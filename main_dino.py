@@ -22,6 +22,7 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image
+from PIL import ImageFilter
 import torch
 import torch.nn as nn
 import torch.distributed as dist
@@ -117,6 +118,7 @@ def get_args_parser():
         Used for small local view cropping of multi-crop.""")
 
     # Misc
+    parser.add_argument('--use_mnist', action="store_true")
     parser.add_argument('--data_path', default='/path/to/imagenet/train/', type=str,
         help='Please specify path to the ImageNet training data.')
     parser.add_argument('--output_dir', default=".", type=str, help='Path to save logs and checkpoints.')
@@ -137,12 +139,32 @@ def train_dino(args):
     cudnn.benchmark = True
 
     # ============ preparing data ... ============
-    transform = DataAugmentationDINO(
-        args.global_crops_scale,
-        args.local_crops_scale,
-        args.local_crops_number,
-    )
-    dataset = datasets.ImageFolder(args.data_path, transform=transform)
+    if args.use_mnist:
+        convert_to_RGB = transforms.Lambda(lambda img: img.convert('RGB'))
+        sharpen = transforms.Lambda(lambda img: img.filter(ImageFilter.SHARPEN))
+        transform = transforms.Compose([
+            transforms.Compose([
+                              convert_to_RGB,
+                              transforms.Resize(size=256), 
+                              sharpen,
+                              transforms.ToTensor()
+                             ]),
+            DataAugmentationDINO(
+                args.global_crops_scale,
+                args.local_crops_scale,
+                args.local_crops_number,
+            ),
+        ])
+        dataset = datasets.MNIST(args.data_path, train=True, transform=transform)
+    else:
+        transform = DataAugmentationDINO(
+            args.global_crops_scale,
+            args.local_crops_scale,
+            args.local_crops_number,
+        )
+        dataset = datasets.ImageFolder(args.data_path, transform=transform)
+
+    
     sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
     data_loader = torch.utils.data.DataLoader(
         dataset,
