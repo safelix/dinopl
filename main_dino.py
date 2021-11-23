@@ -147,7 +147,6 @@ def train_dino(args):
                               convert_to_RGB,
                               transforms.Resize(size=256), 
                               sharpen,
-                              #transforms.ToTensor()
                              ]),
             DataAugmentationDINO(
                 args.global_crops_scale,
