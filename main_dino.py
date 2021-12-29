@@ -119,6 +119,7 @@ def get_args_parser():
 
     # Misc
     parser.add_argument('--use_mnist', action="store_true")
+    parser.add_argument('--use_diagvibsix', action="store_true")
     parser.add_argument('--data_path', default='/path/to/imagenet/train/', type=str,
         help='Please specify path to the ImageNet training data.')
     parser.add_argument('--output_dir', default=".", type=str, help='Path to save logs and checkpoints.')
@@ -139,28 +140,31 @@ def train_dino(args):
     cudnn.benchmark = True
 
     # ============ preparing data ... ============
-    if args.use_mnist:
-        convert_to_RGB = transforms.Lambda(lambda img: img.convert('RGB'))
-        sharpen = transforms.Lambda(lambda img: img.filter(ImageFilter.SHARPEN))
-        transform = transforms.Compose([
-            transforms.Compose([
-                              convert_to_RGB,
-                              transforms.Resize(size=256), 
-                              sharpen,
-                             ]),
-            DataAugmentationDINO(
-                args.global_crops_scale,
-                args.local_crops_scale,
-                args.local_crops_number,
-            ),
-        ])
-        dataset = datasets.MNIST(args.data_path, train=True, transform=transform)
-    else:
-        transform = DataAugmentationDINO(
+    transform = DataAugmentationDINO(
             args.global_crops_scale,
             args.local_crops_scale,
             args.local_crops_number,
         )
+
+    if args.use_diagvibsix:
+        sharpen = transforms.Lambda(lambda img: img.filter(ImageFilter.SHARPEN))
+        transform = transforms.Compose([
+            transforms.Resize(size=256), 
+            sharpen,
+            transform
+        ])
+    
+    if args.use_mnist:
+        convert_to_RGB = transforms.Lambda(lambda img: img.convert('RGB'))
+        transform = transforms.Compose([
+            convert_to_RGB,
+            transform
+        ]),
+   
+
+    if args.use_mnist:
+        dataset = datasets.MNIST(args.data_path, train=True, transform=transform)
+    else:
         dataset = datasets.ImageFolder(args.data_path, transform=transform)
 
     
@@ -449,7 +453,7 @@ class DataAugmentationDINO(object):
         ])
         normalize = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)), #imagenet stats
         ])
 
         # first global crop
