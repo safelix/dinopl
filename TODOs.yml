@@ -1,0 +1,6 @@
+TODOs:
+- learning rate batchsize dependend
+- Wandb logging
+- Online Evaluator for comparison
+- freeze last layer in first epoch
+- losses
