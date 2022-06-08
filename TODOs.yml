@@ -3,4 +3,9 @@ TODOs:
 - Wandb logging
 - Online Evaluator for comparison
 - freeze last layer in first epoch
-- losses
+- losses => micro vs macro?
+- batch structure in test/valid_step()
+- how to freeze correctly in LinearProbe
+- schedule: 
+  - copy for parameter location?
+  - Schedule.__repr__(self, ) instead of super(CatSched, self)

@@ -15,6 +15,7 @@ import pprint
 import warnings
 
 import torch
+import torchvision.models
 
 from scheduling import *
 
@@ -97,11 +98,11 @@ class Configuration(object):
 
         # Model.
         model = parser.add_argument_group('Model')
-        model.add_argument('--enc', type=str, default='ResNet18', 
+        model.add_argument('--enc', type=str, default='resnet18', 
                             help='Defines the model to train on.')
         model.add_argument('--mlp_act', type=str, choices={'GELU', 'ReLu'}, default='GELU',
                             help='Ativation function of DINOHead MLP.')
-        model.add_argument('--use_bn', type=bool, action='store_true',
+        model.add_argument('--use_bn', action='store_true',
                             help='Use batchnorm in DINOHead MLP.')
         model.add_argument('--hid_dims', type=int, default=[2048, 2048], nargs='+',
                             help='Hidden dimensions of DINOHead MLP.')
@@ -132,13 +133,13 @@ class Configuration(object):
                             help='Number of epochs to train for.')
         training.add_argument('--opt', type=str, choices={'adam', 'sgd'}, default='adam', 
                             help='Optimizer to use for training.')                   
+        training.add_argument('--opt_lr', type=Schedule.parse, default=CatSched(LinSched(0, 5e-4), CosSched(5e-4, 1e-6), 10), 
+                            help='Learning rate for optimizer.')
+        training.add_argument('--opt_wd', type=Schedule.parse, default=CosSched(0.04, 0.4), 
+                            help='Weight decay for optimizer.')
         training.add_argument('--clip_grad', type=float, default=3, 
                             help='Value to clip gradient norm to.')
-        training.add_argument('--lr', type=Schedule.parse, default=CatSched(LinSched(0, 5e-4), CosSched(5e-4, 1e-6), 10), 
-                            help='Learning rate for optimizer.')
-        training.add_argument('--wd', type=Schedule.parse, default=CosSched(0.04, 0.4), 
-                            help='Weight decay for optimizer.')
-  
+
 
         # Probing configurations
         probing = parser.add_argument_group('Probing')
@@ -221,9 +222,12 @@ def create_encoder(config:Configuration):
     This is a helper function that can be useful if you have several model definitions that you want to
     choose from via the command line.
     '''
-    if config.enc == 'ResNet18':
-        from encoders.ResNet import ResNet18
-        return ResNet18(config)
+    if config.enc in torchvision.models.__dict__.keys():
+        enc = torchvision.models.__dict__[config.enc]()
+        enc.embed_dim = enc.fc.in_features
+        config.embed_dim = enc.fc.in_features
+        enc.fc = torch.nn.Identity()
+        return enc
 
     raise RuntimeError('Unkown model name.')
 

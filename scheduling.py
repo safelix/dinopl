@@ -104,16 +104,16 @@ class Scheduler(pl.Callback):
     def add(self, loc:Union[dict, object], key:str, sched:Schedule):
         if not isinstance(loc, dict):
             loc = loc.__dict__
-        self.scheduled_params.append(loc, key, sched) 
+        self.scheduled_params.append((loc, key, sched))
 
-    def on_fit_start(self, trainer: pl.Trainer):
+    def on_fit_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):
         for loc, key, sched in self.scheduled_params: # prepare all schedules
             sched.prep(trainer.estimated_stepping_batches, trainer.max_epochs)
             if isinstance(sched, ConstSched): # initiallize ConstSched
                 loc[key] = sched(0)
                 sched.unprep() # de-materialize ConstSched
 
-    def on_batch_start(self, trainer: pl.Trainer):
+    def on_train_batch_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):
         for loc, key, sched in self.scheduled_params: # update parameter
             if not isinstance(sched, ConstSched): # don't update ConstSched
                 loc[key] = sched(trainer.global_step)
@@ -182,14 +182,19 @@ class CatSched(Schedule):
             n_epochs_l = round(frac * self.n_epochs)
         else:
             n_epochs_l = self.where # interprete as epoch
+        n_epochs_r = self.n_epochs - n_epochs_l
 
         # prepare schedules of left and right
-        n_epochs_r = self.n_epochs - n_epochs_l
-        self.sched_l.prep(self.steps_per_epoch * n_epochs_l, n_epochs_l)
-        self.sched_r.prep(self.steps_per_epoch * n_epochs_r, n_epochs_r)
+        ys_list = []
+        if n_epochs_l > 0:
+            self.sched_l.prep(self.steps_per_epoch * n_epochs_l, n_epochs_l)
+            ys_list.append(self.sched_l.ys)
+        if n_epochs_r > 0:
+            self.sched_r.prep(self.steps_per_epoch * n_epochs_r, n_epochs_r)
+            ys_list.append(self.sched_r.ys)
 
         # concatenate left and right schedules
-        self.ys = torch.concat([self.sched_l.ys, self.sched_r.ys])
+        self.ys = torch.concat(ys_list)
 
         # de-materialize left and right schedules
         self.sched_r.unprep()

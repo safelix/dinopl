@@ -1,6 +1,35 @@
+import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
+
+
+def recprint(curr, recprefix='', prefix=''):
+    t = type(curr)
+
+    if t == list or t==tuple:
+        out = (f'{recprefix}{prefix}{t.__name__} of length {len(curr)}')
+        
+        for idx, child in enumerate(curr, 1):
+            out += '\n'+recprint(child, recprefix=f'{recprefix}  ', prefix=f'{idx}. ') 
+    
+    elif t == dict:
+        out = (f'{recprefix}{prefix}{t.__name__} of length {len(curr)}')
+        
+        for name, child in curr.items():
+            out += '\n'+recprint(child, recprefix=f'{recprefix}  ', prefix=f'\'{name}\': ') 
+    
+    elif t == torch.Tensor or t==np.ndarray:
+        if len(curr.shape) == 1:
+            out = (f'{recprefix}{prefix}{t.__name__} of shape {curr.shape}: {curr}')
+        else:
+            out = (f'{recprefix}{prefix}{t.__name__} of shape {curr.shape}')
+    
+    else:
+        out = (f'{recprefix}{prefix}object of type {t.__name__}')
+    
+    return out
+
 
 ## Losses and Metrics
 def entropy(prob:torch.Tensor, log_prob:torch.Tensor):
@@ -35,11 +64,12 @@ def mlp_layer(in_dim:int, out_dim:int, act_fn:str = 'GELU', use_bn:bool = False)
     
     return nn.Sequential(*sublayers)
 
-def l2_bottleneck(in_dim:int, mid_dim:int, out_dim:int):
-    sublayers = [nn.Linear(in_dim, mid_dim)]
-    sublayers.append(LpNormalizeFeatures(p=1, dim=-1))
-    sublayers.append(WeightNormalizedLinear(mid_dim, out_dim, bias=False)) 
-    return nn.Sequential(*sublayers)
+class L2Bottleneck(nn.Sequential):
+    def __init__(self, in_dim:int, mid_dim:int, out_dim:int):
+        sublayers = [nn.Linear(in_dim, mid_dim)]
+        sublayers.append(LpNormalizeFeatures(p=1, dim=-1))
+        sublayers.append(WeightNormalizedLinear(mid_dim, out_dim, bias=False))
+        super().__init__(*sublayers) 
 
 class LpNormalizeFeatures(nn.Module):
     def __init__(self, p:float = 2, dim:int = -1):
@@ -47,7 +77,7 @@ class LpNormalizeFeatures(nn.Module):
         self.p = p
         self.dim = dim
 
-    def forward(x):
+    def forward(self, x):
         return F.normalize(x, p=2, dim=-1)
 
     def extra_repr(self):
@@ -57,10 +87,24 @@ class WeightNormalizedLinear(nn.Linear):
     def __init__(self, in_features:int, out_features:int, bias:bool = True):
         super().__init__(in_features, out_features, bias)
 
-        # attach weight norm
+        # attach weight norm like in vision_transformer.py
         self = nn.utils.weight_norm(self)
         self.weight_g.data.fill_(1)
         self.weight_g.requires_grad = False
+
+        # This doesn't work with deepcopy, see:
+        # https://github.com/pytorch/pytorch/issues/28594 and
+        # https://discuss.pytorch.org/t/when-can-you-not-deepcopy-a-model/153226/2
+        
+        # Workaround 1: detach the initiallized weight.. forward_pre_hook will reattach it again
+        self.weight = self.weight_v.detach()
+
+        # Workaround 2:
+        #self.weight_g = nn.Parameter(torch.full((self.weight.shape[0],1), 1.0))
+        #self.weight_g.requires_grad = False
+        #self.weight.data = torch._weight_norm(self.weight, self.weight_g, 0)
+        # _weight_norm() must be called manually before forward
+
 
 
 ###############################################################################
@@ -70,8 +114,9 @@ class WeightNormalizedLinear(nn.Linear):
 import math
 import warnings
 
-from torch import Tensor
 import torch
+from torch import Tensor
+
 
 # These no_grad_* functions are necessary as wrappers around the parts of these
 # functions that use `with torch.no_grad()`. The JIT doesn't support context
