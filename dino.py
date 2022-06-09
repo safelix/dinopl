@@ -1,4 +1,5 @@
 from typing import Dict, List, Type, Union
+from numpy import require
 
 import pytorch_lightning as pl
 import torch
@@ -33,7 +34,7 @@ class DINOHead(nn.Module):
         super().__init__()
         self.out_dim = out_dim
         self.temp = temp
-        self.cent = torch.full((out_dim,), cent)
+        self.cent = nn.Parameter(torch.full((out_dim,), cent), requires_grad=False)
         self.cmom = None if cmom is None else nn.Parameter(cmom, requires_grad=False)
 
         # multi-layer perceptron classification head
@@ -63,7 +64,7 @@ class DINOHead(nn.Module):
 
         logits = self.mlp(x)
         if self.cmom:
-            self.cent = self.cmom * self.cent + (1-self.cmom) * torch.mean(logits)
+            self.cent.data = self.cmom * self.cent + (1-self.cmom) * torch.mean(logits)
         y = self.log_softmax(logits - self.cent / self.temp)
         return y
         

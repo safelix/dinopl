@@ -7,26 +7,27 @@ from torch.nn import functional as F
 def recprint(curr, recprefix='', prefix=''):
     t = type(curr)
 
+    out = '\n'
     if t == list or t==tuple:
-        out = (f'{recprefix}{prefix}{t.__name__} of length {len(curr)}')
+        out += (f'{recprefix}{prefix}{t.__name__} of length {len(curr)}')
         
         for idx, child in enumerate(curr, 1):
-            out += '\n'+recprint(child, recprefix=f'{recprefix}  ', prefix=f'{idx}. ') 
+            out += recprint(child, recprefix=f'{recprefix}  ', prefix=f'{idx}. ') 
     
     elif t == dict:
-        out = (f'{recprefix}{prefix}{t.__name__} of length {len(curr)}')
+        out += (f'{recprefix}{prefix}{t.__name__} of length {len(curr)}')
         
         for name, child in curr.items():
-            out += '\n'+recprint(child, recprefix=f'{recprefix}  ', prefix=f'\'{name}\': ') 
+            out += recprint(child, recprefix=f'{recprefix}  ', prefix=f'\'{name}\': ') 
     
     elif t == torch.Tensor or t==np.ndarray:
         if len(curr.shape) == 1:
-            out = (f'{recprefix}{prefix}{t.__name__} of shape {curr.shape}: {curr}')
+            out += (f'{recprefix}{prefix}{t.__name__} of shape {curr.shape}: {curr}')
         else:
-            out = (f'{recprefix}{prefix}{t.__name__} of shape {curr.shape}')
+            out += (f'{recprefix}{prefix}{t.__name__} of shape {curr.shape}')
     
     else:
-        out = (f'{recprefix}{prefix}object of type {t.__name__}')
+        out += (f'{recprefix}{prefix}object of type {t.__name__}')
     
     return out
 

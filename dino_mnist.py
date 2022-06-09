@@ -1,16 +1,24 @@
+import sys
 import time
 import pytorch_lightning as pl
-from torch import nn
+from torch import device, nn
 from torch.utils.data import DataLoader
 from torchvision.datasets import MNIST
 from torchvision import transforms
+
+from test import train_linear
 
 from configuration import CONSTANTS as C, create_optimizer
 from configuration import Configuration, create_encoder
 
 from dino import *
-from eval_linear import train
-from probing import LinearProbe, ProbingCallback
+from probing import LinearProbe, ProbingCallback, ProbingCallbackSimple
+from pytorch_lightning.loggers import WandbLogger
+wandb_logger = WandbLogger(project="DINO_MNIST")
+
+import warnings
+warnings.filterwarnings("ignore", ".*does not have many workers.*") # TODO?
+
 
 import my_utils as U
 
@@ -59,7 +67,6 @@ def main(config:Configuration):
             use_bn=config.use_bn,
             act_fn=config.mlp_act)
     model = DINOModel(enc, head)
-    #print(model)
 
 
     # DINO Setup
@@ -73,28 +80,33 @@ def main(config:Configuration):
                 opt_lr = config.opt_lr,
                 opt_wd = config.opt_wd)
 
+    # Test wether train_linear works in main.. seems to!?
+    #train_linear(config.embed_dim, config.n_classes, dino.student.enc.to(C.DEVICE), eval_train_dl, C.DEVICE)
 
     # Tracking Logic
-    probing_cb = ProbingCallback(
-        probes={'Student': LinearProbe(dino.student.enc, 
-                                        config.embed_dim, 
-                                        config.n_classes),
-                'Teacher': LinearProbe(dino.teacher.enc, 
-                                        config.embed_dim, 
-                                        config.n_classes)},
+    probing_cb = ProbingCallbackSimple(
+        encoders={'student': dino.student.enc,
+                'teacher': dino.teacher.enc},
+        embed_dim=config.embed_dim, 
+        n_classes=config.n_classes,
         train_dl=eval_train_dl,
         valid_dl=eval_valid_dl,
         probe_every=config.probe_every,
         probing_epochs=config.probing_epochs,
     )
 
-
     # Training
     trainer = pl.Trainer(
         max_epochs=config.n_epochs,
-        accelerator='auto',
         gradient_clip_val=config.clip_grad,
-        callbacks=[probing_cb])
+        #callbacks=[probing_cb],
+        logger=wandb_logger,
+        accelerator='auto',
+        devices=1, # only use single GPU training
+        #limit_train_batches=2,
+        #limit_val_batches=2,
+        )
+
     trainer.fit(model=dino, 
                 train_dataloaders=[self_train_dl],
                 val_dataloaders=[self_valid_dl])
