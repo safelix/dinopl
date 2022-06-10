@@ -30,7 +30,7 @@ eval_train_dl = DataLoader(dataset=eval_train_set, batch_size=config.bs_eval)
 
 encoder = create_encoder(config).to(C.DEVICE)
 
-
+@torch.enable_grad()
 def train_linear(embed_dim, n_classes, enc, dl, dev):
     clf = nn.Linear(embed_dim, n_classes, device=dev)
     opt = torch.optim.Adam(clf.parameters())
@@ -63,6 +63,7 @@ def train_linear(embed_dim, n_classes, enc, dl, dev):
 
     return clf
 
+@torch.no_grad()
 def valid_linear(clf, enc, dl, dev):
     accuracy = Accuracy()
     

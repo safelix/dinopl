@@ -115,11 +115,12 @@ class ProbingCallback(pl.Callback):
             pl_module.log_dict(self.probe(pl_module.device), prog_bar=True) 
 
 
+
 ###############################################################################
 ############################ Try to keep it simple ############################
 ###############################################################################
 
-class ProbingCallbackSimple(pl.Callback):
+class LinearProbingCallback(pl.Callback):
     def __init__(self,
             encoders:Dict[str, nn.Module],
             embed_dim:int,
@@ -140,21 +141,46 @@ class ProbingCallbackSimple(pl.Callback):
         self.probe_every = probe_every
         self.probing_epochs = probing_epochs
 
+    @torch.enable_grad()
     def probe(self, device):
-        acc = {}
+        out = {}
         for name, encoder in self.encoders.items():
-            print(f'Starting LinearProbe of {name}... ', flush=True, end='\n\n')
 
-            clf = train_linear(self.embed_dim, self.n_classes, encoder, self.train_dl, device)
-            acc[name] = valid_linear(clf, encoder, encoder, self.train_dl, device)
+            accuracy = Accuracy()
+            clf = nn.Linear(self.embed_dim, self.n_classes, device=device)
+            opt = torch.optim.Adam(clf.parameters())
+
+            print(f'Starting LinearProbe of {name}... ', flush=True)
+            for epoch in tqdm(range(self.probing_epochs)): # training
+                pbar = tqdm(self.train_dl, leave=False)
+                pbar.set_description(f'Epoch {epoch}')
+                for batch in pbar: 
+                    inputs, targets = batch[0].to(device), batch[1].to(device)
+
+                    with torch.no_grad(): # get embeddings
+                        embeddings = encoder(inputs)
+                    opt.zero_grad() # step clf parameters
+                    loss = F.cross_entropy(clf(embeddings), targets)
+                    loss.backward()
+                    opt.step()
+                    pbar.set_postfix({'loss':float(loss)})
+                
+
+            with torch.no_grad(): 
+                pbar = tqdm(self.valid_dl, leave=False)
+                pbar.set_description('Validation')
+                for batch in pbar:
+                    inputs, targets = batch[0].to(device), batch[1].to(device)
+                    accuracy.update(clf(encoder(inputs)), targets)
+                    pbar.set_postfix({'acc':float(accuracy.compute())})
+                out[name] = float(accuracy.compute())
 
             t = time() - t
-            print(f'..took {int(t//60):02d}:{int(t%60):02d}min \t\t=> acc: {acc[name]:.3f}', flush=True)
+            print(f'..took {int(t//60):02d}:{int(t%60):02d}min \t\t=> acc: {out[name]:.3f}', flush=True)
     
 
     def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):
-        # only probe every so many epochs
-        if trainer.current_epoch % self.probe_every == 0: 
+        if trainer.current_epoch % self.probe_every == 0: # only probe every so many epochs      
             pl_module.log_dict(self.probe(pl_module.device), prog_bar=True) 
      
     def on_train_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):

@@ -5,6 +5,7 @@ from torch import device, nn
 from torch.utils.data import DataLoader
 from torchvision.datasets import MNIST
 from torchvision import transforms
+import torch
 
 from test import train_linear
 
@@ -12,7 +13,7 @@ from configuration import CONSTANTS as C, create_optimizer
 from configuration import Configuration, create_encoder
 
 from dino import *
-from probing import LinearProbe, ProbingCallback, ProbingCallbackSimple
+from probing import LinearProbe, ProbingCallback, LinearProbingCallback
 from pytorch_lightning.loggers import WandbLogger
 wandb_logger = WandbLogger(project="DINO_MNIST")
 
@@ -84,7 +85,7 @@ def main(config:Configuration):
     #train_linear(config.embed_dim, config.n_classes, dino.student.enc.to(C.DEVICE), eval_train_dl, C.DEVICE)
 
     # Tracking Logic
-    probing_cb = ProbingCallbackSimple(
+    probing_cb = LinearProbingCallback(
         encoders={'student': dino.student.enc,
                 'teacher': dino.teacher.enc},
         embed_dim=config.embed_dim, 
@@ -99,12 +100,12 @@ def main(config:Configuration):
     trainer = pl.Trainer(
         max_epochs=config.n_epochs,
         gradient_clip_val=config.clip_grad,
-        #callbacks=[probing_cb],
+        callbacks=[probing_cb],
         logger=wandb_logger,
-        accelerator='auto',
+        accelerator='cpu',
         devices=1, # only use single GPU training
-        #limit_train_batches=2,
-        #limit_val_batches=2,
+        limit_train_batches=2,
+        limit_val_batches=2,
         )
 
     trainer.fit(model=dino, 
