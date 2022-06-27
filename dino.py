@@ -308,6 +308,8 @@ class DINO(pl.LightningModule):
         ## logging
         out = dict((f'train/{k}', v) for (k,v) in out.items())
         self.log_dict(out)
+        # TODO: log CE, KL and H to pbar
+        # Log H_* seperately
         return out['train/CE']
 
     def validation_step(self, batch, batch_idx):
