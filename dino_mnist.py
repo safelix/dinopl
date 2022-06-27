@@ -7,13 +7,11 @@ from torchvision.datasets import MNIST
 from torchvision import transforms
 import torch
 
-from test import train_linear
-
 from configuration import CONSTANTS as C, create_optimizer
 from configuration import Configuration, create_encoder
 
 from dino import *
-from probing import LinearProbe, ProbingCallback, LinearProbingCallback
+from probing import LinearProbingCallback
 from pytorch_lightning.loggers import WandbLogger
 wandb_logger = WandbLogger(project="DINO_MNIST")
 
@@ -41,10 +39,12 @@ def main(config:Configuration):
     
     self_trfm = transforms.Compose([ # self-training
                     transforms.Lambda(lambda img: img.convert('RGB')),
-                    transforms.ToTensor()])
+                    transforms.ToTensor()
+                ])
     eval_trfm = transforms.Compose([ # evaluation
                     transforms.Resize(size=128),
-                    self_trfm])
+                    self_trfm
+                ])
                     
     mc = MultiCropAugmentation(MC_SPEC, per_crop_transform=self_trfm)
 
@@ -81,9 +81,6 @@ def main(config:Configuration):
                 opt_lr = config.opt_lr,
                 opt_wd = config.opt_wd)
 
-    # Test wether train_linear works in main.. seems to!?
-    #train_linear(config.embed_dim, config.n_classes, dino.student.enc.to(C.DEVICE), eval_train_dl, C.DEVICE)
-
     # Tracking Logic
     probing_cb = LinearProbingCallback(
         encoders={'student': dino.student.enc,
@@ -102,10 +99,10 @@ def main(config:Configuration):
         gradient_clip_val=config.clip_grad,
         callbacks=[probing_cb],
         logger=wandb_logger,
-        accelerator='cpu',
+        accelerator='gpu',
         devices=1, # only use single GPU training
-        limit_train_batches=2,
-        limit_val_batches=2,
+        #limit_train_batches=2,
+        #limit_val_batches=2,
         )
 
     trainer.fit(model=dino, 

@@ -34,14 +34,14 @@ def recshape(curr, recprefix='', prefix=''):
 
 ## Losses and Metrics
 def entropy(prob:torch.Tensor, log_prob:torch.Tensor):
-    return torch.mean(prob * -log_prob, dim=-1)
+    return torch.sum(prob * -log_prob, dim=-1)
 
 def cross_entropy(log_pred:torch.Tensor, targ:torch.Tensor):
-    return torch.mean(targ * -log_pred, dim=-1)
+    return torch.sum(targ * -log_pred, dim=-1)
 
 def kl_divergence(log_pred:torch.Tensor, targ:torch.Tensor, log_targ:torch.Tensor,):
     #return cross_entropy(log_pred, targ) - entropy(targ, log_targ)
-    return torch.mean(targ * -(log_pred - log_targ), dim=-1)
+    return torch.sum(targ * -(log_pred - log_targ), dim=-1)
 
 ## torch.nn utilities
 def is_bias(n:str, p:nn.Parameter): 

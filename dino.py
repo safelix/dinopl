@@ -65,7 +65,7 @@ class DINOHead(nn.Module):
         logits = self.mlp(x)
         if self.cmom:
             self.cent.data = self.cmom * self.cent + (1-self.cmom) * torch.mean(logits)
-        y = self.log_softmax(logits - self.cent / self.temp)
+        y = self.log_softmax((logits - self.cent) / self.temp)
         return y
         
 
@@ -189,7 +189,7 @@ class DINO(pl.LightningModule):
         t_cmom:Schedule = ConstSched(0.9),
         t_temp:Schedule = LinWarmup(0.04, 0.04, 0),
         s_temp:Schedule = ConstSched(0.1),
-        opt:Type[optim.Optimizer] = optim.Adam,
+        opt:Type[optim.Optimizer] = optim.AdamW,
         opt_lr:Schedule = None,
         opt_wd:Schedule = None,
     ):
@@ -306,6 +306,8 @@ class DINO(pl.LightningModule):
 
         ## logging
         self.log_dict(out)
+        self.log('lr', self.optimizer.param_groups[0]['lr'])
+        self.log('wd', self.optimizer.param_groups[0]['weight_decay'])
         return out['CE']
 
     def validation_step(self, batch, batch_idx):
@@ -319,7 +321,7 @@ class DINO(pl.LightningModule):
         
         # compute multicrop loss
         out = self.multicrop_loss(y_student_log, y_teacher_log)
-
+        
         ## logging
         out = dict((f'val_{k}', v) for (k,v) in out.items())
         self.log_dict(out)

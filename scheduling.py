@@ -105,13 +105,17 @@ class Scheduler(pl.Callback):
         if not isinstance(loc, dict):
             loc = loc.__dict__
         self.scheduled_params.append((loc, key, sched))
+    
+    def prep(self, n_steps:int, n_epochs:int):
+        for loc, key, sched in self.scheduled_params: # prepare all schedules
+            sched.prep(n_steps, n_epochs)
+            loc[key] = sched(0) # initiallizes all start values
+
+            if isinstance(sched, ConstSched): 
+                sched.unprep() # de-materialize ConstSched
 
     def on_fit_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):
-        for loc, key, sched in self.scheduled_params: # prepare all schedules
-            sched.prep(trainer.estimated_stepping_batches, trainer.max_epochs)
-            if isinstance(sched, ConstSched): # initiallize ConstSched
-                loc[key] = sched(0)
-                sched.unprep() # de-materialize ConstSched
+        self.prep(trainer.estimated_stepping_batches, trainer.max_epochs)
 
     def on_train_batch_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):
         for loc, key, sched in self.scheduled_params: # update parameter

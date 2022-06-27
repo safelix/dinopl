@@ -131,7 +131,7 @@ class Configuration(object):
         training = parser.add_argument_group('Training')
         training.add_argument('--n_epochs', type=int, default=100, 
                             help='Number of epochs to train for.')
-        training.add_argument('--opt', type=str, choices={'adam', 'sgd'}, default='adam', 
+        training.add_argument('--opt', type=str, choices={'adamw', 'adam', 'sgd'}, default='adamw', 
                             help='Optimizer to use for training.')                   
         training.add_argument('--opt_lr', type=Schedule.parse, default=CatSched(LinSched(0, 5e-4), CosSched(5e-4, 1e-6), 10), 
                             help='Learning rate for optimizer.')
@@ -145,7 +145,7 @@ class Configuration(object):
         probing = parser.add_argument_group('Probing')
         probing.add_argument('--probe_every', type=int, default=5, 
                             help='Probe every so many epochs during training.')
-        probing.add_argument('--probing_epochs', type=int, default=10, 
+        probing.add_argument('--probing_epochs', type=int, default=5, 
                             help='Number of epochs to train for linear probing.')
 
         return parser
@@ -223,7 +223,7 @@ def create_encoder(config:Configuration):
     choose from via the command line.
     '''
     if config.enc in torchvision.models.__dict__.keys():
-        enc = torchvision.models.__dict__[config.enc]()
+        enc = torchvision.models.__dict__[config.enc](pretrained=False)
         enc.embed_dim = enc.fc.in_features
         config.embed_dim = enc.fc.in_features
         enc.fc = torch.nn.Identity()
@@ -237,6 +237,9 @@ def create_optimizer(config:Configuration):
     This is a helper function that can be useful if you have optimizers that you want to
     choose from via the command line.
     '''
+    if config.opt == 'adamw':
+        return torch.optim.AdamW
+
     if config.opt == 'adam':
         return torch.optim.Adam
 
