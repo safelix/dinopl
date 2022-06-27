@@ -4,7 +4,7 @@ from torch import nn
 from torch.nn import functional as F
 
 
-def recprint(curr, recprefix='', prefix=''):
+def recshape(curr, recprefix='', prefix=''):
     t = type(curr)
 
     out = '\n'
@@ -12,13 +12,13 @@ def recprint(curr, recprefix='', prefix=''):
         out += (f'{recprefix}{prefix}{t.__name__} of length {len(curr)}')
         
         for idx, child in enumerate(curr, 1):
-            out += recprint(child, recprefix=f'{recprefix}  ', prefix=f'{idx}. ') 
+            out += recshape(child, recprefix=f'{recprefix}  ', prefix=f'{idx}. ') 
     
     elif t == dict:
         out += (f'{recprefix}{prefix}{t.__name__} of length {len(curr)}')
         
         for name, child in curr.items():
-            out += recprint(child, recprefix=f'{recprefix}  ', prefix=f'\'{name}\': ') 
+            out += recshape(child, recprefix=f'{recprefix}  ', prefix=f'\'{name}\': ') 
     
     elif t == torch.Tensor or t==np.ndarray:
         if len(curr.shape) == 1:
