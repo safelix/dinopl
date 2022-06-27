@@ -33,12 +33,15 @@ def recshape(curr, recprefix='', prefix=''):
 
 
 ## Losses and Metrics
+@torch.jit.script
 def entropy(prob:torch.Tensor, log_prob:torch.Tensor):
     return torch.sum(prob * -log_prob, dim=-1)
 
+@torch.jit.script
 def cross_entropy(log_pred:torch.Tensor, targ:torch.Tensor):
     return torch.sum(targ * -log_pred, dim=-1)
 
+@torch.jit.script
 def kl_divergence(log_pred:torch.Tensor, targ:torch.Tensor, log_targ:torch.Tensor,):
     #return cross_entropy(log_pred, targ) - entropy(targ, log_targ)
     return torch.sum(targ * -(log_pred - log_targ), dim=-1)

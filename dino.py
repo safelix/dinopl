@@ -183,7 +183,7 @@ class DINOTeacherUpdate(pl.Callback):
 class DINO(pl.LightningModule):
     def __init__(self,
         mc:MultiCropAugmentation,
-        model:DINOModel,
+        init:DINOModel,
         t_mode:str = 'ema',
         t_mom:Schedule = CosSched(0.996, 1),
         t_cmom:Schedule = ConstSched(0.9),
@@ -194,12 +194,13 @@ class DINO(pl.LightningModule):
         opt_wd:Schedule = None,
     ):
         super().__init__()
-        self.embed_dim = model.embed_dim
-        self.out_dim = model.out_dim
+        self.embed_dim = init.embed_dim
+        self.out_dim = init.out_dim
         
         # initiallize student and teacher with same params
-        self.student = model
-        self.teacher = copy.deepcopy(model)
+        self.init = init
+        self.student = copy.deepcopy(init)
+        self.teacher = copy.deepcopy(init)
       
         # prepare teacher in evaluation mode
         self.teacher.eval() # TODO: will this stay in eval mode?
@@ -279,13 +280,13 @@ class DINO(pl.LightningModule):
         out['KL'] = KLs.mean(dim=-1).mean(dim=0) # compute mean of batches, than of all matched crops
 
         with torch.no_grad():
-            out['H_preds'] = {'mean':H_preds.mean()}
+            out['H_preds'] = H_preds.mean()
             for crop_name, H_pred in zip(self.student.crops['name'], H_preds):
-                out['H_preds'][crop_name] = H_pred.mean() # compute mean of batch for every crop
+                out[f'H_preds/{crop_name}'] = H_pred.mean() # compute mean of batch for every crop
 
-            out['H_targs'] = {'mean':H_targs.mean()}
+            out['H_targs'] = H_targs.mean()
             for crop_name, H_targ in zip(self.teacher.crops['name'], H_targs):
-                out['H_targs'][crop_name] = H_targ.mean() # compute mean of batch for every crop
+                out[f'H_targs/{crop_name}'] = H_targ.mean() # compute mean of batch for every crop
 
         return out
  
@@ -305,10 +306,9 @@ class DINO(pl.LightningModule):
         out = self.multicrop_loss(y_student_log, y_teacher_log)
 
         ## logging
+        out = dict((f'train/{k}', v) for (k,v) in out.items())
         self.log_dict(out)
-        self.log('lr', self.optimizer.param_groups[0]['lr'])
-        self.log('wd', self.optimizer.param_groups[0]['weight_decay'])
-        return out['CE']
+        return out['train/CE']
 
     def validation_step(self, batch, batch_idx):
         batch, batch_labels = batch
@@ -323,6 +323,6 @@ class DINO(pl.LightningModule):
         out = self.multicrop_loss(y_student_log, y_teacher_log)
         
         ## logging
-        out = dict((f'val_{k}', v) for (k,v) in out.items())
+        out = dict((f'valid/{k}', v) for (k,v) in out.items())
         self.log_dict(out)
-        return out['val_CE']
+        return out['valid/CE']

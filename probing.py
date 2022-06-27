@@ -160,7 +160,7 @@ class LinearProbingCallback(pl.Callback):
 
                     with torch.no_grad(): # get embeddings
                         embeddings = encoder(inputs)
-                    opt.zero_grad() # step clf parameters
+                    opt.zero_grad(set_to_none=True) # step clf parameters
                     loss = F.cross_entropy(clf(embeddings), targets)
                     loss.backward()
                     opt.step()
@@ -180,9 +180,13 @@ class LinearProbingCallback(pl.Callback):
         return dict((f'{k}_acc', v) for (k,v) in out.items())
     
 
-    def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):
+    def on_train_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):
+            pl_module.log_dict(self.probe(pl_module.device), prog_bar=True) 
+
+    def on_training_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):
         if trainer.current_epoch % self.probe_every == 0: # only probe every so many epochs      
             pl_module.log_dict(self.probe(pl_module.device), prog_bar=True) 
      
     def on_train_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):
+        if trainer.current_epoch % self.probe_every != 0: # only probe if on_training_epoch_end didn't probe yet      
             pl_module.log_dict(self.probe(pl_module.device), prog_bar=True) 

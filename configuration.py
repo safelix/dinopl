@@ -88,6 +88,8 @@ class Configuration(object):
                             help='Number of parallel threads for data loading.')
         general.add_argument('--seed', type=int, default=None,
                             help='Random number generator seed.')
+        general.add_argument('--log_every', type=int, default=20,
+                            help='Log every so many steps.')
 
         # Data.
         data = parser.add_argument_group('Data')

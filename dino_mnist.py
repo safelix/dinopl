@@ -11,6 +11,7 @@ from configuration import CONSTANTS as C, create_optimizer
 from configuration import Configuration, create_encoder
 
 from dino import *
+from logging import HParamLogger, ParamLogger
 from probing import LinearProbingCallback
 from pytorch_lightning.loggers import WandbLogger
 wandb_logger = WandbLogger(project="DINO_MNIST")
@@ -55,10 +56,10 @@ def main(config:Configuration):
     eval_valid_set = MNIST(root=C.DATA_DIR, train=False, transform=eval_trfm)
     config.n_classes = 10
 
-    self_train_dl = DataLoader(dataset=self_train_set, batch_size=config.bs_train)
-    self_valid_dl = DataLoader(dataset=self_valid_set, batch_size=config.bs_train)
-    eval_train_dl = DataLoader(dataset=eval_train_set, batch_size=config.bs_eval)
-    eval_valid_dl = DataLoader(dataset=eval_valid_set, batch_size=config.bs_eval)
+    self_train_dl = DataLoader(dataset=self_train_set, batch_size=config.bs_train, num_workers=config.n_workers, pin_memory=True)
+    self_valid_dl = DataLoader(dataset=self_valid_set, batch_size=config.bs_train, num_workers=config.n_workers, pin_memory=True)
+    eval_train_dl = DataLoader(dataset=eval_train_set, batch_size=config.bs_eval, num_workers=config.n_workers, pin_memory=True)
+    eval_valid_dl = DataLoader(dataset=eval_valid_set, batch_size=config.bs_eval, num_workers=config.n_workers, pin_memory=True)
    
     # Model Setup
     enc = create_encoder(config)
@@ -95,12 +96,25 @@ def main(config:Configuration):
 
     # Training
     trainer = pl.Trainer(
+        # training dynamics
         max_epochs=config.n_epochs,
         gradient_clip_val=config.clip_grad,
-        callbacks=[probing_cb],
+        callbacks=[probing_cb, HParamLogger(), ParamLogger()],
+
+        # logging
         logger=wandb_logger,
+        log_every_n_steps=config.log_every,
+
+        # acceleration
         accelerator='gpu',
         devices=1, # only use single GPU training
+        gpus=[1],
+
+        # performance
+        benchmark=True,
+        deterministic=False,
+
+        # debugging
         #limit_train_batches=2,
         #limit_val_batches=2,
         )
