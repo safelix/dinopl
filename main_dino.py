@@ -159,7 +159,7 @@ def train_dino(args):
         transform = transforms.Compose([
             convert_to_RGB,
             transform
-        ]),
+        ])
    
 
     if args.use_mnist:

@@ -183,7 +183,7 @@ class DINOTeacherUpdate(pl.Callback):
 class DINO(pl.LightningModule):
     def __init__(self,
         mc:MultiCropAugmentation,
-        init:DINOModel,
+        model:DINOModel,
         t_mode:str = 'ema',
         t_mom:Schedule = CosSched(0.996, 1),
         t_cmom:Schedule = ConstSched(0.9),
@@ -194,13 +194,13 @@ class DINO(pl.LightningModule):
         opt_wd:Schedule = None,
     ):
         super().__init__()
-        self.embed_dim = init.embed_dim
-        self.out_dim = init.out_dim
+        self.embed_dim = model.embed_dim
+        self.out_dim = model.out_dim
         
         # initiallize student and teacher with same params
-        self.init = init
-        self.student = copy.deepcopy(init)
-        self.teacher = copy.deepcopy(init)
+        self.init = model
+        self.student = copy.deepcopy(self.init)
+        self.teacher = copy.deepcopy(self.init)
       
         # prepare teacher in evaluation mode
         self.teacher.eval() # TODO: will this stay in eval mode?

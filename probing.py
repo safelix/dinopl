@@ -184,9 +184,8 @@ class LinearProbingCallback(pl.Callback):
             pl_module.log_dict(self.probe(pl_module.device), prog_bar=True) 
 
     def on_training_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):
-        if trainer.current_epoch % self.probe_every == 0: # only probe every so many epochs      
+        if trainer.current_epoch % self.probe_every == 0: # only probe every so many epochs
             pl_module.log_dict(self.probe(pl_module.device), prog_bar=True) 
-     
-    def on_train_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):
-        if trainer.current_epoch % self.probe_every != 0: # only probe if on_training_epoch_end didn't probe yet      
+        
+        elif trainer.current_epoch == trainer.max_epochs - 1: # probe after last epoch
             pl_module.log_dict(self.probe(pl_module.device), prog_bar=True) 

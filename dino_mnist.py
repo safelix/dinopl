@@ -11,7 +11,7 @@ from configuration import CONSTANTS as C, create_optimizer
 from configuration import Configuration, create_encoder
 
 from dino import *
-from logging import HParamLogger, ParamLogger
+from tracking import HParamTracker, ParamTracker
 from probing import LinearProbingCallback
 from pytorch_lightning.loggers import WandbLogger
 wandb_logger = WandbLogger(project="DINO_MNIST")
@@ -99,7 +99,7 @@ def main(config:Configuration):
         # training dynamics
         max_epochs=config.n_epochs,
         gradient_clip_val=config.clip_grad,
-        callbacks=[probing_cb, HParamLogger(), ParamLogger()],
+        callbacks=[probing_cb, HParamTracker(), ParamTracker()],
 
         # logging
         logger=wandb_logger,
@@ -108,7 +108,7 @@ def main(config:Configuration):
         # acceleration
         accelerator='gpu',
         devices=1, # only use single GPU training
-        gpus=[1],
+        gpus=[2],
 
         # performance
         benchmark=True,
