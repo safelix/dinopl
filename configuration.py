@@ -88,7 +88,7 @@ class Configuration(object):
                             help='Number of parallel threads for data loading.')
         general.add_argument('--seed', type=int, default=None,
                             help='Random number generator seed.')
-        general.add_argument('--log_every', type=int, default=20,
+        general.add_argument('--log_every', type=int, default=1,
                             help='Log every so many steps.')
         general.add_argument('--force_cpu', action='store_true',
                             help='Force training on CPU instead of GPU.')

@@ -1,4 +1,5 @@
-from typing import List
+import copy
+from typing import Dict, List
 
 import pytorch_lightning as pl
 import torch
@@ -7,48 +8,70 @@ import my_utils as U
 from dino import DINO
 
 
-class HParamTracker(pl.Callback):
-    def __init__(self, hparams:List[str]=None) -> None:
-        self.hparams = hparams
+class MetricsTracker(pl.Callback):
+    def step(self, prefix, out:Dict[str, torch.Tensor], dino:DINO):
+        logs = {}
+        logs[f'{prefix}/CE'] = out['CE']
+        logs[f'{prefix}/KL'] = out['KL']
+        logs[f'{prefix}/H_preds'] = out['H_preds'].mean()
+        logs[f'{prefix}/H_targs'] = out['H_targs'].mean()
+        dino.log_dict(logs)
+
+    def on_train_batch_end(self, _:pl.Trainer, dino:DINO, outputs:Dict[str, torch.Tensor], *args) -> None:
+        self.step('train', outputs, dino)
     
+    def on_valid_batch_end(self, _:pl.Trainer, dino:DINO, outputs:Dict[str, torch.Tensor], *args) -> None:
+        self.step('valid', outputs, dino)
+
+
+class PerCropEntropyTracker(pl.Callback):
+    def step(self, prefix, H_preds:torch.Tensor, H_targs:torch.Tensor, dino:DINO):
+        logs = {}
+        for crop_name, H_pred in zip(dino.student.crops['name'], H_preds):
+            logs[f'{prefix}/H_preds/{crop_name}'] = H_pred.mean() # compute mean of batch for every crop
+
+        for crop_name, H_targ in zip(dino.teacher.crops['name'], H_targs):
+            logs[f'{prefix}/H_targs/{crop_name}'] = H_targ.mean() # compute mean of batch for every crop
+        dino.log_dict(logs)
+
+    def on_train_batch_end(self, _: pl.Trainer, dino: DINO, outputs:Dict[str, torch.Tensor], *args) -> None:
+        self.step('train', outputs['H_preds'], outputs['H_targs'], dino)
+    
+    def on_valid_batch_end(self, _: pl.Trainer, dino: DINO, outputs:Dict[str, torch.Tensor], *args) -> None:
+        self.step('valid', outputs['H_preds'], outputs['H_targs'], dino)
+
+
+class HParamTracker(pl.Callback):  
     def step(self, dino:DINO):
-        out = {
-            'hparams/lr': dino.optimizer.param_groups[0]['lr'],
-            'hparams/wd': dino.optimizer.param_groups[1]['weight_decay'],
-            'hparams/t_mom': dino.t_updater.mom,
-            'hparams/t_cmom': dino.teacher.head.cmom,
-            'hparams/t_temp': dino.teacher.head.temp,
-            'hparams/s_temp': dino.student.head.temp}
+        logs = {}
+        logs['hparams/lr'] = dino.optimizer.param_groups[0]['lr']
+        logs['hparams/wd'] = dino.optimizer.param_groups[1]['weight_decay']
+        logs['hparams/t_mom'] = dino.t_updater.mom
+        logs['hparams/t_cmom'] = dino.teacher.head.cmom
+        logs['hparams/t_temp'] = dino.teacher.head.temp
+        logs['hparams/s_temp'] = dino.student.head.temp
+        dino.log_dict(logs)
 
-        if self.hparams is not None:
-            out = dict((k, v) for (k,v) in out.items() if k in self.hparams)
-        dino.log_dict(out)
-
-    def on_train_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args) -> None:
-        self.step(pl_module)
-
-    def on_train_batch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args) -> None:
-        self.step(pl_module)
+    def on_train_batch_start(self, _:pl.Trainer, dino:DINO, *args) -> None:
+        self.step(dino)
 
 
 class ParamTracker(pl.Callback):
     def step(self, dino:DINO):
-        i_vec = U.module_to_vector(dino.init)
+        logs = {}
+        i_vec = U.module_to_vector(self.init)
         s_vec = U.module_to_vector(dino.student)
         t_vec = U.module_to_vector(dino.teacher)
+        logs['params/cos(init,teacher)']     = torch.dot(i_vec, t_vec) / torch.norm(i_vec) / torch.norm(t_vec)
+        logs['params/cos(init,student)']     = torch.dot(i_vec, s_vec) / torch.norm(i_vec) / torch.norm(s_vec)
+        logs['params/cos(teacher,student)']  = torch.dot(t_vec, s_vec) / torch.norm(t_vec) / torch.norm(s_vec)
+        logs['params/norm(init-teacher)']    = torch.norm(i_vec - t_vec)
+        logs['params/norm(init-student)']    = torch.norm(i_vec - s_vec)
+        logs['params/norm(teacher-student)'] = torch.norm(t_vec - s_vec)
+        dino.log_dict(logs)
 
-        out = {
-            'params/dot(i,t)' : torch.dot(i_vec, t_vec),
-            'params/dot(i,s)' : torch.dot(i_vec, s_vec),
-            'params/dot(t,s)' : torch.dot(t_vec, s_vec),
-            'params/norm(i-t)' : torch.norm(i_vec - t_vec),
-            'params/norm(i-s)' : torch.norm(i_vec - s_vec),
-            'params/norm(t-s)' : torch.norm(t_vec - s_vec) }
+    def on_fit_start(self, _:pl.Trainer, dino: DINO, *args) -> None:
+        self.init = copy.deepcopy(dino.student)
 
-        dino.log_dict(out)
-
-    def on_train_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args) -> None:
-        self.step(pl_module)
-
-    def on_train_batch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args) -> None:
-        self.step(pl_module)
+    def on_train_batch_end(self, _:pl.Trainer, dino: DINO, *args) -> None:
+        self.step(dino)

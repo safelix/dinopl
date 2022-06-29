@@ -198,9 +198,8 @@ class DINO(pl.LightningModule):
         self.out_dim = model.out_dim
         
         # initiallize student and teacher with same params
-        self.init = model
-        self.student = copy.deepcopy(self.init)
-        self.teacher = copy.deepcopy(self.init)
+        self.student = model
+        self.teacher = copy.deepcopy(model)
       
         # prepare teacher in evaluation mode
         self.teacher.eval() # TODO: will this stay in eval mode?
@@ -240,13 +239,17 @@ class DINO(pl.LightningModule):
         if opt_wd is not None: # no weight decay for bias parameters
             self.scheduler.add(self.optimizer.param_groups[1], 'weight_decay', opt_wd)
 
+    def configure_optimizers(self):
+        return self.optimizer
 
     def configure_callbacks(self):
         return [self.scheduler, self.t_updater]
 
-    def configure_optimizers(self):
-        return self.optimizer
-
+    def on_fit_start(self) -> None:
+        print('List of Callbacks: ')
+        for idx, cb in enumerate(self.trainer.callbacks, 1):
+            print(f' {idx}. {type(cb).__name__}', flush=True)
+        #print([type(cb).__name__ for cb in self.trainer.callbacks], flush=True)
 
     def multicrop_loss(self, log_preds: torch.Tensor, log_targs: torch.Tensor):
         # [n_crops, n_batches, out_dim]
@@ -278,22 +281,12 @@ class DINO(pl.LightningModule):
         out = {}  # TODO: macro vs micro? 
         out['CE'] = CEs.mean(dim=-1).mean(dim=0) # compute mean of batches, than of all matched crops
         out['KL'] = KLs.mean(dim=-1).mean(dim=0) # compute mean of batches, than of all matched crops
-
-        with torch.no_grad():
-            out['H_preds'] = H_preds.mean()
-            for crop_name, H_pred in zip(self.student.crops['name'], H_preds):
-                out[f'H_preds/{crop_name}'] = H_pred.mean() # compute mean of batch for every crop
-
-            out['H_targs'] = H_targs.mean()
-            for crop_name, H_targ in zip(self.teacher.crops['name'], H_targs):
-                out[f'H_targs/{crop_name}'] = H_targ.mean() # compute mean of batch for every crop
-
+        out['H_preds'] = H_preds
+        out['H_targs'] = H_targs
         return out
  
     def training_step(self, batch, batch_idx):
-        # TODO: why is this list of length 1, but not in validation_step()?!
-        #U.recprint(batch)
-        batch, batch_labels = batch[0] 
+        batch, batch_labels = batch[0] # TODO: why is this a list of length 1?!
 
         # generate teacher's targets and student's predictions
         # [n_crops, n_batches, n_channels, height, width]
@@ -305,12 +298,9 @@ class DINO(pl.LightningModule):
         # compute multicrop loss
         out = self.multicrop_loss(y_student_log, y_teacher_log)
 
-        ## logging
-        out = dict((f'train/{k}', v) for (k,v) in out.items())
-        self.log_dict(out)
-        # TODO: log CE, KL and H to pbar
-        # Log H_* seperately
-        return out['train/CE']
+        # minimize CE loss
+        out['loss'] = out['CE']
+        return out
 
     def validation_step(self, batch, batch_idx):
         batch, batch_labels = batch
@@ -324,7 +314,6 @@ class DINO(pl.LightningModule):
         # compute multicrop loss
         out = self.multicrop_loss(y_student_log, y_teacher_log)
         
-        ## logging
-        out = dict((f'valid/{k}', v) for (k,v) in out.items())
-        self.log_dict(out)
-        return out['valid/CE']
+        # minimize CE loss
+        out['loss'] = out['CE']
+        return out

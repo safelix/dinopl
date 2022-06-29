@@ -1,26 +1,27 @@
-import sys
 import time
+
 import pytorch_lightning as pl
-from torch import device, nn
-from torch.utils.data import DataLoader
-from torchvision.datasets import MNIST
-from torchvision import transforms
-import torch
-
-from configuration import CONSTANTS as C, create_optimizer
-from configuration import Configuration, create_encoder
-
-from dino import *
-from tracking import HParamTracker, ParamTracker
-from probing import LinearProbingCallback
 from pytorch_lightning.loggers import WandbLogger
+from torch.utils.data import DataLoader
+from torchvision import transforms
+from torchvision.datasets import MNIST
+
+from configuration import CONSTANTS as C
+from configuration import Configuration, create_encoder, create_optimizer
+from dino import *
+from probing import LinearProbingCallback
+from tracking import (HParamTracker, MetricsTracker, ParamTracker,
+                      PerCropEntropyTracker)
+
 wandb_logger = WandbLogger(project="DINO_MNIST")
 
 import warnings
+
 warnings.filterwarnings("ignore", ".*does not have many workers.*") # TODO?
 
 
 import my_utils as U
+
 
 def main(config:Configuration):
     # Fix random seed
@@ -96,12 +97,20 @@ def main(config:Configuration):
         probing_epochs=config.probing_epochs,
     )
 
+    callbacks = [
+            MetricsTracker(), 
+            PerCropEntropyTracker(), 
+            HParamTracker(),
+            ParamTracker(),
+            probing_cb,
+        ]
+
     # Training
     trainer = pl.Trainer(
         # training dynamics
         max_epochs=config.n_epochs,
         gradient_clip_val=config.clip_grad,
-        callbacks=[probing_cb, HParamTracker(), ParamTracker()],
+        callbacks=callbacks,
 
         # logging
         logger=wandb_logger,
