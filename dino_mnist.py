@@ -97,7 +97,7 @@ def main(config:Configuration):
             PerCropEntropyTracker(), 
             HParamTracker(),
             ParamTracker(track_init=True),
-            #probing_cb,
+            probing_cb,
         ]
 
     # Training
@@ -126,8 +126,8 @@ def main(config:Configuration):
         )
 
     trainer.fit(model=dino, 
-                train_dataloaders=[self_train_dl],
-                val_dataloaders=[self_valid_dl])
+                train_dataloaders=self_train_dl,
+                val_dataloaders=self_valid_dl)
 
 
 if __name__ == '__main__':

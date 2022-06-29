@@ -33,7 +33,7 @@ class DINOHead(nn.Module):
         super().__init__()
         self.out_dim = out_dim
         self.temp = temp
-        self.cent = nn.Parameter(torch.full((out_dim,), cent), requires_grad=False)
+        self.register_buffer('cent', torch.full((out_dim,), cent))
         self.cmom = None if cmom is None else nn.Parameter(cmom, requires_grad=False)
 
         # multi-layer perceptron classification head
@@ -63,7 +63,7 @@ class DINOHead(nn.Module):
 
         logits = self.mlp(x)
         if self.cmom:
-            self.cent.data = self.cmom * self.cent + (1-self.cmom) * torch.mean(logits)
+            self.cent = self.cmom * self.cent + (1 - self.cmom) * torch.mean(logits)
         y = self.log_softmax((logits - self.cent) / self.temp)
         return y
         
@@ -147,12 +147,11 @@ class DINOTeacherUpdate(pl.Callback):
             self.on_train_epoch_end = self.copy 
         else:
             raise RuntimeError('Unkown teacher update mode.')
+
     def ema(self, _:pl.Trainer, dino: pl.LightningModule, *args):
         for p_s, p_t in zip(dino.student.parameters(), dino.teacher.parameters()):
-            with torch.jit.script:
-                p_t.data = self.mom * p_t.data + (1 - self.mom) * p_s.data
-                #p_t.grad = self.mom * (p_t.data - p_s.data)
-                #p_t.data += self.mom * p_t.grad
+            p_t.data = self.mom * p_t.data + (1 - self.mom) * p_s.data
+
     def copy(self, _:pl.Trainer, dino: pl.LightningModule, *args):
         for p_s, p_t in zip(dino.student.parameters(), dino.teacher.parameters()):
             p_t.data = p_s.data
@@ -236,10 +235,9 @@ class DINO(pl.LightningModule):
             print(f' {idx}. {type(cb).__name__}', flush=True)
 
         # linear scaling rule
-        bs = self.trainer.train_dataloader.batch_size
+        bs = self.trainer.train_dataloader.loaders.batch_size
         self.scheduler.get(self.optimizer.param_groups[0], 'lr').ys *=  bs / 256
         self.scheduler.get(self.optimizer.param_groups[1], 'lr').ys *=  bs / 256
-
 
     def multicrop_loss(self, log_preds: torch.Tensor, log_targs: torch.Tensor):
         # [n_crops, n_batches, out_dim]
@@ -277,7 +275,7 @@ class DINO(pl.LightningModule):
  
 
     def training_step(self, batch, batch_idx):
-        batch, batch_labels = batch[0] # TODO: why is this a list of length 1?!
+        batch, batch_labels = batch
 
         # generate teacher's targets and student's predictions
         # [n_crops, n_batches, n_channels, height, width]

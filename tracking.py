@@ -72,7 +72,7 @@ class ParamTracker(pl.Callback):
         s_norm = torch.norm(s_vec)
         logs['params/norm(teach)'] = t_norm
         logs['params/norm(stud)'] = s_norm
-        logs['params/cos(teach, stud)']  = torch.dot(t_vec, s_vec) / (t_norm, s_norm)
+        logs['params/cos(teach, stud)']  = torch.dot(t_vec, s_vec) / (t_norm * s_norm)
         
         # get driving signals: gradient and difference
         g_vec = U.module_to_vector(dino.student, grad=True)
@@ -98,7 +98,7 @@ class ParamTracker(pl.Callback):
             s_norm = torch.norm(s_vec)
             logs['params/norm(teach - init)'] = t_norm
             logs['params/norm(stud - init)'] = s_norm
-            logs['params/cos(teach-init, stud-init)'] = torch.dot(t_vec, s_vec) / (t_norm, s_norm)
+            logs['params/cos(teach-init, stud-init)'] = torch.dot(t_vec, s_vec) / (t_norm * s_norm)
             
         dino.log_dict(logs)
 

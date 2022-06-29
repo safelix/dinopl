@@ -53,8 +53,10 @@ def is_bias(n:str, p:nn.Parameter):
 def module_to_vector(module:nn.Module, grad=False):
     vec = []
     for param in module.parameters():
-        if grad:
+        if grad and param.grad is not None:
             vec.append(param.grad.view(-1))
+        elif grad:  # fill non gradient parameters with 0 entries
+            vec.append(torch.zeros_like(param.data, requires_grad=False).view(-1))
         else:
             vec.append(param.data.view(-1)) 
 

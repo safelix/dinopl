@@ -95,7 +95,7 @@ class Configuration(object):
 
         # Data.
         data = parser.add_argument_group('Data')
-        data.add_argument('--bs_train', type=int, default=256, 
+        data.add_argument('--bs_train', type=int, default=64, 
                             help='Batch size for the training set.')
         data.add_argument('--bs_eval', type=int, default=256, 
                             help='Batch size for valid/test set.')
@@ -112,7 +112,7 @@ class Configuration(object):
                             help='Hidden dimensions of DINOHead MLP.')
         model.add_argument('--bot_dim', type=int, default=256,
                             help='L2-Bottleneck dimension of DINOHead MLP.')
-        model.add_argument('--out_dim', type=int, default=256, 
+        model.add_argument('--out_dim', type=int, default=65536, 
                             help='Output dimension of the DINOHead MLP.')
 
 
@@ -133,7 +133,7 @@ class Configuration(object):
         
         # Training configurations.        
         training = parser.add_argument_group('Training')
-        training.add_argument('--n_epochs', type=int, default=100, 
+        training.add_argument('--n_epochs', type=int, default=50, 
                             help='Number of epochs to train for.')
         training.add_argument('--opt', type=str, choices={'adamw', 'adam', 'sgd'}, default='adamw', 
                             help='Optimizer to use for training.')                   

@@ -105,6 +105,12 @@ class Scheduler(pl.Callback):
         if not isinstance(loc, dict):
             loc = loc.__dict__
         self.scheduled_params.append((loc, key, sched))
+
+    def get(self, loc:Union[dict, object], key:str):
+        for curr_loc, curr_key, curr_sched in self.scheduled_params: # get first schedule
+            if curr_loc == loc and curr_key == key:
+                return curr_sched
+        raise RuntimeError(f'Schedule {loc}[{key}] could not be retrieved.')
     
     def prep(self, n_steps:int, n_epochs:int):
         for loc, key, sched in self.scheduled_params: # prepare all schedules
