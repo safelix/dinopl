@@ -166,7 +166,10 @@ class DINOTeacherUpdate(pl.Callback):
 
     def ema(self, trainer:pl.Trainer, dino: pl.LightningModule, *args):
         for p_s, p_t in zip(dino.student.parameters(), dino.teacher.parameters()):
-            p_t.data = self.mom * p_t.data + (1 - self.mom) * p_s.data
+            with torch.jit.script:
+                p_t.data = self.mom * p_t.data + (1 - self.mom) * p_s.data
+                #p_t.grad = self.mom * (p_t.data - p_s.data)
+                #p_t.data += self.mom * p_t.grad
 
     def opt_step(self, dino: pl.LightningModule, *args):
         with torch.no_grad:

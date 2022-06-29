@@ -1,5 +1,6 @@
 import copy
 from typing import Dict, List
+from numpy import gradient
 
 import pytorch_lightning as pl
 import torch
@@ -62,18 +63,44 @@ class ParamTracker(pl.Callback):
         
     def step(self, dino:DINO):
         logs = {}
-        s_vec = U.module_to_vector(dino.student)
+
+        # get vector representation of student and teacher
         t_vec = U.module_to_vector(dino.teacher)
-        logs['params/cos(teacher,student)']  = torch.dot(t_vec, s_vec) / torch.norm(t_vec) / torch.norm(s_vec)
-        logs['params/norm(teacher-student)'] = torch.norm(t_vec - s_vec)
+        s_vec = U.module_to_vector(dino.student)
+
+        # log absolute vector representations
+        t_norm = torch.norm(t_vec)
+        s_norm = torch.norm(s_vec)
+        logs['params/norm(teach)'] = t_norm
+        logs['params/norm(stud)'] = s_norm
+        logs['params/cos(teach, stud)']  = torch.dot(t_vec, s_vec) / (t_norm, s_norm)
+        
+        # get driving signals: gradient and difference
+        g_vec = U.module_to_vector(dino.student, grad=True)
+        d_vec = t_vec - s_vec
+
+        # log driving signals
+        g_norm = torch.norm(g_vec)
+        d_norm = torch.norm(d_vec)
+        logs['params/norm(grad)'] = g_norm
+        logs['params/norm(diff)'] = d_norm
+        logs['params/cos(grad, diff)'] = torch.dot(g_vec, d_vec) / (g_norm * d_norm)
 
         if self.init:
+            # get absolute vector representations of init
             i_vec = U.module_to_vector(self.init)
-            logs['params/cos(init,teacher)']     = torch.dot(i_vec, t_vec) / torch.norm(i_vec) / torch.norm(t_vec)
-            logs['params/cos(init,student)']     = torch.dot(i_vec, s_vec) / torch.norm(i_vec) / torch.norm(s_vec)
-            logs['params/norm(init-teacher)']    = torch.norm(i_vec - t_vec)
-            logs['params/norm(init-student)']    = torch.norm(i_vec - s_vec)
-
+            i_norm = torch.norm(i_vec)
+            logs['params/cos(teacher, init)']  = torch.dot(t_vec, i_vec) / (t_norm * i_norm)
+            logs['params/cos(student, init)']  = torch.dot(s_vec, i_vec) / (s_norm * i_norm)
+            
+            # get vector representations relative to init
+            t_vec, s_vec = t_vec - i_vec, s_vec - i_vec
+            t_norm = torch.norm(t_vec)
+            s_norm = torch.norm(s_vec)
+            logs['params/norm(teach - init)'] = t_norm
+            logs['params/norm(stud - init)'] = s_norm
+            logs['params/cos(teach-init, stud-init)'] = torch.dot(t_vec, s_vec) / (t_norm, s_norm)
+            
         dino.log_dict(logs)
 
     def on_fit_start(self, _:pl.Trainer, dino: DINO, *args) -> None:
