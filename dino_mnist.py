@@ -101,8 +101,8 @@ def main(config:Configuration):
             MetricsTracker(), 
             PerCropEntropyTracker(), 
             HParamTracker(),
-            ParamTracker(),
-            probing_cb,
+            ParamTracker(track_init=True),
+            #probing_cb,
         ]
 
     # Training

@@ -57,21 +57,27 @@ class HParamTracker(pl.Callback):
 
 
 class ParamTracker(pl.Callback):
+    def __init__(self, track_init:bool=False) -> None:
+        self.track_init = track_init
+        
     def step(self, dino:DINO):
         logs = {}
-        i_vec = U.module_to_vector(self.init)
         s_vec = U.module_to_vector(dino.student)
         t_vec = U.module_to_vector(dino.teacher)
-        logs['params/cos(init,teacher)']     = torch.dot(i_vec, t_vec) / torch.norm(i_vec) / torch.norm(t_vec)
-        logs['params/cos(init,student)']     = torch.dot(i_vec, s_vec) / torch.norm(i_vec) / torch.norm(s_vec)
         logs['params/cos(teacher,student)']  = torch.dot(t_vec, s_vec) / torch.norm(t_vec) / torch.norm(s_vec)
-        logs['params/norm(init-teacher)']    = torch.norm(i_vec - t_vec)
-        logs['params/norm(init-student)']    = torch.norm(i_vec - s_vec)
         logs['params/norm(teacher-student)'] = torch.norm(t_vec - s_vec)
+
+        if self.init:
+            i_vec = U.module_to_vector(self.init)
+            logs['params/cos(init,teacher)']     = torch.dot(i_vec, t_vec) / torch.norm(i_vec) / torch.norm(t_vec)
+            logs['params/cos(init,student)']     = torch.dot(i_vec, s_vec) / torch.norm(i_vec) / torch.norm(s_vec)
+            logs['params/norm(init-teacher)']    = torch.norm(i_vec - t_vec)
+            logs['params/norm(init-student)']    = torch.norm(i_vec - s_vec)
+
         dino.log_dict(logs)
 
     def on_fit_start(self, _:pl.Trainer, dino: DINO, *args) -> None:
-        self.init = copy.deepcopy(dino.student)
+        self.init = copy.deepcopy(dino.student) if self.track_init else None
 
     def on_train_batch_end(self, _:pl.Trainer, dino: DINO, *args) -> None:
         self.step(dino)
