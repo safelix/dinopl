@@ -50,16 +50,18 @@ def main(config:Configuration):
     mc = MultiCropAugmentation(MC_SPEC, per_crop_transform=self_trfm)
 
     # Data Loading
+    config.n_classes = 10
     self_train_set = MNIST(root=C.DATA_DIR, train=True, transform=mc)
     self_valid_set = MNIST(root=C.DATA_DIR, train=False, transform=mc)
     eval_train_set = MNIST(root=C.DATA_DIR, train=True, transform=eval_trfm)
     eval_valid_set = MNIST(root=C.DATA_DIR, train=False, transform=eval_trfm)
-    config.n_classes = 10
 
-    self_train_dl = DataLoader(dataset=self_train_set, batch_size=config.bs_train, num_workers=config.n_workers, pin_memory=True)
-    self_valid_dl = DataLoader(dataset=self_valid_set, batch_size=config.bs_train, num_workers=config.n_workers, pin_memory=True)
-    eval_train_dl = DataLoader(dataset=eval_train_set, batch_size=config.bs_eval, num_workers=config.n_workers, pin_memory=True)
-    eval_valid_dl = DataLoader(dataset=eval_valid_set, batch_size=config.bs_eval, num_workers=config.n_workers, pin_memory=True)
+    # TODO: move after automatic gpu selection
+    gpu_args = {} if config.force_cpu else {'num_workers':config.n_workers, 'pin_memory':True} 
+    self_train_dl = DataLoader(dataset=self_train_set, batch_size=config.bs_train, **gpu_args)
+    self_valid_dl = DataLoader(dataset=self_valid_set, batch_size=config.bs_train, **gpu_args)
+    eval_train_dl = DataLoader(dataset=eval_train_set, batch_size=config.bs_eval, **gpu_args)
+    eval_valid_dl = DataLoader(dataset=eval_valid_set, batch_size=config.bs_eval, **gpu_args)
    
     # Model Setup
     enc = create_encoder(config)
