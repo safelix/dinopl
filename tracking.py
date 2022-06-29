@@ -1,6 +1,5 @@
 import copy
-from typing import Dict, List
-from numpy import gradient
+from typing import Dict
 
 import pytorch_lightning as pl
 import torch

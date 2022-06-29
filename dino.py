@@ -1,12 +1,11 @@
-from typing import Dict, List, Type, Union
-from numpy import require
+import copy
+from typing import List, Type
 
 import pytorch_lightning as pl
 import torch
 import torch.optim as optim
 from torch import nn
 from torchvision import transforms
-import copy
 
 import my_utils as U
 from scheduling import *
@@ -249,10 +248,16 @@ class DINO(pl.LightningModule):
         return [self.scheduler, self.t_updater]
 
     def on_fit_start(self) -> None:
-        print('List of Callbacks: ')
+        # move scheduler and updater to the front
+        for idx, cb in enumerate(self.trainer.callbacks):
+            if isinstance(cb, Scheduler):
+                self.trainer.callbacks.insert(0, self.trainer.callbacks.pop(idx))
+            if isinstance(cb, DINOTeacherUpdate):
+                self.trainer.callbacks.insert(1, self.trainer.callbacks.pop(idx))
+
+        print('Order of Callbacks: ')
         for idx, cb in enumerate(self.trainer.callbacks, 1):
             print(f' {idx}. {type(cb).__name__}', flush=True)
-        #print([type(cb).__name__ for cb in self.trainer.callbacks], flush=True)
 
     def multicrop_loss(self, log_preds: torch.Tensor, log_targs: torch.Tensor):
         # [n_crops, n_batches, out_dim]
