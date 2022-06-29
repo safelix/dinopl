@@ -139,48 +139,24 @@ class MultiCropAugmentation(nn.Module):
 
 
 class DINOTeacherUpdate(pl.Callback):
-    def __init__(self,
-        mode: str = 'ema',
-        mom: float= 0.996,
-        ) -> None:
-        super().__init__()
-
+    def __init__(self, mode: str = 'ema', mom: float = 0.996 ):
         if mode == 'ema':
             self.mom = mom
             self.on_train_batch_end = self.ema
-
         elif mode == 'prev_epoch':
-            self.mom = 0
-            self.on_train_epoch_end = self.ema
-
-        elif mode == 'sgd':
-            self.lr = 1 - mom
-            self.wd = mom
-
-            self.opt = torch.optim.SGD(lr=self.lr, weigh_decay=self.wd)
-            self.on_train_batch_end = self.opt_step
-            
+            self.on_train_epoch_end = self.copy 
         else:
             raise RuntimeError('Unkown teacher update mode.')
-
-    def ema(self, trainer:pl.Trainer, dino: pl.LightningModule, *args):
+    def ema(self, _:pl.Trainer, dino: pl.LightningModule, *args):
         for p_s, p_t in zip(dino.student.parameters(), dino.teacher.parameters()):
             with torch.jit.script:
                 p_t.data = self.mom * p_t.data + (1 - self.mom) * p_s.data
                 #p_t.grad = self.mom * (p_t.data - p_s.data)
                 #p_t.data += self.mom * p_t.grad
-
-    def opt_step(self, dino: pl.LightningModule, *args):
-        with torch.no_grad:
-            w_s = U.module_to_vector(dino.student)
-        w_t = U.module_to_vector(dino.teacher)
-
-        # optimizing similarity with sgd should be equal to ema
-        loss = torch.dot(w_s, w_t)
-        self.opt.zero_grad()
-        loss.backward()
-        self.opt.step()
-
+    def copy(self, _:pl.Trainer, dino: pl.LightningModule, *args):
+        for p_s, p_t in zip(dino.student.parameters(), dino.teacher.parameters()):
+            p_t.data = p_s.data
+        
 
 class DINO(pl.LightningModule):
     def __init__(self,
@@ -259,6 +235,12 @@ class DINO(pl.LightningModule):
         for idx, cb in enumerate(self.trainer.callbacks, 1):
             print(f' {idx}. {type(cb).__name__}', flush=True)
 
+        # linear scaling rule
+        bs = self.trainer.train_dataloader.batch_size
+        self.scheduler.get(self.optimizer.param_groups[0], 'lr').ys *=  bs / 256
+        self.scheduler.get(self.optimizer.param_groups[1], 'lr').ys *=  bs / 256
+
+
     def multicrop_loss(self, log_preds: torch.Tensor, log_targs: torch.Tensor):
         # [n_crops, n_batches, out_dim]
 
@@ -293,6 +275,7 @@ class DINO(pl.LightningModule):
         out['H_targs'] = H_targs
         return out
  
+
     def training_step(self, batch, batch_idx):
         batch, batch_labels = batch[0] # TODO: why is this a list of length 1?!
 
@@ -309,6 +292,7 @@ class DINO(pl.LightningModule):
         # minimize CE loss
         out['loss'] = out['CE']
         return out
+
 
     def validation_step(self, batch, batch_idx):
         batch, batch_labels = batch
