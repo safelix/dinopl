@@ -15,11 +15,6 @@ from tracking import (HParamTracker, MetricsTracker, ParamTracker,
 
 wandb_logger = WandbLogger(project="DINO_MNIST")
 
-import warnings
-
-warnings.filterwarnings("ignore", ".*does not have many workers.*") # TODO?
-
-
 import my_utils as U
 
 
