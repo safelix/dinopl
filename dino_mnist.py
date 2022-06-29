@@ -106,9 +106,9 @@ def main(config:Configuration):
         log_every_n_steps=config.log_every,
 
         # acceleration
-        accelerator='gpu',
-        devices=1, # only use single GPU training
-        gpus=[2],
+        accelerator='cpu' if config.force_cpu else 'gpu',
+        devices=None if config.force_cpu else 1,
+        auto_select_gpus=True,
 
         # performance
         benchmark=True,
