@@ -1,26 +1,22 @@
-import sys
 import time
+
 import pytorch_lightning as pl
-from torch import device, nn
-from torch.utils.data import DataLoader
-from torchvision.datasets import MNIST
-from torchvision import transforms
-import torch
-
-from configuration import CONSTANTS as C, create_optimizer
-from configuration import Configuration, create_encoder
-
-from dino import *
-from tracking import HParamTracker, ParamTracker
-from probing import LinearProbingCallback
 from pytorch_lightning.loggers import WandbLogger
+from torch.utils.data import DataLoader
+from torchvision import transforms
+from torchvision.datasets import MNIST
+
+from configuration import CONSTANTS as C
+from configuration import Configuration, create_encoder, create_optimizer
+from dino import *
+from probing import LinearProbingCallback
+from tracking import (HParamTracker, MetricsTracker, ParamTracker,
+                      PerCropEntropyTracker)
+
 wandb_logger = WandbLogger(project="DINO_MNIST")
 
-import warnings
-warnings.filterwarnings("ignore", ".*does not have many workers.*") # TODO?
-
-
 import my_utils as U
+
 
 def main(config:Configuration):
     # Fix random seed
@@ -50,16 +46,18 @@ def main(config:Configuration):
     mc = MultiCropAugmentation(MC_SPEC, per_crop_transform=self_trfm)
 
     # Data Loading
+    config.n_classes = 10
     self_train_set = MNIST(root=C.DATA_DIR, train=True, transform=mc)
     self_valid_set = MNIST(root=C.DATA_DIR, train=False, transform=mc)
     eval_train_set = MNIST(root=C.DATA_DIR, train=True, transform=eval_trfm)
     eval_valid_set = MNIST(root=C.DATA_DIR, train=False, transform=eval_trfm)
-    config.n_classes = 10
 
-    self_train_dl = DataLoader(dataset=self_train_set, batch_size=config.bs_train, num_workers=config.n_workers, pin_memory=True)
-    self_valid_dl = DataLoader(dataset=self_valid_set, batch_size=config.bs_train, num_workers=config.n_workers, pin_memory=True)
-    eval_train_dl = DataLoader(dataset=eval_train_set, batch_size=config.bs_eval, num_workers=config.n_workers, pin_memory=True)
-    eval_valid_dl = DataLoader(dataset=eval_valid_set, batch_size=config.bs_eval, num_workers=config.n_workers, pin_memory=True)
+    # TODO: move after automatic gpu selection
+    gpu_args = {} if config.force_cpu else {'num_workers':config.n_workers, 'pin_memory':True} 
+    self_train_dl = DataLoader(dataset=self_train_set, batch_size=config.bs_train, **gpu_args)
+    self_valid_dl = DataLoader(dataset=self_valid_set, batch_size=config.bs_train, **gpu_args)
+    eval_train_dl = DataLoader(dataset=eval_train_set, batch_size=config.bs_eval, **gpu_args)
+    eval_valid_dl = DataLoader(dataset=eval_valid_set, batch_size=config.bs_eval, **gpu_args)
    
     # Model Setup
     enc = create_encoder(config)
@@ -94,21 +92,29 @@ def main(config:Configuration):
         probing_epochs=config.probing_epochs,
     )
 
+    callbacks = [
+            MetricsTracker(), 
+            PerCropEntropyTracker(), 
+            HParamTracker(),
+            ParamTracker(track_init=True),
+            probing_cb,
+        ]
+
     # Training
     trainer = pl.Trainer(
         # training dynamics
         max_epochs=config.n_epochs,
         gradient_clip_val=config.clip_grad,
-        callbacks=[probing_cb, HParamTracker(), ParamTracker()],
+        callbacks=callbacks,
 
         # logging
         logger=wandb_logger,
         log_every_n_steps=config.log_every,
 
         # acceleration
-        accelerator='gpu',
-        devices=1, # only use single GPU training
-        gpus=[2],
+        accelerator='cpu' if config.force_cpu else 'gpu',
+        devices=None if config.force_cpu else 1,
+        auto_select_gpus=True,
 
         # performance
         benchmark=True,
@@ -120,8 +126,8 @@ def main(config:Configuration):
         )
 
     trainer.fit(model=dino, 
-                train_dataloaders=[self_train_dl],
-                val_dataloaders=[self_valid_dl])
+                train_dataloaders=self_train_dl,
+                val_dataloaders=self_valid_dl)
 
 
 if __name__ == '__main__':

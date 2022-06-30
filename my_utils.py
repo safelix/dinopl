@@ -50,8 +50,18 @@ def kl_divergence(log_pred:torch.Tensor, targ:torch.Tensor, log_targ:torch.Tenso
 def is_bias(n:str, p:nn.Parameter): 
     return n.endswith('bias') or len(p.shape)==1
 
-def module_to_vector(module:nn.Module):
-    return nn.utils.parameters_to_vector(module.parameters())
+def module_to_vector(module:nn.Module, grad=False):
+    vec = []
+    for param in module.parameters():
+        if grad and param.grad is not None:
+            vec.append(param.grad.view(-1))
+        elif grad:  # fill non gradient parameters with 0 entries
+            vec.append(torch.zeros_like(param.data, requires_grad=False).view(-1))
+        else:
+            vec.append(param.data.view(-1)) 
+
+    return torch.cat(vec)
+
 
 ## MLP Utilities
 def mlp_layer(in_dim:int, out_dim:int, act_fn:str = 'GELU', use_bn:bool = False):

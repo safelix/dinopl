@@ -1,12 +1,11 @@
-from typing import Dict, List, Type, Union
-from numpy import require
+import copy
+from typing import List, Type
 
 import pytorch_lightning as pl
 import torch
 import torch.optim as optim
 from torch import nn
 from torchvision import transforms
-import copy
 
 import my_utils as U
 from scheduling import *
@@ -34,7 +33,7 @@ class DINOHead(nn.Module):
         super().__init__()
         self.out_dim = out_dim
         self.temp = temp
-        self.cent = nn.Parameter(torch.full((out_dim,), cent), requires_grad=False)
+        self.register_buffer('cent', torch.full((out_dim,), cent))
         self.cmom = None if cmom is None else nn.Parameter(cmom, requires_grad=False)
 
         # multi-layer perceptron classification head
@@ -64,7 +63,7 @@ class DINOHead(nn.Module):
 
         logits = self.mlp(x)
         if self.cmom:
-            self.cent.data = self.cmom * self.cent + (1-self.cmom) * torch.mean(logits)
+            self.cent = self.cmom * self.cent + (1 - self.cmom) * torch.mean(logits)
         y = self.log_softmax((logits - self.cent) / self.temp)
         return y
         
@@ -140,45 +139,23 @@ class MultiCropAugmentation(nn.Module):
 
 
 class DINOTeacherUpdate(pl.Callback):
-    def __init__(self,
-        mode: str = 'ema',
-        mom: float= 0.996,
-        ) -> None:
-        super().__init__()
-
+    def __init__(self, mode: str = 'ema', mom: float = 0.996 ):
         if mode == 'ema':
             self.mom = mom
             self.on_train_batch_end = self.ema
-
         elif mode == 'prev_epoch':
-            self.mom = 0
-            self.on_train_epoch_end = self.ema
-
-        elif mode == 'sgd':
-            self.lr = 1 - mom
-            self.wd = mom
-
-            self.opt = torch.optim.SGD(lr=self.lr, weigh_decay=self.wd)
-            self.on_train_batch_end = self.opt_step
-            
+            self.on_train_epoch_end = self.copy 
         else:
             raise RuntimeError('Unkown teacher update mode.')
 
-    def ema(self, trainer:pl.Trainer, dino: pl.LightningModule, *args):
+    def ema(self, _:pl.Trainer, dino: pl.LightningModule, *args):
         for p_s, p_t in zip(dino.student.parameters(), dino.teacher.parameters()):
             p_t.data = self.mom * p_t.data + (1 - self.mom) * p_s.data
 
-    def opt_step(self, dino: pl.LightningModule, *args):
-        with torch.no_grad:
-            w_s = U.module_to_vector(dino.student)
-        w_t = U.module_to_vector(dino.teacher)
-
-        # optimizing similarity with sgd should be equal to ema
-        loss = torch.dot(w_s, w_t)
-        self.opt.zero_grad()
-        loss.backward()
-        self.opt.step()
-
+    def copy(self, _:pl.Trainer, dino: pl.LightningModule, *args):
+        for p_s, p_t in zip(dino.student.parameters(), dino.teacher.parameters()):
+            p_t.data = p_s.data
+        
 
 class DINO(pl.LightningModule):
     def __init__(self,
@@ -198,9 +175,8 @@ class DINO(pl.LightningModule):
         self.out_dim = model.out_dim
         
         # initiallize student and teacher with same params
-        self.init = model
-        self.student = copy.deepcopy(self.init)
-        self.teacher = copy.deepcopy(self.init)
+        self.student = model
+        self.teacher = copy.deepcopy(model)
       
         # prepare teacher in evaluation mode
         self.teacher.eval() # TODO: will this stay in eval mode?
@@ -240,13 +216,28 @@ class DINO(pl.LightningModule):
         if opt_wd is not None: # no weight decay for bias parameters
             self.scheduler.add(self.optimizer.param_groups[1], 'weight_decay', opt_wd)
 
+    def configure_optimizers(self):
+        return self.optimizer
 
     def configure_callbacks(self):
         return [self.scheduler, self.t_updater]
 
-    def configure_optimizers(self):
-        return self.optimizer
+    def on_fit_start(self) -> None:
+        # move scheduler and updater to the front
+        for idx, cb in enumerate(self.trainer.callbacks):
+            if isinstance(cb, Scheduler):
+                self.trainer.callbacks.insert(0, self.trainer.callbacks.pop(idx))
+            if isinstance(cb, DINOTeacherUpdate):
+                self.trainer.callbacks.insert(1, self.trainer.callbacks.pop(idx))
 
+        print('Order of Callbacks: ')
+        for idx, cb in enumerate(self.trainer.callbacks, 1):
+            print(f' {idx}. {type(cb).__name__}', flush=True)
+
+        # linear scaling rule
+        bs = self.trainer.train_dataloader.loaders.batch_size
+        self.scheduler.get(self.optimizer.param_groups[0], 'lr').ys *=  bs / 256
+        self.scheduler.get(self.optimizer.param_groups[1], 'lr').ys *=  bs / 256
 
     def multicrop_loss(self, log_preds: torch.Tensor, log_targs: torch.Tensor):
         # [n_crops, n_batches, out_dim]
@@ -278,22 +269,13 @@ class DINO(pl.LightningModule):
         out = {}  # TODO: macro vs micro? 
         out['CE'] = CEs.mean(dim=-1).mean(dim=0) # compute mean of batches, than of all matched crops
         out['KL'] = KLs.mean(dim=-1).mean(dim=0) # compute mean of batches, than of all matched crops
-
-        with torch.no_grad():
-            out['H_preds'] = H_preds.mean()
-            for crop_name, H_pred in zip(self.student.crops['name'], H_preds):
-                out[f'H_preds/{crop_name}'] = H_pred.mean() # compute mean of batch for every crop
-
-            out['H_targs'] = H_targs.mean()
-            for crop_name, H_targ in zip(self.teacher.crops['name'], H_targs):
-                out[f'H_targs/{crop_name}'] = H_targ.mean() # compute mean of batch for every crop
-
+        out['H_preds'] = H_preds
+        out['H_targs'] = H_targs
         return out
  
+
     def training_step(self, batch, batch_idx):
-        # TODO: why is this list of length 1, but not in validation_step()?!
-        #U.recprint(batch)
-        batch, batch_labels = batch[0] 
+        batch, batch_labels = batch
 
         # generate teacher's targets and student's predictions
         # [n_crops, n_batches, n_channels, height, width]
@@ -305,12 +287,10 @@ class DINO(pl.LightningModule):
         # compute multicrop loss
         out = self.multicrop_loss(y_student_log, y_teacher_log)
 
-        ## logging
-        out = dict((f'train/{k}', v) for (k,v) in out.items())
-        self.log_dict(out)
-        # TODO: log CE, KL and H to pbar
-        # Log H_* seperately
-        return out['train/CE']
+        # minimize CE loss
+        out['loss'] = out['CE']
+        return out
+
 
     def validation_step(self, batch, batch_idx):
         batch, batch_labels = batch
@@ -324,7 +304,6 @@ class DINO(pl.LightningModule):
         # compute multicrop loss
         out = self.multicrop_loss(y_student_log, y_teacher_log)
         
-        ## logging
-        out = dict((f'valid/{k}', v) for (k,v) in out.items())
-        self.log_dict(out)
-        return out['valid/CE']
+        # minimize CE loss
+        out['loss'] = out['CE']
+        return out
