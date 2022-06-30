@@ -143,6 +143,8 @@ class Configuration(object):
                             help='Weight decay for optimizer.')
         training.add_argument('--clip_grad', type=float, default=3, 
                             help='Value to clip gradient norm to.')
+        training.add_argument('--wn_freeze_epochs', type=int, default=1,
+                            help='Epochs to freeze WeightNormalizedLinear layer in DINOHead.')
 
 
         # Probing configurations

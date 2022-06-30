@@ -1,4 +1,5 @@
 import copy
+from collections import OrderedDict
 from typing import List, Type
 
 import pytorch_lightning as pl
@@ -38,17 +39,16 @@ class DINOHead(nn.Module):
         self.register_buffer('cent', torch.full((out_dim,), cent))
 
         # multi-layer perceptron classification head
-        layers, dims = [], [embed_dim] + hidden_dims
-        for i, o in zip(dims[:-1], dims[1:]):
-            layers.append(U.mlp_layer(i, o, act_fn, use_bn))
+        layers, dims = OrderedDict(), [embed_dim] + hidden_dims
+        for idx, (i, o) in enumerate(zip(dims[:-1], dims[1:])):
+            layers[f'layer{idx}'] = U.mlp_layer(i, o, act_fn, use_bn)
         
-        if l2_bottleneck_dim is None: # last layer
-            layers.append(nn.Linear(dims[-1], out_dim))
+        if l2_bottleneck_dim is None:
+            layers['output'] = nn.Linear(dims[-1], out_dim)
         else:
-            layers.append(
-                U.L2Bottleneck(dims[-1], l2_bottleneck_dim, out_dim))
+            layers['bottleneck'] = U.L2Bottleneck(dims[-1], l2_bottleneck_dim, out_dim)
 
-        self.mlp = nn.Sequential(*layers)  # build mlp
+        self.mlp = nn.Sequential(layers)  # build mlp
         self.log_softmax = nn.LogSoftmax(dim=-1)
 
         # Initallization with trunc_normal()
@@ -170,10 +170,12 @@ class DINO(pl.LightningModule):
         opt:Type[optim.Optimizer] = optim.AdamW,
         opt_lr:Schedule = None,
         opt_wd:Schedule = None,
+        wn_freeze_epochs = 1,
     ):
         super().__init__()
         self.embed_dim = model.embed_dim
         self.out_dim = model.out_dim
+        self.wn_freeze_epochs = wn_freeze_epochs
         
         # initiallize student and teacher with same params
         self.student = model
@@ -291,7 +293,12 @@ class DINO(pl.LightningModule):
         out['loss'] = out['CE']
         return out
 
-
+    def on_before_optimizer_step(self, *args):
+        wn = self.student.head.mlp.bottleneck.weightnorm
+        if self.current_epoch < self.wn_freeze_epochs:
+            for p in wn.parameters():
+                p.grad = None
+            
     def validation_step(self, batch, batch_idx):
         batch, batch_labels = batch
 
