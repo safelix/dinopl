@@ -267,8 +267,8 @@ class DINO(pl.LightningModule):
 
         # aggregate losses
         out = {}  # TODO: macro vs micro? 
-        out['CE'] = CEs.mean(dim=-1).mean(dim=0) # compute mean of batches, than of all matched crops
-        out['KL'] = KLs.mean(dim=-1).mean(dim=0) # compute mean of batches, than of all matched crops
+        out['CE'] = CEs.mean(dim=-1).mean(dim=-1) # compute mean of batches, than of all matched crops
+        out['KL'] = KLs.mean(dim=-1).mean(dim=-1) # compute mean of batches, than of all matched crops
         out['H_preds'] = H_preds
         out['H_targs'] = H_targs
         return out
