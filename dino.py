@@ -31,10 +31,11 @@ class DINOHead(nn.Module):
         cmom:float = None,
     ):
         super().__init__()
+        self.embed_dim = embed_dim
         self.out_dim = out_dim
         self.temp = temp
+        self.cmom = cmom
         self.register_buffer('cent', torch.full((out_dim,), cent))
-        self.cmom = None if cmom is None else nn.Parameter(cmom, requires_grad=False)
 
         # multi-layer perceptron classification head
         layers, dims = [], [embed_dim] + hidden_dims
@@ -234,10 +235,9 @@ class DINO(pl.LightningModule):
         for idx, cb in enumerate(self.trainer.callbacks, 1):
             print(f' {idx}. {type(cb).__name__}', flush=True)
 
-        # linear scaling rule
+        # linear scaling rule: schedule is by refernce... only scale once
         bs = self.trainer.train_dataloader.loaders.batch_size
         self.scheduler.get(self.optimizer.param_groups[0], 'lr').ys *=  bs / 256
-        self.scheduler.get(self.optimizer.param_groups[1], 'lr').ys *=  bs / 256
 
     def multicrop_loss(self, log_preds: torch.Tensor, log_targs: torch.Tensor):
         # [n_crops, n_batches, out_dim]

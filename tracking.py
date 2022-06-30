@@ -3,6 +3,7 @@ from typing import Dict
 
 import pytorch_lightning as pl
 import torch
+from pytorch_lightning.loggers import WandbLogger
 
 import my_utils as U
 from dino import DINO
@@ -20,7 +21,7 @@ class MetricsTracker(pl.Callback):
     def on_train_batch_end(self, _:pl.Trainer, dino:DINO, outputs:Dict[str, torch.Tensor], *args) -> None:
         self.step('train', outputs, dino)
     
-    def on_valid_batch_end(self, _:pl.Trainer, dino:DINO, outputs:Dict[str, torch.Tensor], *args) -> None:
+    def on_validation_batch_end(self, _:pl.Trainer, dino:DINO, outputs:Dict[str, torch.Tensor], *args) -> None:
         self.step('valid', outputs, dino)
 
 
@@ -37,7 +38,7 @@ class PerCropEntropyTracker(pl.Callback):
     def on_train_batch_end(self, _: pl.Trainer, dino: DINO, outputs:Dict[str, torch.Tensor], *args) -> None:
         self.step('train', outputs['H_preds'], outputs['H_targs'], dino)
     
-    def on_valid_batch_end(self, _: pl.Trainer, dino: DINO, outputs:Dict[str, torch.Tensor], *args) -> None:
+    def on_validation_batch_end(self, _: pl.Trainer, dino: DINO, outputs:Dict[str, torch.Tensor], *args) -> None:
         self.step('valid', outputs['H_preds'], outputs['H_targs'], dino)
 
 
@@ -50,6 +51,8 @@ class HParamTracker(pl.Callback):
         logs['hparams/t_cmom'] = dino.teacher.head.cmom
         logs['hparams/t_temp'] = dino.teacher.head.temp
         logs['hparams/s_temp'] = dino.student.head.temp
+        logs['hparams/t_cent.norm()'] = dino.teacher.head.cent.norm()
+        logs['hparams/t_cent.mean()'] = dino.teacher.head.cent.mean()
         dino.log_dict(logs)
 
     def on_train_batch_start(self, _:pl.Trainer, dino:DINO, *args) -> None:
@@ -67,13 +70,6 @@ class ParamTracker(pl.Callback):
         t_vec = U.module_to_vector(dino.teacher)
         s_vec = U.module_to_vector(dino.student)
 
-        # log absolute vector representations
-        t_norm = torch.norm(t_vec)
-        s_norm = torch.norm(s_vec)
-        logs['params/norm(teach)'] = t_norm
-        logs['params/norm(stud)'] = s_norm
-        logs['params/cos(teach, stud)']  = torch.dot(t_vec, s_vec) / (t_norm * s_norm)
-        
         # get driving signals: gradient and difference
         g_vec = U.module_to_vector(dino.student, grad=True)
         d_vec = t_vec - s_vec
@@ -85,15 +81,12 @@ class ParamTracker(pl.Callback):
         logs['params/norm(diff)'] = d_norm
         logs['params/cos(grad, diff)'] = torch.dot(g_vec, d_vec) / (g_norm * d_norm)
 
-        if self.init:
-            # get absolute vector representations of init
-            i_vec = U.module_to_vector(self.init)
-            i_norm = torch.norm(i_vec)
-            logs['params/cos(teacher, init)']  = torch.dot(t_vec, i_vec) / (t_norm * i_norm)
-            logs['params/cos(student, init)']  = torch.dot(s_vec, i_vec) / (s_norm * i_norm)
-            
+        if self.track_init:           
             # get vector representations relative to init
-            t_vec, s_vec = t_vec - i_vec, s_vec - i_vec
+            t_vec = t_vec - self.i_vec
+            s_vec =  s_vec - self.i_vec
+
+            # log position and angle relative to init
             t_norm = torch.norm(t_vec)
             s_norm = torch.norm(s_vec)
             logs['params/norm(teach - init)'] = t_norm
@@ -103,7 +96,11 @@ class ParamTracker(pl.Callback):
         dino.log_dict(logs)
 
     def on_fit_start(self, _:pl.Trainer, dino: DINO, *args) -> None:
-        self.init = copy.deepcopy(dino.student) if self.track_init else None
+        if self.track_init:
+            self.i_vec = U.module_to_vector(dino.teacher).clone()
+
+        #if isinstance(dino.logger, WandbLogger):
+        #    dino.logger.watch(dino.student, log='all', log_freq=100)
 
     def on_train_batch_end(self, _:pl.Trainer, dino: DINO, *args) -> None:
         self.step(dino)

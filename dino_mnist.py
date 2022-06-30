@@ -51,6 +51,8 @@ def main(config:Configuration):
     self_valid_set = MNIST(root=C.DATA_DIR, train=False, transform=mc)
     eval_train_set = MNIST(root=C.DATA_DIR, train=True, transform=eval_trfm)
     eval_valid_set = MNIST(root=C.DATA_DIR, train=False, transform=eval_trfm)
+    print(f'Data loaded: size(train)={len(self_train_set)}, size(valid)={self_valid_set}')
+
 
     # TODO: move after automatic gpu selection
     gpu_args = {} if config.force_cpu else {'num_workers':config.n_workers, 'pin_memory':True} 
