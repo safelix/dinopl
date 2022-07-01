@@ -27,8 +27,8 @@ class DINOHead(nn.Module):
         l2_bottleneck_dim:int = 256,
         use_bn:bool = False, 
         act_fn:str = 'GELU',
-        temp:float = 1,     
-        cent:float = 0,
+        temp:float = 1.0,     
+        cent:float = 0.0,
         cmom:float = None,
     ):
         super().__init__()
@@ -52,11 +52,15 @@ class DINOHead(nn.Module):
         self.log_softmax = nn.LogSoftmax(dim=-1)
 
         # Initallization with trunc_normal()
-        for m in self.mlp:
-            if isinstance(m, nn.Linear):
-                U.trunc_normal_(m.weight, std=.02)
-                if isinstance(m, nn.Linear) and m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
+        self.mlp.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, U.WeightNormalizedLinear):
+            return # explicitely do not apply to weight normalized
+        if isinstance(m, nn.Linear):
+            U.trunc_normal_(m.weight, std=.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
 
     def forward(self, x:torch.Tensor):
         # [n_crops, n_batches, embed_dim]
