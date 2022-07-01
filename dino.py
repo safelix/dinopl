@@ -213,18 +213,22 @@ class DINO(pl.LightningModule):
         self.scheduler.add(self.teacher.head, 'temp', t_temp)
         self.scheduler.add(self.student.head, 'temp', s_temp)
 
-        # configure optimizer, learning rate & weight decay
-        params = self.student.named_parameters()
+        # configure optimizer, learning rate & weight decay       
+        params = list(self.student.named_parameters()) # generator -> list
         self.optimizer = opt([
-            {'params':[p for n,p in params if U.is_bias(n,p)]},
-            {'params':[p for n,p in params if not U.is_bias(n,p)]}])
-
+            {'params':[p for n,p in params if not U.is_bias(n,p)]},
+            {'params':[p for n,p in params if U.is_bias(n,p)]}])
+        
         if opt_lr is not None:
             self.scheduler.add(self.optimizer.param_groups[0], 'lr', opt_lr)
             self.scheduler.add(self.optimizer.param_groups[1], 'lr', opt_lr)
-        if opt_wd is not None: # no weight decay for bias parameters
-            self.scheduler.add(self.optimizer.param_groups[1], 'weight_decay', opt_wd)
+        if opt_wd is not None: # only regularize weights but not biases
+            self.scheduler.add(self.optimizer.param_groups[0], 'weight_decay', opt_wd)
 
+        print(f'Optimizer initiallized: {len(self.optimizer.param_groups)} groups of sizes:', 
+            [len(group['params']) for group in self.optimizer.param_groups])
+    
+    
     def configure_optimizers(self):
         return self.optimizer
 
@@ -246,6 +250,7 @@ class DINO(pl.LightningModule):
         # linear scaling rule: schedule is by refernce... only scale once
         bs = self.trainer.train_dataloader.loaders.batch_size
         self.scheduler.get(self.optimizer.param_groups[0], 'lr').ys *=  bs / 256
+    
 
     def multicrop_loss(self, log_preds: torch.Tensor, log_targs: torch.Tensor):
         # [n_crops, n_batches, out_dim]
@@ -280,7 +285,6 @@ class DINO(pl.LightningModule):
         out['H_preds'] = H_preds
         out['H_targs'] = H_targs
         return out
- 
 
     def training_step(self, batch, batch_idx):
         batch, batch_labels = batch
@@ -298,12 +302,6 @@ class DINO(pl.LightningModule):
         # minimize CE loss
         out['loss'] = out['CE']
         return out
-
-    def on_before_optimizer_step(self, *args):
-        wn = self.student.head.mlp.bottleneck.weightnorm
-        if self.current_epoch < self.wn_freeze_epochs:
-            for p in wn.parameters():
-                p.grad = None
             
     def validation_step(self, batch, batch_idx):
         batch, batch_labels = batch
@@ -320,3 +318,14 @@ class DINO(pl.LightningModule):
         # minimize CE loss
         out['loss'] = out['CE']
         return out
+
+
+    # Set gradients to `None` instead of zero to improve performance.
+    def optimizer_zero_grad(self, epoch, batch_idx, opt:torch.optim.Optimizer, optimizer_idx):
+        opt.zero_grad(set_to_none=True)
+
+    def on_before_optimizer_step(self, *args):
+        wn = self.student.head.mlp.bottleneck.weightnorm
+        if self.current_epoch < self.wn_freeze_epochs:
+            for p in wn.parameters():
+                p.grad = None
