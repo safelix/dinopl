@@ -27,10 +27,10 @@ def main(config:Configuration):
     MC_SPEC = [
             {'name':'global1', 'out_size':128, 'min_scale':0.6, 'max_scale':1.0, 'teacher':True, 'student':True},
             {'name':'global2', 'out_size':128, 'min_scale':0.6, 'max_scale':1.0, 'teacher':True, 'student':True},
-            {'name':'local1', 'out_size':96, 'min_scale':0.2, 'max_scale':0.4, 'teacher':False, 'student':True},
-            {'name':'local2', 'out_size':96, 'min_scale':0.2, 'max_scale':0.4, 'teacher':False, 'student':True},
-            {'name':'local3', 'out_size':96, 'min_scale':0.2, 'max_scale':0.4, 'teacher':False, 'student':True},
-            {'name':'local4', 'out_size':96, 'min_scale':0.2, 'max_scale':0.4, 'teacher':False, 'student':True},
+            {'name':'local1', 'out_size':96, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
+            {'name':'local2', 'out_size':96, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
+            {'name':'local3', 'out_size':96, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
+            {'name':'local4', 'out_size':96, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
         ]
 
     
