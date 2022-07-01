@@ -67,9 +67,11 @@ class DINOHead(nn.Module):
         # -> [n_crops, n_batches, out_dim]
 
         logits = self.mlp(x)
-        if self.cmom:
-            self.cent = self.cmom * self.cent + (1 - self.cmom) * torch.mean(logits)
+        batch_cent = torch.mean(logits, dim=[0,1])
         y = self.log_softmax((logits - self.cent) / self.temp)
+
+        if self.cmom: # update centering after it is applied 
+            self.cent = self.cent * self.cmom  + batch_cent * (1 - self.cmom)
         return y
         
 
