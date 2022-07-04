@@ -225,7 +225,7 @@ class DINO(pl.LightningModule):
         if opt_wd is not None: # only regularize weights but not biases
             self.scheduler.add(self.optimizer.param_groups[0], 'weight_decay', opt_wd)
 
-        print(f'Optimizer initiallized: {len(self.optimizer.param_groups)} groups of sizes:', 
+        print(f'Init optimizer: {len(self.optimizer.param_groups)} paramgroups of sizes', 
             [len(group['params']) for group in self.optimizer.param_groups])
     
     

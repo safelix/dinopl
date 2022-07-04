@@ -1,37 +1,48 @@
 from time import time
-from typing import Dict, List
+from typing import Dict
 
 import pytorch_lightning as pl
 import torch
 from torch import nn
 from torch.nn import functional as F
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from torchmetrics import Accuracy
 from tqdm import tqdm
 
-
+import my_utils as U
 
 class LinearProbingCallback(pl.Callback):
     def __init__(self,
             encoders:Dict[str, nn.Module],
             embed_dim:int,
             n_classes:int,
-            train_dl:DataLoader, 
-            valid_dl:DataLoader, 
             probe_every:int, 
-            probing_epochs:int):
+            probing_epochs:int,
+            train_set:Dataset, 
+            valid_set:Dataset,
+            dl_args:Dict,
+            ):
         super().__init__()
+
+        self.probe_every = probe_every
+        self.probing_epochs = probing_epochs
 
         self.encoders = encoders
         self.embed_dim = embed_dim
         self.n_classes = n_classes
 
-        self.train_dl =  train_dl
-        self.valid_dl =  valid_dl
+        self.train_set =  train_set
+        self.valid_set =  valid_set
 
-        self.probe_every = probe_every
-        self.probing_epochs = probing_epochs
+        self.dl_args = dl_args
+        self.train_dl = None
+        self.valid_dl = None
 
+
+    def on_fit_start(self, *_) -> None:
+        self.train_dl = DataLoader(dataset=self.train_set, **self.dl_args)
+        self.valid_dl = DataLoader(dataset=self.valid_set, **self.dl_args)
+ 
     @torch.enable_grad()
     def probe(self, device):
         out = {}
@@ -40,28 +51,36 @@ class LinearProbingCallback(pl.Callback):
             clf = nn.Linear(self.embed_dim, self.n_classes, device=device)
             opt = torch.optim.AdamW(clf.parameters())
 
-            print(f'Starting LinearProbe of {name}... ', flush=True, end='')
+            print(f'Starting LinearProbe of {name}... ', flush=True)
             t = time()
+
+            loading_pbar = tqdm(self.train_dl, leave=False)
+            loading_pbar.set_description(f'Loading Embeddings')
+            train_embs, mem = [], 0
+            with torch.no_grad():
+                for batch in loading_pbar:
+                    inputs, targets = batch[0].to(device), batch[1].to(device)
+                    embeddings = encoder(inputs)
+                    train_embs.append((embeddings, targets))
+                    mem += embeddings.element_size() * embeddings.nelement()
+                    loading_pbar.set_postfix({'mem':f'{mem*1e-6:.1f}MB'})      
 
             train_pbar = tqdm(range(self.probing_epochs), leave=False)
             train_pbar.set_description(f'Training')
             for epoch in train_pbar: # training
-                epoch_pbar = tqdm(self.train_dl, leave=False)
+                epoch_pbar = tqdm(train_embs, leave=False)
                 epoch_pbar.set_description(f'Epoch {epoch}')
-                for batch in epoch_pbar: 
-                    inputs, targets = batch[0].to(device), batch[1].to(device)
+                for embeddings, targets in epoch_pbar: 
 
-                    with torch.no_grad(): # get embeddings
-                        embeddings = encoder(inputs)
                     opt.zero_grad(set_to_none=True) # step clf parameters
                     loss = F.cross_entropy(clf(embeddings), targets)
                     loss.backward()
                     opt.step()
-                    epoch_pbar.set_postfix({'loss':float(loss)})      
+                    epoch_pbar.set_postfix({'loss':float(loss)})
 
+            valid_pbar = tqdm(self.valid_dl, leave=False)
+            valid_pbar.set_description('Validation')
             with torch.no_grad(): 
-                valid_pbar = tqdm(self.valid_dl, leave=False)
-                valid_pbar.set_description('Validation')
                 for batch in valid_pbar:
                     inputs, targets = batch[0].to(device), batch[1].to(device)
                     accuracy.update(clf(encoder(inputs)), targets)
@@ -69,7 +88,8 @@ class LinearProbingCallback(pl.Callback):
                 out[name] = float(accuracy.compute())
 
             t = time() - t
-            print(f'...took {int(t//60):02d}:{int(t%60):02d}min \t\t=> acc: {out[name]:.3f}', flush=True)
+            grad = U.module_to_vector(clf, grad=True).norm()
+            print(f'...took {int(t//60):02d}:{int(t%60):02d}min \t\t=> acc={out[name]:.3f}, grad={grad:.3f}', flush=True)
         return dict((f'{k}_acc', v) for (k,v) in out.items())
     
 

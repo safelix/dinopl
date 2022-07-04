@@ -51,16 +51,8 @@ def main(config:Configuration):
     self_valid_set = MNIST(root=C.DATA_DIR, train=False, transform=mc)
     eval_train_set = MNIST(root=C.DATA_DIR, train=True, transform=eval_trfm)
     eval_valid_set = MNIST(root=C.DATA_DIR, train=False, transform=eval_trfm)
-    print(f'Data loaded: size(train)={len(self_train_set)}, size(valid)={len(self_valid_set)}')
+    print(f'Init dataset: size(train)={len(self_train_set)}, size(valid)={len(self_valid_set)}')
 
-
-    # TODO: move after automatic gpu selection
-    gpu_args = {} if config.force_cpu else {'num_workers':config.n_workers, 'pin_memory':True} 
-    self_train_dl = DataLoader(dataset=self_train_set, batch_size=config.bs_train, **gpu_args)
-    self_valid_dl = DataLoader(dataset=self_valid_set, batch_size=config.bs_train, **gpu_args)
-    eval_train_dl = DataLoader(dataset=eval_train_set, batch_size=config.bs_eval, **gpu_args)
-    eval_valid_dl = DataLoader(dataset=eval_valid_set, batch_size=config.bs_eval, **gpu_args)
-   
     # Model Setup
     enc = create_encoder(config)
     head = DINOHead(config.embed_dim, config.out_dim, 
@@ -82,16 +74,21 @@ def main(config:Configuration):
                 opt_lr = config.opt_lr,
                 opt_wd = config.opt_wd)
 
-    # Tracking Logic
+    # Tracking Logic    
     probing_cb = LinearProbingCallback(
-        encoders={'student': dino.student.enc,
-                'teacher': dino.teacher.enc},
-        embed_dim=config.embed_dim, 
-        n_classes=config.n_classes,
-        train_dl=eval_train_dl,
-        valid_dl=eval_valid_dl,
-        probe_every=config.probe_every,
-        probing_epochs=config.probing_epochs,
+        encoders = dict(
+            student=dino.student.enc,
+            teacher=dino.teacher.enc),
+        embed_dim = config.embed_dim, 
+        n_classes = config.n_classes,
+        probe_every = config.probe_every,
+        probing_epochs = config.probing_epochs,
+        train_set = eval_train_set,
+        valid_set = eval_valid_set,
+        dl_args=dict(
+            batch_size = config.bs_eval,
+            num_workers = config.n_workers,
+            pin_memory = False if config.force_cpu else True)
     )
 
     callbacks = [
@@ -116,8 +113,7 @@ def main(config:Configuration):
         # acceleration
         accelerator='cpu' if config.force_cpu else 'gpu',
         devices=None if config.force_cpu else 1,
-        #auto_select_gpus=True,
-        gpus=[2],
+        auto_select_gpus=True,
 
         # performance
         benchmark=True,
@@ -127,6 +123,13 @@ def main(config:Configuration):
         #limit_train_batches=2,
         #limit_val_batches=2,
         )
+
+    dl_args = dict(
+        batch_size = config.bs_train,
+        num_workers = config.n_workers,
+        pin_memory = False if config.force_cpu else True ) 
+    self_train_dl = DataLoader(dataset=self_train_set, **dl_args)
+    self_valid_dl = DataLoader(dataset=self_valid_set, **dl_args)
 
     trainer.fit(model=dino, 
                 train_dataloaders=self_train_dl,
