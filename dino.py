@@ -7,6 +7,7 @@ import torch
 import torch.optim as optim
 from torch import nn
 from torchvision import transforms
+from torch.nn import functional as F
 
 import my_utils as U
 from scheduling import *
@@ -49,7 +50,6 @@ class DINOHead(nn.Module):
             layers['bottleneck'] = U.L2Bottleneck(dims[-1], l2_bottleneck_dim, out_dim)
 
         self.mlp = nn.Sequential(layers)  # build mlp
-        self.log_softmax = nn.LogSoftmax(dim=-1)
 
         # Initallization with trunc_normal()
         self.mlp.apply(self._init_weights)
@@ -68,11 +68,11 @@ class DINOHead(nn.Module):
 
         logits = self.mlp(x)
         batch_cent = torch.mean(logits, dim=[0,1])
-        y = self.log_softmax((logits - self.cent) / self.temp)
+        logits = (logits - self.cent) / self.temp
 
         if self.cmom: # update centering after it is applied 
             self.cent = self.cent * self.cmom  + batch_cent * (1 - self.cmom)
-        return y
+        return logits
         
 
 class DINOModel(nn.Module):
@@ -99,8 +99,9 @@ class DINOModel(nn.Module):
 
         # compute outputs from embeddings
         # -> [n_crops, n_batches, out_dim]
-        y = self.head(embeddings)
-        return y
+        logits = self.head(embeddings)
+
+        return dict(logits=logits, embeddings=embeddings)
 
 
 
@@ -252,8 +253,12 @@ class DINO(pl.LightningModule):
         self.scheduler.get(self.optimizer.param_groups[0], 'lr').ys *=  bs / 256
     
 
-    def multicrop_loss(self, log_preds: torch.Tensor, log_targs: torch.Tensor):
+    def multicrop_loss(self, pred_logits: torch.Tensor, targ_logits: torch.Tensor):
         # [n_crops, n_batches, out_dim]
+
+        # compute log softmax
+        log_preds = F.log_softmax(pred_logits, dim=-1)
+        log_targs = F.log_softmax(targ_logits, dim=-1)
 
         # compute softmax outputs
         preds = torch.exp(log_preds)
@@ -293,14 +298,16 @@ class DINO(pl.LightningModule):
         # [n_crops, n_batches, n_channels, height, width]
         # -> [n_crops, n_batches, out_dim]
         with torch.no_grad():
-            y_teacher_log = self.teacher([batch[i] for i in self.teacher.crops['idx']])
-        y_student_log = self.student([batch[i] for i in self.student.crops['idx']])
+            teacher_out = self.teacher([batch[i] for i in self.teacher.crops['idx']])
+        student_out = self.student([batch[i] for i in self.student.crops['idx']])
         
         # compute multicrop loss
-        out = self.multicrop_loss(y_student_log, y_teacher_log)
+        out = self.multicrop_loss(student_out['logits'], teacher_out['logits'])
 
         # minimize CE loss
         out['loss'] = out['CE']
+        out['teacher'] = teacher_out
+        out['student'] = student_out
         return out
             
     def validation_step(self, batch, batch_idx):
@@ -309,14 +316,16 @@ class DINO(pl.LightningModule):
         # generate teacher's targets and student's predictions
         # [n_crops, n_batches, n_channels, height, width]
         # -> [n_crops, n_batches, out_dim]
-        y_teacher_log = self.teacher([batch[i] for i in self.teacher.crops['idx']])
-        y_student_log = self.student([batch[i] for i in self.student.crops['idx']])
+        teacher_out = self.teacher([batch[i] for i in self.teacher.crops['idx']])
+        student_out = self.student([batch[i] for i in self.student.crops['idx']])
         
         # compute multicrop loss
-        out = self.multicrop_loss(y_student_log, y_teacher_log)
+        out = self.multicrop_loss(student_out['logits'], teacher_out['logits'])
         
         # minimize CE loss
         out['loss'] = out['CE']
+        out['teacher'] = teacher_out
+        out['student'] = student_out
         return out
 
 
