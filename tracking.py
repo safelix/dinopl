@@ -46,7 +46,7 @@ class HParamTracker(pl.Callback):
     def step(self, dino:DINO):
         logs = {}
         logs['hparams/lr'] = dino.optimizer.param_groups[0]['lr']
-        logs['hparams/wd'] = dino.optimizer.param_groups[1]['weight_decay']
+        logs['hparams/wd'] = dino.optimizer.param_groups[0]['weight_decay']
         logs['hparams/t_mom'] = dino.t_updater.mom
         logs['hparams/t_cmom'] = dino.teacher.head.cmom
         logs['hparams/t_temp'] = dino.teacher.head.temp
@@ -63,7 +63,14 @@ class ParamTracker(pl.Callback):
     def __init__(self, track_init:bool=False) -> None:
         self.track_init = track_init
         
-    def step(self, dino:DINO):
+    def on_fit_start(self, _:pl.Trainer, dino: DINO, *args) -> None:
+        if self.track_init:
+            self.i_vec = U.module_to_vector(dino.teacher).clone()
+
+    def on_after_backward(self, _:pl.Trainer, dino: DINO) -> None:
+        self.g_vec = U.module_to_vector(dino.student, grad=True)
+
+    def on_train_batch_end(self, _:pl.Trainer, dino: DINO, *args) -> None:
         logs = {}
 
         # get vector representation of student and teacher
@@ -71,7 +78,7 @@ class ParamTracker(pl.Callback):
         s_vec = U.module_to_vector(dino.student)
 
         # get driving signals: gradient and difference
-        g_vec = U.module_to_vector(dino.student, grad=True)
+        g_vec = self.g_vec #U.module_to_vector(dino.student, grad=True)
         d_vec = t_vec - s_vec
 
         # log driving signals
@@ -94,13 +101,3 @@ class ParamTracker(pl.Callback):
             logs['params/cos(teach-init, stud-init)'] = torch.dot(t_vec, s_vec) / (t_norm * s_norm)
             
         dino.log_dict(logs)
-
-    def on_fit_start(self, _:pl.Trainer, dino: DINO, *args) -> None:
-        if self.track_init:
-            self.i_vec = U.module_to_vector(dino.teacher).clone()
-
-        #if isinstance(dino.logger, WandbLogger):
-        #    dino.logger.watch(dino.student, log='all', log_freq=100)
-
-    def on_train_batch_end(self, _:pl.Trainer, dino: DINO, *args) -> None:
-        self.step(dino)
