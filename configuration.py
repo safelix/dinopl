@@ -151,7 +151,7 @@ class Configuration(object):
         probing = parser.add_argument_group('Probing')
         probing.add_argument('--probe_every', type=int, default=5, 
                             help='Probe every so many epochs during training.')
-        probing.add_argument('--probing_epochs', type=int, default=5, 
+        probing.add_argument('--probing_epochs', type=int, default=10, 
                             help='Number of epochs to train for linear probing.')
 
         return parser

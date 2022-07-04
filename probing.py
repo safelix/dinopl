@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 import my_utils as U
 
-class LinearProbingCallback(pl.Callback):
+class LinearProber(pl.Callback):
     def __init__(self,
             encoders:Dict[str, nn.Module],
             embed_dim:int,
@@ -51,11 +51,10 @@ class LinearProbingCallback(pl.Callback):
             clf = nn.Linear(self.embed_dim, self.n_classes, device=device)
             opt = torch.optim.AdamW(clf.parameters())
 
-            print(f'Starting LinearProbe of {name}... ', flush=True)
             t = time()
 
             loading_pbar = tqdm(self.train_dl, leave=False)
-            loading_pbar.set_description(f'Loading Embeddings')
+            loading_pbar.set_description(f'Loading {name} embeddings')
             train_embs, mem = [], 0
             with torch.no_grad():
                 for batch in loading_pbar:
@@ -65,18 +64,16 @@ class LinearProbingCallback(pl.Callback):
                     mem += embeddings.element_size() * embeddings.nelement()
                     loading_pbar.set_postfix({'mem':f'{mem*1e-6:.1f}MB'})      
 
+            print('', flush=True, end='')
             train_pbar = tqdm(range(self.probing_epochs), leave=False)
             train_pbar.set_description(f'Training')
             for epoch in train_pbar: # training
-                epoch_pbar = tqdm(train_embs, leave=False)
-                epoch_pbar.set_description(f'Epoch {epoch}')
-                for embeddings, targets in epoch_pbar: 
-
+                for embeddings, targets in train_embs: 
                     opt.zero_grad(set_to_none=True) # step clf parameters
                     loss = F.cross_entropy(clf(embeddings), targets)
                     loss.backward()
                     opt.step()
-                    epoch_pbar.set_postfix({'loss':float(loss)})
+                train_pbar.set_postfix({'loss':float(loss)})
 
             valid_pbar = tqdm(self.valid_dl, leave=False)
             valid_pbar.set_description('Validation')
@@ -89,16 +86,15 @@ class LinearProbingCallback(pl.Callback):
 
             t = time() - t
             grad = U.module_to_vector(clf, grad=True).norm()
-            print(f'...took {int(t//60):02d}:{int(t%60):02d}min \t\t=> acc={out[name]:.3f}, grad={grad:.3f}', flush=True)
-        return dict((f'{k}_acc', v) for (k,v) in out.items())
+            print(f' ..{name} took {int(t//60):02d}:{int(t%60):02d}min \t\t=> acc={out[name]:.3f}, grad={grad:.3f}', end='')
+        print('')
+        return dict((f'probe/{k}', v) for (k,v) in out.items())
     
-
-    def on_train_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):
-            pl_module.log_dict(self.probe(pl_module.device)) 
-
-    def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):
+    
+    def on_train_epoch_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):
         if trainer.current_epoch % self.probe_every == 0: # only probe every so many epochs
             pl_module.log_dict(self.probe(pl_module.device)) 
-        
-        elif trainer.current_epoch == trainer.max_epochs - 1: # probe after last epoch
+    
+    def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):
+        if trainer.current_epoch == trainer.max_epochs - 1: # probe after last epoch
             pl_module.log_dict(self.probe(pl_module.device)) 
