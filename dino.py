@@ -15,7 +15,7 @@ __all__ = [
     'DINOHead',
     'DINOModel',
     'MultiCropAugmentation',
-    'DINOTeacherUpdate',
+    'DINOTeacherUpdater',
     'DINO',
 ]
 
@@ -145,7 +145,7 @@ class MultiCropAugmentation(nn.Module):
         return crops
 
 
-class DINOTeacherUpdate(pl.Callback):
+class DINOTeacherUpdater(pl.Callback):
     def __init__(self, mode: str = 'ema', mom: float = 0.996 ):
         if mode == 'ema':
             self.mom = mom
@@ -205,7 +205,7 @@ class DINO(pl.LightningModule):
         self.scheduler = Scheduler()
 
         # configure teacher updater
-        self.t_updater = DINOTeacherUpdate(t_mode)
+        self.t_updater = DINOTeacherUpdater(t_mode)
         self.scheduler.add(self.t_updater, 'mom', t_mom)
         
         # configure teacher temperature and centering
@@ -240,7 +240,7 @@ class DINO(pl.LightningModule):
         for idx, cb in enumerate(self.trainer.callbacks):
             if isinstance(cb, Scheduler):
                 self.trainer.callbacks.insert(0, self.trainer.callbacks.pop(idx))
-            if isinstance(cb, DINOTeacherUpdate):
+            if isinstance(cb, DINOTeacherUpdater):
                 self.trainer.callbacks.insert(1, self.trainer.callbacks.pop(idx))
 
         print('Order of Callbacks: ')
