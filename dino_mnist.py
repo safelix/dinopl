@@ -9,7 +9,7 @@ from torchvision.datasets import MNIST
 from configuration import CONSTANTS as C
 from configuration import Configuration, create_encoder, create_optimizer
 from dino import *
-from probing import LinearProber
+from probing import LinearProbe, LinearProber
 from tracking import (HParamTracker, MetricsTracker, ParamTracker,
                       PerCropEntropyTracker)
 
@@ -76,13 +76,20 @@ def main(config:Configuration):
 
     # Tracking Logic    
     probing_cb = LinearProber(
-        encoders = dict(
-            student=dino.student.enc,
-            teacher=dino.teacher.enc),
-        embed_dim = config.embed_dim, 
-        n_classes = config.n_classes,
         probe_every = config.probe_every,
         probing_epochs = config.probing_epochs,
+        # probes
+        probes = dict(
+            student=LinearProbe(
+                encoder=dino.student.enc,
+                embed_dim=config.embed_dim,
+                n_classes=config.n_classes),
+            teacher=LinearProbe(
+                encoder=dino.teacher.enc,
+                embed_dim=config.embed_dim,
+                n_classes=config.n_classes
+            )),
+        # data loading
         train_set = eval_train_set,
         valid_set = eval_valid_set,
         dl_args=dict(
