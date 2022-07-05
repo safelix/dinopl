@@ -60,33 +60,36 @@ class HParamTracker(pl.Callback):
 
 
 class ParamTracker(pl.Callback):
-    def __init__(self, track_init:bool=False) -> None:
+    def __init__(self, student, teacher, name=None, track_init:bool=False) -> None:
+        self.student = student
+        self.teacher = teacher
         self.track_init = track_init
+        self.name = '' if name is None else name + '/'
         
-    def on_fit_start(self, _:pl.Trainer, dino: DINO, *args) -> None:
+    def on_fit_start(self, *_) -> None:
         if self.track_init:
-            self.i_vec = U.module_to_vector(dino.teacher).clone()
+            self.i_vec = U.module_to_vector(self.teacher).clone()
 
-    def on_after_backward(self, _:pl.Trainer, dino: DINO) -> None:
-        self.g_vec = U.module_to_vector(dino.student, grad=True)
+    def on_after_backward(self, *_) -> None:
+        self.g_vec = U.module_to_vector(self.student, grad=True)
 
     def on_train_batch_end(self, _:pl.Trainer, dino: DINO, *args) -> None:
         logs = {}
 
         # get vector representation of student and teacher
-        t_vec = U.module_to_vector(dino.teacher)
-        s_vec = U.module_to_vector(dino.student)
+        t_vec = U.module_to_vector(self.teacher)
+        s_vec = U.module_to_vector(self.student)
 
         # get driving signals: gradient and difference
-        g_vec = self.g_vec #U.module_to_vector(dino.student, grad=True)
+        g_vec = self.g_vec #U.module_to_vector(self.student, grad=True)
         d_vec = t_vec - s_vec
 
         # log driving signals
         g_norm = torch.norm(g_vec)
         d_norm = torch.norm(d_vec)
-        logs['params/norm(grad)'] = g_norm
-        logs['params/norm(diff)'] = d_norm
-        logs['params/cos(grad, diff)'] = torch.dot(g_vec, d_vec) / (g_norm * d_norm)
+        logs[f'params/{self.name}norm(grad)'] = g_norm
+        logs[f'params/{self.name}norm(diff)'] = d_norm
+        logs[f'params/{self.name}cos(grad, diff)'] = torch.dot(g_vec, d_vec) / (g_norm * d_norm)
 
         if self.track_init:           
             # get vector representations relative to init
@@ -96,8 +99,8 @@ class ParamTracker(pl.Callback):
             # log position and angle relative to init
             t_norm = torch.norm(t_vec)
             s_norm = torch.norm(s_vec)
-            logs['params/norm(teach - init)'] = t_norm
-            logs['params/norm(stud - init)'] = s_norm
-            logs['params/cos(teach-init, stud-init)'] = torch.dot(t_vec, s_vec) / (t_norm * s_norm)
+            logs[f'params/{self.name}norm(teach - init)'] = t_norm
+            logs[f'params/{self.name}norm(stud - init)'] = s_norm
+            logs[f'params/{self.name}cos(teach-init, stud-init)'] = torch.dot(t_vec, s_vec) / (t_norm * s_norm)
             
         dino.log_dict(logs)

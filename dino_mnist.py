@@ -102,7 +102,9 @@ def main(config:Configuration):
             MetricsTracker(), 
             PerCropEntropyTracker(), 
             HParamTracker(),
-            ParamTracker(track_init=True),
+            ParamTracker(dino.student, dino.teacher, track_init=True),
+            ParamTracker(dino.student.head, dino.teacher.head, 'head', True),
+            ParamTracker(dino.student.enc, dino.teacher.enc, 'enc', True),
             probing_cb,
         ]
 
