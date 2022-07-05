@@ -116,8 +116,8 @@ class LinearProber(pl.Callback):
             print('', flush=True, end='')
 
             # train and validate
-            clf = probe.train(clf, self.probing_epochs, train_data)
-            out[id] = probe.valid(clf, valid_data)            
+            probe.train(self.probing_epochs, train_data)
+            out[id] = probe.valid(valid_data)            
 
             t = time() - t
             m, s = int(t//60), int(t%60)
