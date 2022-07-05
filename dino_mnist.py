@@ -10,7 +10,7 @@ from configuration import CONSTANTS as C
 from configuration import Configuration, create_encoder, create_optimizer
 from dino import *
 from probing import LinearProbe, LinearProber
-from tracking import (HParamTracker, MetricsTracker, ParamTracker,
+from tracking import (FeatureTracker, HParamTracker, MetricsTracker, ParamTracker,
                       PerCropEntropyTracker)
 
 wandb_logger = WandbLogger(project="DINO_MNIST")
@@ -101,6 +101,7 @@ def main(config:Configuration):
     callbacks = [
             MetricsTracker(), 
             PerCropEntropyTracker(), 
+            FeatureTracker(),
             HParamTracker(),
             ParamTracker(dino.student, dino.teacher, track_init=True),
             ParamTracker(dino.student.head, dino.teacher.head, 'head', True),

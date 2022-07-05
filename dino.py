@@ -66,13 +66,15 @@ class DINOHead(nn.Module):
         # [n_crops, n_batches, embed_dim]
         # -> [n_crops, n_batches, out_dim]
 
-        logits = self.mlp(x)
-        batch_cent = torch.mean(logits, dim=[0,1])
-        logits = (logits - self.cent) / self.temp
+        projections = self.mlp(x)
+        batch_cent = torch.mean(projections, dim=[0,1])
+        logits = (projections - self.cent) / self.temp
 
         if self.cmom: # update centering after it is applied 
             self.cent = self.cent * self.cmom  + batch_cent * (1 - self.cmom)
-        return logits
+        
+        out = dict(logits=logits, projections=projections)
+        return out
         
 
 class DINOModel(nn.Module):
@@ -99,9 +101,9 @@ class DINOModel(nn.Module):
 
         # compute outputs from embeddings
         # -> [n_crops, n_batches, out_dim]
-        logits = self.head(embeddings)
-
-        return dict(logits=logits, embeddings=embeddings)
+        out = self.head(embeddings)
+        out['embeddings'] = embeddings
+        return out
 
 
 
@@ -284,7 +286,7 @@ class DINO(pl.LightningModule):
         KLs = torch.stack(KLs, dim=-1) # [n_pairs, n_batches]
 
         # aggregate losses
-        out = {}  # TODO: macro vs micro? 
+        out = {}
         out['CE'] = CEs.mean(dim=-1).mean(dim=-1) # compute mean of batches, than of all matched crops
         out['KL'] = KLs.mean(dim=-1).mean(dim=-1) # compute mean of batches, than of all matched crops
         out['H_preds'] = H_preds

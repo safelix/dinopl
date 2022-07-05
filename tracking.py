@@ -4,6 +4,7 @@ from typing import Dict
 import pytorch_lightning as pl
 import torch
 from pytorch_lightning.loggers import WandbLogger
+from torch.nn import functional as F
 
 import my_utils as U
 from dino import DINO
@@ -26,24 +27,58 @@ class MetricsTracker(pl.Callback):
 
 
 class PerCropEntropyTracker(pl.Callback):
-    def step(self, prefix, H_preds:torch.Tensor, H_targs:torch.Tensor, dino:DINO):
+    def step(self, prefix, out:Dict[str, torch.Tensor], dino:DINO):
         logs = {}
-        for crop_name, H_pred in zip(dino.student.crops['name'], H_preds):
+        for crop_name, H_pred in zip(dino.student.crops['name'], out['H_preds']):
             logs[f'{prefix}/H_preds/{crop_name}'] = H_pred.mean() # compute mean of batch for every crop
 
-        for crop_name, H_targ in zip(dino.teacher.crops['name'], H_targs):
+        for crop_name, H_targ in zip(dino.teacher.crops['name'], out['H_targs']):
             logs[f'{prefix}/H_targs/{crop_name}'] = H_targ.mean() # compute mean of batch for every crop
         dino.log_dict(logs)
 
     def on_train_batch_end(self, _: pl.Trainer, dino: DINO, outputs:Dict[str, torch.Tensor], *args) -> None:
-        self.step('train', outputs['H_preds'], outputs['H_targs'], dino)
+        self.step('train', outputs, dino)
     
     def on_validation_batch_end(self, _: pl.Trainer, dino: DINO, outputs:Dict[str, torch.Tensor], *args) -> None:
-        self.step('valid', outputs['H_preds'], outputs['H_targs'], dino)
+        self.step('valid', outputs, dino)
 
+class FeatureTracker(pl.Callback):       
+    def step(self, prefix, out:Dict[str, torch.Tensor], dino:DINO):
+        logs = {}
+        prefix += '/feat'
+        for n in ['embeddings', 'projections', 'logits']:
+            t_x = out['teacher'][n].flatten(0,1)   # consider crops as batches
+            s_x = out['student'][n].flatten(0,1)   # consider crops as batches
+            s_gx = out['student'][n][:2].flatten(0,1)   # consider crops as batches
+            n = n[:5]                       # shortname for plots
+            
+            for i, x in [('t', t_x), ('s', s_x)]:
+                # within batch cosine similarity distance
+                cossim = torch.corrcoef(x).triu(diagonal=1) # upper triangular
+                logs[f'{prefix}/{n}/{i}_x.corr().mean()'] = cossim.mean()
+                
+                # within batch l2 distance
+                l2dist = F.pairwise_distance(x, x).triu(diagonal=1) # upper triangular
+                logs[f'{prefix}/{n}/{i}_x.pdist().mean()'] = l2dist.mean()
+
+            # between student and teacher
+            l2dist = (t_x - s_gx).norm(dim=-1)
+            logs[f'{prefix}/{n}/l2(t_x,s_x).mean()'] = l2dist.mean()
+
+            dot = (t_x * s_gx).sum(-1)
+            cossim = dot / (t_x.norm(dim=-1) * s_gx.norm(dim=-1))
+            logs[f'{prefix}/{n}/cos(t_x,s_x).mean()'] = cossim.mean()
+
+        dino.log_dict(logs)
+
+    def on_train_batch_end(self, _: pl.Trainer, dino: DINO, outputs:Dict[str, torch.Tensor], *args) -> None:
+        self.step('train', outputs, dino)
+
+    def on_validation_batch_end(self, _: pl.Trainer, dino: DINO, outputs:Dict[str, torch.Tensor], *args) -> None:
+        self.step('valid', outputs, dino)
 
 class HParamTracker(pl.Callback):  
-    def step(self, dino:DINO):
+    def on_train_batch_start(self, _:pl.Trainer, dino:DINO, *args) -> None:
         logs = {}
         logs['hparams/lr'] = dino.optimizer.param_groups[0]['lr']
         logs['hparams/wd'] = dino.optimizer.param_groups[0]['weight_decay']
@@ -54,10 +89,6 @@ class HParamTracker(pl.Callback):
         logs['hparams/t_cent.norm()'] = dino.teacher.head.cent.norm()
         logs['hparams/t_cent.mean()'] = dino.teacher.head.cent.mean()
         dino.log_dict(logs)
-
-    def on_train_batch_start(self, _:pl.Trainer, dino:DINO, *args) -> None:
-        self.step(dino)
-
 
 class ParamTracker(pl.Callback):
     def __init__(self, student, teacher, name=None, track_init:bool=False) -> None:
