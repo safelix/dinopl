@@ -9,8 +9,8 @@ from torchvision.datasets import MNIST
 from configuration import CONSTANTS as C
 from configuration import Configuration, create_encoder, create_optimizer
 from dino import *
-from probing import LinearProbingCallback
-from tracking import (HParamTracker, MetricsTracker, ParamTracker,
+from probing import LinearProbe, LinearProber
+from tracking import (FeatureTracker, HParamTracker, MetricsTracker, ParamTracker,
                       PerCropEntropyTracker)
 
 wandb_logger = WandbLogger(project="DINO_MNIST")
@@ -27,10 +27,10 @@ def main(config:Configuration):
     MC_SPEC = [
             {'name':'global1', 'out_size':128, 'min_scale':0.6, 'max_scale':1.0, 'teacher':True, 'student':True},
             {'name':'global2', 'out_size':128, 'min_scale':0.6, 'max_scale':1.0, 'teacher':True, 'student':True},
-            {'name':'local1', 'out_size':96, 'min_scale':0.2, 'max_scale':0.4, 'teacher':False, 'student':True},
-            {'name':'local2', 'out_size':96, 'min_scale':0.2, 'max_scale':0.4, 'teacher':False, 'student':True},
-            {'name':'local3', 'out_size':96, 'min_scale':0.2, 'max_scale':0.4, 'teacher':False, 'student':True},
-            {'name':'local4', 'out_size':96, 'min_scale':0.2, 'max_scale':0.4, 'teacher':False, 'student':True},
+            {'name':'local1', 'out_size':96, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
+            {'name':'local2', 'out_size':96, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
+            {'name':'local3', 'out_size':96, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
+            {'name':'local4', 'out_size':96, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
         ]
 
     
@@ -51,14 +51,8 @@ def main(config:Configuration):
     self_valid_set = MNIST(root=C.DATA_DIR, train=False, transform=mc)
     eval_train_set = MNIST(root=C.DATA_DIR, train=True, transform=eval_trfm)
     eval_valid_set = MNIST(root=C.DATA_DIR, train=False, transform=eval_trfm)
+    print(f'Init dataset: size(train)={len(self_train_set)}, size(valid)={len(self_valid_set)}')
 
-    # TODO: move after automatic gpu selection
-    gpu_args = {} if config.force_cpu else {'num_workers':config.n_workers, 'pin_memory':True} 
-    self_train_dl = DataLoader(dataset=self_train_set, batch_size=config.bs_train, **gpu_args)
-    self_valid_dl = DataLoader(dataset=self_valid_set, batch_size=config.bs_train, **gpu_args)
-    eval_train_dl = DataLoader(dataset=eval_train_set, batch_size=config.bs_eval, **gpu_args)
-    eval_valid_dl = DataLoader(dataset=eval_valid_set, batch_size=config.bs_eval, **gpu_args)
-   
     # Model Setup
     enc = create_encoder(config)
     head = DINOHead(config.embed_dim, config.out_dim, 
@@ -80,23 +74,38 @@ def main(config:Configuration):
                 opt_lr = config.opt_lr,
                 opt_wd = config.opt_wd)
 
-    # Tracking Logic
-    probing_cb = LinearProbingCallback(
-        encoders={'student': dino.student.enc,
-                'teacher': dino.teacher.enc},
-        embed_dim=config.embed_dim, 
-        n_classes=config.n_classes,
-        train_dl=eval_train_dl,
-        valid_dl=eval_valid_dl,
-        probe_every=config.probe_every,
-        probing_epochs=config.probing_epochs,
+    # Tracking Logic    
+    probing_cb = LinearProber(
+        probe_every = config.probe_every,
+        probing_epochs = config.probing_epochs,
+        # probes
+        probes = dict(
+            student=LinearProbe(
+                encoder=dino.student.enc,
+                embed_dim=config.embed_dim,
+                n_classes=config.n_classes),
+            teacher=LinearProbe(
+                encoder=dino.teacher.enc,
+                embed_dim=config.embed_dim,
+                n_classes=config.n_classes
+            )),
+        # data loading
+        train_set = eval_train_set,
+        valid_set = eval_valid_set,
+        dl_args=dict(
+            batch_size = config.bs_eval,
+            num_workers = config.n_workers,
+            pin_memory = False if config.force_cpu else True)
     )
 
     callbacks = [
             MetricsTracker(), 
             PerCropEntropyTracker(), 
+            FeatureTracker(),
             HParamTracker(),
-            ParamTracker(track_init=True),
+            ParamTracker(dino.student, dino.teacher, track_init=True),
+            ParamTracker(dino.student.head, dino.teacher.head, 'head', True),
+            ParamTracker(dino.student.enc, dino.teacher.enc, 'enc', True),
             probing_cb,
         ]
 
@@ -124,6 +133,13 @@ def main(config:Configuration):
         #limit_train_batches=2,
         #limit_val_batches=2,
         )
+
+    dl_args = dict(
+        batch_size = config.bs_train,
+        num_workers = config.n_workers,
+        pin_memory = False if config.force_cpu else True ) 
+    self_train_dl = DataLoader(dataset=self_train_set, **dl_args)
+    self_valid_dl = DataLoader(dataset=self_valid_set, **dl_args)
 
     trainer.fit(model=dino, 
                 train_dataloaders=self_train_dl,

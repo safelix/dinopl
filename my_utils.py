@@ -1,3 +1,5 @@
+from collections import OrderedDict
+
 import numpy as np
 import torch
 from torch import nn
@@ -65,25 +67,28 @@ def module_to_vector(module:nn.Module, grad=False):
 
 ## MLP Utilities
 def mlp_layer(in_dim:int, out_dim:int, act_fn:str = 'GELU', use_bn:bool = False):
-    sublayers = [nn.Linear(in_dim, out_dim)]
+    sublayers = OrderedDict()
+    sublayers['lin'] = nn.Linear(in_dim, out_dim)
+
     if use_bn:
-        sublayers.append(nn.BatchNorm1d(out_dim))
+        sublayers['bn'] = nn.BatchNorm1d(out_dim)
     
     if act_fn.lower() == 'gelu':
-        sublayers.append(nn.GELU())
+        sublayers['act'] = nn.GELU()
     elif act_fn.lower() == 'relu':
-        sublayers.append(nn.ReLU())
+        sublayers['act'] = nn.ReLU()
     else:
         raise RuntimeError('Unkown activation function.')
     
-    return nn.Sequential(*sublayers)
+    return nn.Sequential(sublayers)
 
 class L2Bottleneck(nn.Sequential):
     def __init__(self, in_dim:int, mid_dim:int, out_dim:int):
-        sublayers = [nn.Linear(in_dim, mid_dim)]
-        sublayers.append(LpNormalizeFeatures(p=1, dim=-1))
-        sublayers.append(WeightNormalizedLinear(mid_dim, out_dim, bias=False))
-        super().__init__(*sublayers) 
+        sublayers = OrderedDict()
+        sublayers['lin'] = nn.Linear(in_dim, mid_dim)
+        sublayers['featurenorm'] = LpNormalizeFeatures(p=1, dim=-1)
+        sublayers['weightnorm'] = WeightNormalizedLinear(mid_dim, out_dim, bias=False)
+        super().__init__(sublayers) 
 
 class LpNormalizeFeatures(nn.Module):
     def __init__(self, p:float = 2, dim:int = -1):

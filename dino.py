@@ -1,4 +1,5 @@
 import copy
+from collections import OrderedDict
 from typing import List, Type
 
 import pytorch_lightning as pl
@@ -6,6 +7,7 @@ import torch
 import torch.optim as optim
 from torch import nn
 from torchvision import transforms
+from torch.nn import functional as F
 
 import my_utils as U
 from scheduling import *
@@ -14,7 +16,7 @@ __all__ = [
     'DINOHead',
     'DINOModel',
     'MultiCropAugmentation',
-    'DINOTeacherUpdate',
+    'DINOTeacherUpdater',
     'DINO',
 ]
 
@@ -26,46 +28,53 @@ class DINOHead(nn.Module):
         l2_bottleneck_dim:int = 256,
         use_bn:bool = False, 
         act_fn:str = 'GELU',
-        temp:float = 1,     
-        cent:float = 0,
+        temp:float = 1.0,     
+        cent:float = 0.0,
         cmom:float = None,
     ):
         super().__init__()
+        self.embed_dim = embed_dim
         self.out_dim = out_dim
         self.temp = temp
+        self.cmom = cmom
         self.register_buffer('cent', torch.full((out_dim,), cent))
-        self.cmom = None if cmom is None else nn.Parameter(cmom, requires_grad=False)
 
         # multi-layer perceptron classification head
-        layers, dims = [], [embed_dim] + hidden_dims
-        for i, o in zip(dims[:-1], dims[1:]):
-            layers.append(U.mlp_layer(i, o, act_fn, use_bn))
+        layers, dims = OrderedDict(), [embed_dim] + hidden_dims
+        for idx, (i, o) in enumerate(zip(dims[:-1], dims[1:])):
+            layers[f'layer{idx}'] = U.mlp_layer(i, o, act_fn, use_bn)
         
-        if l2_bottleneck_dim is None: # last layer
-            layers.append(nn.Linear(dims[-1], out_dim))
+        if l2_bottleneck_dim is None:
+            layers['output'] = nn.Linear(dims[-1], out_dim)
         else:
-            layers.append(
-                U.L2Bottleneck(dims[-1], l2_bottleneck_dim, out_dim))
+            layers['bottleneck'] = U.L2Bottleneck(dims[-1], l2_bottleneck_dim, out_dim)
 
-        self.mlp = nn.Sequential(*layers)  # build mlp
-        self.log_softmax = nn.LogSoftmax(dim=-1)
+        self.mlp = nn.Sequential(layers)  # build mlp
 
         # Initallization with trunc_normal()
-        for m in self.mlp:
-            if isinstance(m, nn.Linear):
-                U.trunc_normal_(m.weight, std=.02)
-                if isinstance(m, nn.Linear) and m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
+        self.mlp.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, U.WeightNormalizedLinear):
+            return # explicitely do not apply to weight normalized
+        if isinstance(m, nn.Linear):
+            U.trunc_normal_(m.weight, std=.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
 
     def forward(self, x:torch.Tensor):
         # [n_crops, n_batches, embed_dim]
         # -> [n_crops, n_batches, out_dim]
 
-        logits = self.mlp(x)
-        if self.cmom:
-            self.cent = self.cmom * self.cent + (1 - self.cmom) * torch.mean(logits)
-        y = self.log_softmax((logits - self.cent) / self.temp)
-        return y
+        projections = self.mlp(x)
+        batch_cent = torch.mean(projections, dim=[0,1])
+        logits = (projections - self.cent) / self.temp
+
+        if self.cmom: # update centering after it is applied 
+            self.cent = self.cent * self.cmom  + batch_cent * (1 - self.cmom)
+        
+        out = dict(logits=logits, projections=projections)
+        return out
         
 
 class DINOModel(nn.Module):
@@ -92,8 +101,9 @@ class DINOModel(nn.Module):
 
         # compute outputs from embeddings
         # -> [n_crops, n_batches, out_dim]
-        y = self.head(embeddings)
-        return y
+        out = self.head(embeddings)
+        out['embeddings'] = embeddings
+        return out
 
 
 
@@ -138,7 +148,7 @@ class MultiCropAugmentation(nn.Module):
         return crops
 
 
-class DINOTeacherUpdate(pl.Callback):
+class DINOTeacherUpdater(pl.Callback):
     def __init__(self, mode: str = 'ema', mom: float = 0.996 ):
         if mode == 'ema':
             self.mom = mom
@@ -169,10 +179,12 @@ class DINO(pl.LightningModule):
         opt:Type[optim.Optimizer] = optim.AdamW,
         opt_lr:Schedule = None,
         opt_wd:Schedule = None,
+        wn_freeze_epochs = 1,
     ):
         super().__init__()
         self.embed_dim = model.embed_dim
         self.out_dim = model.out_dim
+        self.wn_freeze_epochs = wn_freeze_epochs
         
         # initiallize student and teacher with same params
         self.student = model
@@ -196,7 +208,7 @@ class DINO(pl.LightningModule):
         self.scheduler = Scheduler()
 
         # configure teacher updater
-        self.t_updater = DINOTeacherUpdate(t_mode)
+        self.t_updater = DINOTeacherUpdater(t_mode)
         self.scheduler.add(self.t_updater, 'mom', t_mom)
         
         # configure teacher temperature and centering
@@ -204,18 +216,22 @@ class DINO(pl.LightningModule):
         self.scheduler.add(self.teacher.head, 'temp', t_temp)
         self.scheduler.add(self.student.head, 'temp', s_temp)
 
-        # configure optimizer, learning rate & weight decay
-        params = self.student.named_parameters()
+        # configure optimizer, learning rate & weight decay       
+        params = list(self.student.named_parameters()) # generator -> list
         self.optimizer = opt([
-            {'params':[p for n,p in params if U.is_bias(n,p)]},
-            {'params':[p for n,p in params if not U.is_bias(n,p)]}])
-
+            {'params':[p for n,p in params if not U.is_bias(n,p)]},
+            {'params':[p for n,p in params if U.is_bias(n,p)]}])
+        
         if opt_lr is not None:
             self.scheduler.add(self.optimizer.param_groups[0], 'lr', opt_lr)
             self.scheduler.add(self.optimizer.param_groups[1], 'lr', opt_lr)
-        if opt_wd is not None: # no weight decay for bias parameters
-            self.scheduler.add(self.optimizer.param_groups[1], 'weight_decay', opt_wd)
+        if opt_wd is not None: # only regularize weights but not biases
+            self.scheduler.add(self.optimizer.param_groups[0], 'weight_decay', opt_wd)
 
+        print(f'Init optimizer: {len(self.optimizer.param_groups)} paramgroups of sizes', 
+            [len(group['params']) for group in self.optimizer.param_groups])
+    
+    
     def configure_optimizers(self):
         return self.optimizer
 
@@ -227,20 +243,24 @@ class DINO(pl.LightningModule):
         for idx, cb in enumerate(self.trainer.callbacks):
             if isinstance(cb, Scheduler):
                 self.trainer.callbacks.insert(0, self.trainer.callbacks.pop(idx))
-            if isinstance(cb, DINOTeacherUpdate):
+            if isinstance(cb, DINOTeacherUpdater):
                 self.trainer.callbacks.insert(1, self.trainer.callbacks.pop(idx))
 
         print('Order of Callbacks: ')
         for idx, cb in enumerate(self.trainer.callbacks, 1):
             print(f' {idx}. {type(cb).__name__}', flush=True)
 
-        # linear scaling rule
+        # linear scaling rule: schedule is by refernce... only scale once
         bs = self.trainer.train_dataloader.loaders.batch_size
         self.scheduler.get(self.optimizer.param_groups[0], 'lr').ys *=  bs / 256
-        self.scheduler.get(self.optimizer.param_groups[1], 'lr').ys *=  bs / 256
+    
 
-    def multicrop_loss(self, log_preds: torch.Tensor, log_targs: torch.Tensor):
+    def multicrop_loss(self, pred_logits: torch.Tensor, targ_logits: torch.Tensor):
         # [n_crops, n_batches, out_dim]
+
+        # compute log softmax
+        log_preds = F.log_softmax(pred_logits, dim=-1)
+        log_targs = F.log_softmax(targ_logits, dim=-1)
 
         # compute softmax outputs
         preds = torch.exp(log_preds)
@@ -266,13 +286,12 @@ class DINO(pl.LightningModule):
         KLs = torch.stack(KLs, dim=-1) # [n_pairs, n_batches]
 
         # aggregate losses
-        out = {}  # TODO: macro vs micro? 
-        out['CE'] = CEs.mean(dim=-1).mean(dim=0) # compute mean of batches, than of all matched crops
-        out['KL'] = KLs.mean(dim=-1).mean(dim=0) # compute mean of batches, than of all matched crops
+        out = {}
+        out['CE'] = CEs.mean(dim=-1).mean(dim=-1) # compute mean of batches, than of all matched crops
+        out['KL'] = KLs.mean(dim=-1).mean(dim=-1) # compute mean of batches, than of all matched crops
         out['H_preds'] = H_preds
         out['H_targs'] = H_targs
         return out
- 
 
     def training_step(self, batch, batch_idx):
         batch, batch_labels = batch
@@ -281,29 +300,43 @@ class DINO(pl.LightningModule):
         # [n_crops, n_batches, n_channels, height, width]
         # -> [n_crops, n_batches, out_dim]
         with torch.no_grad():
-            y_teacher_log = self.teacher([batch[i] for i in self.teacher.crops['idx']])
-        y_student_log = self.student([batch[i] for i in self.student.crops['idx']])
+            teacher_out = self.teacher([batch[i] for i in self.teacher.crops['idx']])
+        student_out = self.student([batch[i] for i in self.student.crops['idx']])
         
         # compute multicrop loss
-        out = self.multicrop_loss(y_student_log, y_teacher_log)
+        out = self.multicrop_loss(student_out['logits'], teacher_out['logits'])
 
         # minimize CE loss
         out['loss'] = out['CE']
+        out['teacher'] = teacher_out
+        out['student'] = student_out
         return out
-
-
+            
     def validation_step(self, batch, batch_idx):
         batch, batch_labels = batch
 
         # generate teacher's targets and student's predictions
         # [n_crops, n_batches, n_channels, height, width]
         # -> [n_crops, n_batches, out_dim]
-        y_teacher_log = self.teacher([batch[i] for i in self.teacher.crops['idx']])
-        y_student_log = self.student([batch[i] for i in self.student.crops['idx']])
+        teacher_out = self.teacher([batch[i] for i in self.teacher.crops['idx']])
+        student_out = self.student([batch[i] for i in self.student.crops['idx']])
         
         # compute multicrop loss
-        out = self.multicrop_loss(y_student_log, y_teacher_log)
+        out = self.multicrop_loss(student_out['logits'], teacher_out['logits'])
         
         # minimize CE loss
         out['loss'] = out['CE']
+        out['teacher'] = teacher_out
+        out['student'] = student_out
         return out
+
+
+    # Set gradients to `None` instead of zero to improve performance.
+    def optimizer_zero_grad(self, epoch, batch_idx, opt:torch.optim.Optimizer, optimizer_idx):
+        opt.zero_grad(set_to_none=True)
+
+    def on_before_optimizer_step(self, *args):
+        wn = self.student.head.mlp.bottleneck.weightnorm
+        if self.current_epoch < self.wn_freeze_epochs:
+            for p in wn.parameters():
+                p.grad = None
