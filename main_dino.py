@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
+import copy
 import os
 import sys
 import datetime
@@ -34,6 +35,10 @@ from torchvision import models as torchvision_models
 import utils
 import vision_transformer as vits
 from vision_transformer import DINOHead
+import my_utils as U
+
+import wandb
+wandb.init(project="DINO_MNIST", notes='Original main_dino.py', tags=['orig'])
 
 torchvision_archs = sorted(name for name in torchvision_models.__dict__
     if name.islower() and not name.startswith("__")
@@ -236,6 +241,7 @@ def train_dino(args):
         p.requires_grad = False
     print(f"Student and Teacher are built: they are both {args.arch} network.")
 
+    initial_teacher = copy.deepcopy(teacher_without_ddp)
     # ============ preparing loss ... ============
     dino_loss = DINOLoss(
         args.out_dim,
@@ -297,7 +303,7 @@ def train_dino(args):
         # ============ training one epoch of DINO ... ============
         train_stats = train_one_epoch(student, teacher, teacher_without_ddp, dino_loss,
             data_loader, optimizer, lr_schedule, wd_schedule, momentum_schedule,
-            epoch, fp16_scaler, args)
+            epoch, fp16_scaler, args, initial_teacher)
 
         # ============ writing logs ... ============
         save_dict = {
@@ -325,7 +331,7 @@ def train_dino(args):
 
 def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loader,
                     optimizer, lr_schedule, wd_schedule, momentum_schedule,epoch,
-                    fp16_scaler, args):
+                    fp16_scaler, args, initial_teacher):
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
     for it, (images, _) in enumerate(metric_logger.log_every(data_loader, 10, header)):
@@ -342,7 +348,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         with torch.cuda.amp.autocast(fp16_scaler is not None):
             teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
             student_output = student(images)
-            loss = dino_loss(student_output, teacher_output, epoch)
+            loss, logs = dino_loss(student_output, teacher_output, epoch)
 
         if not math.isfinite(loss.item()):
             print("Loss is {}, stopping training".format(loss.item()), force=True)
@@ -379,6 +385,34 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         metric_logger.update(loss=loss.item())
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
         metric_logger.update(wd=optimizer.param_groups[0]["weight_decay"])
+
+        logs['epoch'] = epoch
+        logs['trainer/global_step'] = it
+        logs['hparams/lr'] = optimizer.param_groups[0]["lr"]
+        logs['hparams/wd'] = optimizer.param_groups[0]["weight_decay"]
+        logs['hparams/t_mom'] = m
+
+        # get vector representations and driving signals
+        i_vec = U.module_to_vector(initial_teacher)
+        t_vec = U.module_to_vector(teacher_without_ddp) - i_vec
+        s_vec = U.module_to_vector(student.module) - i_vec
+        g_vec = U.module_to_vector(student.module, grad=True)
+        d_vec = t_vec - s_vec
+
+        g_norm = torch.norm(g_vec)
+        d_norm = torch.norm(d_vec)
+        logs['params/norm(grad)'] = g_norm
+        logs['params/norm(diff)'] = d_norm
+        logs['params/cos(grad, diff)'] = torch.dot(g_vec, d_vec) / (g_norm * d_norm)
+
+        t_norm = torch.norm(t_vec)
+        s_norm = torch.norm(s_vec)
+        logs['params/norm(teach - init)'] = t_norm
+        logs['params/norm(stud - init)'] = s_norm
+        logs['params/cos(teach-init, stud-init)'] = torch.dot(t_vec, s_vec) / (t_norm * s_norm)
+        wandb.log(logs, step=it)
+        
+
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
@@ -406,27 +440,48 @@ class DINOLoss(nn.Module):
         """
         Cross-entropy between softmax outputs of the teacher and student networks.
         """
+        logs = {}
         student_out = student_output / self.student_temp
-        student_out = student_out.chunk(self.ncrops)
+        student_out_log = F.log_softmax(student_out, dim=-1)
+        student_out = student_out_log.exp()
+        logs['train/H_preds'] = U.entropy(student_out, student_out_log).mean()
+        
+        student_out_log = student_out_log.chunk(self.ncrops)
 
         # teacher centering and sharpening
         temp = self.teacher_temp_schedule[epoch]
-        teacher_out = F.softmax((teacher_output - self.center) / temp, dim=-1)
+        teacher_out_log = F.log_softmax((teacher_output - self.center) / temp, dim=-1)
+        teacher_out = teacher_out_log.exp()
+        H_targs = U.entropy(teacher_out, teacher_out_log)
+        logs['train/H_targs'] = H_targs.mean()
+
         teacher_out = teacher_out.detach().chunk(2)
 
         total_loss = 0
+        total_kl = 0
         n_loss_terms = 0
-        for iq, q in enumerate(teacher_out):
-            for v in range(len(student_out)):
+        for iq, (q, H_targ) in enumerate(zip(teacher_out, H_targs)):
+            for v in range(len(student_out_log)):
                 if v == iq:
                     # we skip cases where student and teacher operate on the same view
                     continue
-                loss = torch.sum(-q * F.log_softmax(student_out[v], dim=-1), dim=-1)
+                loss = torch.sum(-q * student_out_log[v], dim=-1)
+                kl = loss - H_targ
                 total_loss += loss.mean()
+                total_kl += kl.mean()
                 n_loss_terms += 1
         total_loss /= n_loss_terms
+        total_kl /= n_loss_terms
         self.update_center(teacher_output)
-        return total_loss
+
+        logs['train/CE'] = total_loss
+        logs['train/KL'] = total_kl
+        logs['hparams/s_temp'] = self.student_temp
+        logs['hparams/t_temp'] = temp
+        logs['hparams/t_cmom'] = self.center_momentum
+        logs['hparams/t_cent.norm()'] = self.center.norm()
+        logs['hparams/t_cent.mean()'] = self.center.mean()
+        return total_loss, logs
 
     @torch.no_grad()
     def update_center(self, teacher_output):
@@ -479,6 +534,23 @@ class DataAugmentationDINO(object):
             utils.GaussianBlur(p=0.5),
             normalize,
         ])
+
+        # Overwrite transforms
+        self.global_transfo1 = transforms.Compose([
+                transforms.RandomResizedCrop(128, scale=global_crops_scale, interpolation=Image.BICUBIC),
+                transforms.ToTensor()
+            ])
+
+        self.global_transfo2 = transforms.Compose([
+                transforms.RandomResizedCrop(128, scale=global_crops_scale, interpolation=Image.BICUBIC),
+                transforms.ToTensor()
+            ])
+
+        self.local_transfo = transforms.Compose([
+                transforms.RandomResizedCrop(96, scale=global_crops_scale, interpolation=Image.BICUBIC),
+                transforms.ToTensor()
+            ])
+
 
     def __call__(self, image):
         crops = []
