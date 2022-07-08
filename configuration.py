@@ -17,7 +17,7 @@ import warnings
 import torch
 import torchvision.models
 
-from scheduling import *
+from dinopl.scheduling import *
 
 
 class Constants(object):

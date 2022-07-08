@@ -11,8 +11,6 @@ from tqdm import tqdm
 
 from torch.optim import Optimizer, AdamW
 
-import my_utils as U
-
 class LinearProbe():
     def __init__(self, 
             encoder:torch.nn.Module,

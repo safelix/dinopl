@@ -9,7 +9,7 @@ from torch import nn
 from torchvision import transforms
 from torch.nn import functional as F
 
-import my_utils as U
+import utils as U
 from scheduling import *
 
 __all__ = [

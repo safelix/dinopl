@@ -8,14 +8,12 @@ from torchvision.datasets import MNIST
 
 from configuration import CONSTANTS as C
 from configuration import Configuration, create_encoder, create_optimizer
-from dino import *
-from probing import LinearProbe, LinearProber
-from tracking import (FeatureTracker, HParamTracker, MetricsTracker, ParamTracker,
-                      PerCropEntropyTracker)
+from dinopl import *
+from dinopl.probing import LinearProbe, LinearProber
+from dinopl.tracking import (FeatureTracker, HParamTracker, MetricsTracker,
+                             ParamTracker, PerCropEntropyTracker)
 
 wandb_logger = WandbLogger(project="DINO_MNIST")
-
-import my_utils as U
 
 
 def main(config:Configuration):
