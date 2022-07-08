@@ -2,7 +2,6 @@ from typing import Dict
 
 import pytorch_lightning as pl
 import torch
-from torch.nn import functional as F
 
 import dinopl.utils as U
 from dinopl import DINO
@@ -63,7 +62,7 @@ class FeatureTracker(pl.Callback):
                 logs[f'{prefix}/{n}/{i}_x.corr().mean()'] = cossim.mean()
                 
                 # within batch l2 distance
-                l2dist = F.pairwise_distance(x, x).triu(diagonal=1) # upper triangular
+                l2dist = torch.cdist(x, x).triu(diagonal=1) # upper triangular
                 logs[f'{prefix}/{n}/{i}_x.pdist().mean()'] = l2dist.mean()
 
             # between student and teacher
