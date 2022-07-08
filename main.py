@@ -15,11 +15,18 @@ from dinopl.tracking import (FeatureTracker, HParamTracker, MetricsTracker,
 
 
 def main(config:Configuration):
-    wandb_logger = WandbLogger(project="DINO_MNIST")
 
     # Fix random seed
     if config.seed is None:
         config.seed = int(time.time())
+    pl.seed_everything(config.seed)
+
+    wandb_logger = WandbLogger(
+            project='DINO',
+            save_dir=C.RESULTS_DIR,
+            config=config,
+        )
+
 
     # Multi-Crop Augmentation
     MC_SPEC = [
