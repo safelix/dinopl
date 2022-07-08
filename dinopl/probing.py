@@ -5,11 +5,15 @@ import pytorch_lightning as pl
 import torch
 from torch import nn
 from torch.nn import functional as F
+from torch.optim import AdamW, Optimizer
 from torch.utils.data import DataLoader, Dataset
 from torchmetrics import Accuracy
 from tqdm import tqdm
 
-from torch.optim import Optimizer, AdamW
+__all__ = [
+    'LinearProbe', 
+    'LinearProber'
+]
 
 class LinearProbe():
     def __init__(self, 

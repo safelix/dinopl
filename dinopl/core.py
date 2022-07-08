@@ -9,8 +9,8 @@ from torch import nn
 from torchvision import transforms
 from torch.nn import functional as F
 
-import utils as U
-from scheduling import *
+import dinopl.utils as U
+from dinopl.scheduling import *
 
 __all__ = [
     'DINOHead',
@@ -139,7 +139,6 @@ class MultiCropAugmentation(nn.Module):
     def forward(self, img):
         # [height, width, (n_channels)]
         # -> [n_crops, n_channels, height, width]
-
         crops = []
         for name, transform in self.transforms.items():
             crop = transform(img)
