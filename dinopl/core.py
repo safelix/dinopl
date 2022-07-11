@@ -139,7 +139,6 @@ class MultiCropAugmentation(nn.Module):
     def forward(self, img):
         # [height, width, (n_channels)]
         # -> [n_crops, n_channels, height, width]
-
         crops = []
         for name, transform in self.transforms.items():
             crop = transform(img)

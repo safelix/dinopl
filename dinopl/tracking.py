@@ -1,14 +1,18 @@
-import copy
 from typing import Dict
 
 import pytorch_lightning as pl
 import torch
-from pytorch_lightning.loggers import WandbLogger
-from torch.nn import functional as F
 
 from . import utils as U
 from . import DINO
 
+__all__ = [
+    'MetricsTracker',
+    'PerCropEntropyTracker',
+    'FeatureTracker',
+    'HParamTracker',
+    'ParamTracker',
+]
 
 class MetricsTracker(pl.Callback):
     def step(self, prefix, out:Dict[str, torch.Tensor], dino:DINO):
@@ -58,7 +62,7 @@ class FeatureTracker(pl.Callback):
                 logs[f'{prefix}/{n}/{i}_x.corr().mean()'] = cossim.mean()
                 
                 # within batch l2 distance
-                l2dist = F.pairwise_distance(x, x).triu(diagonal=1) # upper triangular
+                l2dist = torch.cdist(x, x).triu(diagonal=1) # upper triangular
                 logs[f'{prefix}/{n}/{i}_x.pdist().mean()'] = l2dist.mean()
 
             # between student and teacher
