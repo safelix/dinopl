@@ -6,8 +6,8 @@ import torch
 from pytorch_lightning.loggers import WandbLogger
 from torch.nn import functional as F
 
-import utils as U
-from dinopl import DINO
+from . import utils as U
+from . import DINO
 
 
 class MetricsTracker(pl.Callback):

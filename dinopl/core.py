@@ -9,8 +9,8 @@ from torch import nn
 from torchvision import transforms
 from torch.nn import functional as F
 
-import utils as U
-from scheduling import *
+from . import utils as U
+from .scheduling import *
 
 __all__ = [
     'DINOHead',
