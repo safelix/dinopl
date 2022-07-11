@@ -99,6 +99,8 @@ class Configuration(object):
         data = parser.add_argument_group('Data')
         data.add_argument('--dataset', type=str, choices=['mnist','cifar10'], default='mnist',
                             help='Datset to train on.')
+        data.add_argument('--mc', type=str, choices=['2x128+4x96','2x28+4x28', '2x28'], default='2x128+4x96',
+                            help='Datset to train on.')
         data.add_argument('--bs_train', type=int, default=64, 
                             help='Batch size for the training set.')
         data.add_argument('--bs_eval', type=int, default=256, 
