@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 from torchvision.datasets import MNIST
 
-from configuration import CONSTANTS as C
+from configuration import CONSTANTS as C, create_dataset, create_multicrop
 from configuration import Configuration, create_encoder, create_optimizer
 from dinopl import *
 from dinopl.probing import LinearProbe, LinearProber
@@ -21,42 +21,28 @@ def main(config:Configuration):
         config.seed = int(time.time())
     pl.seed_everything(config.seed)
 
-    wandb_logger = WandbLogger(
-            project='DINO',
-            save_dir=C.RESULTS_DIR,
-            config=config,
-        )
 
-
-    # Multi-Crop Augmentation
-    MC_SPEC = [
-            {'name':'global1', 'out_size':128, 'min_scale':0.6, 'max_scale':1.0, 'teacher':True, 'student':True},
-            {'name':'global2', 'out_size':128, 'min_scale':0.6, 'max_scale':1.0, 'teacher':True, 'student':True},
-            {'name':'local1', 'out_size':96, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
-            {'name':'local2', 'out_size':96, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
-            {'name':'local3', 'out_size':96, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
-            {'name':'local4', 'out_size':96, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
-        ]
-
-    
+    # Standard Augmentations, always work on RGB
     self_trfm = transforms.Compose([ # self-training
                     transforms.Lambda(lambda img: img.convert('RGB')),
                     transforms.ToTensor()
                 ])
     eval_trfm = transforms.Compose([ # evaluation
-                    transforms.Resize(size=128),
+                    transforms.Resize(size=config.mc[0]['out_size']),
                     self_trfm
                 ])
-                    
-    mc = MultiCropAugmentation(MC_SPEC, per_crop_transform=self_trfm)
+
+    # Multi-Crop Augmentation
+    config.mc_spec = create_multicrop(config)
+    mc = MultiCropAugmentation(config.mc_spec, per_crop_transform=self_trfm)
 
     # Data Loading
-    config.n_classes = 10
-    self_train_set = MNIST(root=C.DATA_DIR, train=True, transform=mc)
-    self_valid_set = MNIST(root=C.DATA_DIR, train=False, transform=mc)
-    eval_train_set = MNIST(root=C.DATA_DIR, train=True, transform=eval_trfm)
-    eval_valid_set = MNIST(root=C.DATA_DIR, train=False, transform=eval_trfm)
-    print(f'Init dataset: size(train)={len(self_train_set)}, size(valid)={len(self_valid_set)}')
+    DSet = create_dataset(config)
+    self_train_set = DSet(root=C.DATA_DIR, train=True, transform=mc)
+    self_valid_set = DSet(root=C.DATA_DIR, train=False, transform=mc)
+    eval_train_set = DSet(root=C.DATA_DIR, train=True, transform=eval_trfm)
+    eval_valid_set = DSet(root=C.DATA_DIR, train=False, transform=eval_trfm)
+    print(f'Init {type(DSet).__name__}: size(train)={len(self_train_set)}, size(valid)={len(self_valid_set)}')
 
     # Model Setup
     enc = create_encoder(config)
@@ -113,6 +99,13 @@ def main(config:Configuration):
             ParamTracker(dino.student.enc, dino.teacher.enc, 'enc', True),
             probing_cb,
         ]
+
+    # Logger
+    wandb_logger = WandbLogger(
+            project='DINO',
+            save_dir=C.RESULTS_DIR,
+            config=config,
+        )
 
     # Training
     trainer = pl.Trainer(

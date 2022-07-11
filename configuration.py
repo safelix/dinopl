@@ -16,6 +16,8 @@ import warnings
 
 import torch
 import torchvision.models
+from torchvision.datasets import MNIST, CIFAR10
+
 
 from dinopl.scheduling import *
 
@@ -95,6 +97,8 @@ class Configuration(object):
 
         # Data.
         data = parser.add_argument_group('Data')
+        data.add_argument('--dataset', type=str, choices=['mnist','cifar10'], default='mnist',
+                            help='Datset to train on.')
         data.add_argument('--bs_train', type=int, default=64, 
                             help='Batch size for the training set.')
         data.add_argument('--bs_eval', type=int, default=256, 
@@ -243,6 +247,8 @@ def create_optimizer(config:Configuration):
     This is a helper function that can be useful if you have optimizers that you want to
     choose from via the command line.
     '''
+    config.opt = config.opt.lower()
+
     if config.opt == 'adamw':
         return torch.optim.AdamW
 
@@ -253,3 +259,57 @@ def create_optimizer(config:Configuration):
         return torch.optim.SGD
 
     raise RuntimeError('Unkown optimizer name.')
+
+
+def create_dataset(config:Configuration):
+    '''
+    This is a helper function that can be useful if you have several dataset definitions that you want to
+    choose from via the command line.
+    '''
+    config.dataset = config.dataset.lower()
+
+    if config.dataset == 'mnist':
+        config.n_classes = 10
+        return MNIST
+
+    if config.dataset == 'cifar10':
+        config.n_classes = 10
+        return CIFAR10
+
+    raise RuntimeError('Unkown dataset name.')
+
+
+def create_multicrop(config:Configuration):
+    '''
+    This is a helper function that can be useful if you have several multicrop definitions that you want to
+    choose from via the command line.
+    '''
+
+    if config.mc == '2x128+4x96':
+        return [
+            {'name':'global1', 'out_size':128, 'min_scale':0.4, 'max_scale':1.0, 'teacher':True, 'student':True},
+            {'name':'global2', 'out_size':128, 'min_scale':0.4, 'max_scale':1.0, 'teacher':True, 'student':True},
+            {'name':'local1', 'out_size':96, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
+            {'name':'local2', 'out_size':96, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
+            {'name':'local3', 'out_size':96, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
+            {'name':'local4', 'out_size':96, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
+        ]
+
+    if config.mc == '2x28+4x28':
+        return [
+            {'name':'global1', 'out_size':28, 'min_scale':0.4, 'max_scale':1.0, 'teacher':True, 'student':True},
+            {'name':'global2', 'out_size':28, 'min_scale':0.4, 'max_scale':1.0, 'teacher':True, 'student':True},
+            {'name':'local1', 'out_size':28, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
+            {'name':'local2', 'out_size':28, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
+            {'name':'local3', 'out_size':28, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
+            {'name':'local4', 'out_size':28, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
+        ]   
+    
+    if config.mc == '2x28':
+        return [
+            {'name':'global1', 'out_size':28, 'min_scale':0.4, 'max_scale':1.0, 'teacher':True, 'student':True},
+            {'name':'global2', 'out_size':28, 'min_scale':0.4, 'max_scale':1.0, 'teacher':True, 'student':True},
+        ]   
+
+    raise RuntimeError('Unkown multicrop name.')
+
