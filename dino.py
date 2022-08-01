@@ -22,19 +22,20 @@ def main(config:Configuration):
     pl.seed_everything(config.seed)
 
 
+    # Create Multicrop Specification from name
+    config.mc_spec = create_multicrop(config)
+    
     # Standard Augmentations, always work on RGB
     self_trfm = transforms.Compose([ # self-training
                     transforms.Lambda(lambda img: img.convert('RGB')),
                     transforms.ToTensor()
                 ])
     eval_trfm = transforms.Compose([ # evaluation
-                    transforms.Resize(size=config.mc[0]['out_size']),
+                    transforms.Resize(size=config.mc_spec[0]['out_size']),
                     self_trfm
                 ])
-
-    # Multi-Crop Augmentation
-    config.mc_spec = create_multicrop(config)
     mc = MultiCropAugmentation(config.mc_spec, per_crop_transform=self_trfm)
+
 
     # Data Loading
     DSet = create_dataset(config)
