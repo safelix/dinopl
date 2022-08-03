@@ -86,7 +86,7 @@ class L2Bottleneck(nn.Sequential):
     def __init__(self, in_dim:int, mid_dim:int, out_dim:int):
         sublayers = OrderedDict()
         sublayers['lin'] = nn.Linear(in_dim, mid_dim)
-        sublayers['featurenorm'] = LpNormalizeFeatures(p=1, dim=-1)
+        sublayers['featurenorm'] = LpNormalizeFeatures(p=2, dim=-1)
         sublayers['weightnorm'] = WeightNormalizedLinear(mid_dim, out_dim, bias=False)
         super().__init__(sublayers) 
 
@@ -97,7 +97,7 @@ class LpNormalizeFeatures(nn.Module):
         self.dim = dim
 
     def forward(self, x):
-        return F.normalize(x, p=2, dim=-1)
+        return F.normalize(x, p=self.p, dim=-1)
 
     def extra_repr(self):
         return f'p={self.p}, dim={self.dim}' 
