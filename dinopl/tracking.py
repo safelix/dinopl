@@ -62,9 +62,9 @@ class FeatureTracker(pl.Callback):
         logs = {}
         prefix += '/feat'
         for n in ['embeddings', 'projections', 'logits']:
-            t_x = out['teacher'][n].flatten(0,1).detach().cpu()     # consider crops as batches
-            s_x = out['student'][n].flatten(0,1).detach().cpu()     # consider crops as batches
-            s_gx = out['student'][n][:2].flatten(0,1).detach().cpu()  # consider crops as batches
+            t_x = out['teacher'][n].flatten(0,1)     # consider crops as batches
+            s_x = out['student'][n].flatten(0,1)     # consider crops as batches
+            s_gx = out['student'][n][:2].flatten(0,1)  # consider crops as batches
             n = n[:5]                       # shortname for plots
             
             for i, x in [('t', t_x), ('s', s_x)]:
@@ -191,10 +191,13 @@ class FeatureSaver(pl.Callback):
 
         prefix = os.path.join(wandb.run.dir, 'valid', 'feat')
         for n in self.features:
-            t_xy = out['teacher'][n].squeeze()
-            s_xy = out['student'][n].squeeze()
-            
-            data = torch.cat((self.lbls, t_xy, s_xy), dim=1).detach().cpu()
-            pd.to_pickle(pd.DataFrame(data, columns=['lbl', 't_x', 't_y', 's_x', 's_y']), 
-                            os.path.join(prefix, n[:5], f'table_{dino.global_step:0>5d}.pckl'))
+            t_feat = out['teacher'][n].squeeze()
+            s_feat = out['student'][n].squeeze()
+            n_feat = t_feat.shape[-1]
+
+            columns = ['lbl'] + [f'{n}_{i}' for n in ['t', 's'] for i in range(n_feat)] 
+            data = torch.cat((self.lbls, t_feat, s_feat), dim=-1).detach().cpu()
+
+            pd.to_pickle(pd.DataFrame(data, columns=columns), 
+                            os.path.join(prefix, n[:5], f'table_{dino.global_step:0>6d}.pckl'))
         return

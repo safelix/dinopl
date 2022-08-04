@@ -149,7 +149,9 @@ class MultiCropAugmentation(nn.Module):
 
 class DINOTeacherUpdater(pl.Callback):
     def __init__(self, mode: str = 'ema', mom: float = 0.996 ):
-        if mode == 'ema':
+        if mode == 'no_update':
+            pass
+        elif mode == 'ema':
             self.mom = mom
             self.on_train_batch_end = self.ema
         elif mode == 'prev_epoch':

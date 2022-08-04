@@ -99,7 +99,8 @@ class Configuration(object):
         data = parser.add_argument_group('Data')
         data.add_argument('--dataset', type=str, choices=['mnist','cifar10'], default='mnist',
                             help='Datset to train on.')
-        data.add_argument('--mc', type=str, choices=['2x128+4x96','2x28+4x28', '2x28'], default='2x128+4x96',
+        data.add_argument('--mc', type=str, choices=['2x128+4x96', '2x128', 
+                                '2x32+4x32', '2x32', '2x28+4x28', '2x28'], default='2x128+4x96',
                             help='Datset to train on.')
         data.add_argument('--bs_train', type=int, default=64, 
                             help='Batch size for the training set.')
@@ -110,6 +111,8 @@ class Configuration(object):
         model = parser.add_argument_group('Model')
         model.add_argument('--enc', type=str, default='resnet18', 
                             help='Defines the model to train on.')
+        model.add_argument('--tiny_input', action='store_true', 
+                            help='Adjust encoder for tiny inputs, e.g. resnet for cifar 10.')
         model.add_argument('--mlp_act', type=str, choices={'GELU', 'ReLu'}, default='GELU',
                             help='Ativation function of DINOHead MLP.')
         model.add_argument('--use_bn', action='store_true',
@@ -124,7 +127,7 @@ class Configuration(object):
 
         # Teacher Update, Temperature, Centering
         dino = parser.add_argument_group('DINO')
-        dino.add_argument('--t_mode', type=str, choices={'ema', 'prev_epoch'}, default='ema',
+        dino.add_argument('--t_mode', type=str, choices={'ema', 'prev_epoch', 'no_update'}, default='ema',
                             help='Mode of teacher update.')
         dino.add_argument('--t_mom', type=Schedule.parse, default=CosSched(0.996, 1),
                             help='Teacher momentum for exponential moving average.')
@@ -154,12 +157,15 @@ class Configuration(object):
 
 
         # Probing configurations
-        probing = parser.add_argument_group('Probing')
-        probing.add_argument('--probe_every', type=int, default=5, 
+        addons = parser.add_argument_group('addons')
+        addons.add_argument('--probe_every', type=int, default=5, 
                             help='Probe every so many epochs during training.')
-        probing.add_argument('--probing_epochs', type=int, default=10, 
+        addons.add_argument('--probing_epochs', type=int, default=10, 
                             help='Number of epochs to train for linear probing.')
-
+        addons.add_argument('--save_features', type=str, nargs='*', default=[],
+                            choices=['embeddings', 'projections', 'logits', 'all'],   
+                            help='Save features for embeddings, projections and/or logits.')
+        
         return parser
     
 
@@ -239,6 +245,13 @@ def create_encoder(config:Configuration):
         enc.embed_dim = enc.fc.in_features
         config.embed_dim = enc.fc.in_features
         enc.fc = torch.nn.Identity()
+
+        # adjust for tiny input, e.g. resnet for cifar10
+        if hasattr(config, 'tiny_input') and config.tiny_input:
+            # https://pytorch-lightning.readthedocs.io/en/stable/notebooks/lightning_examples/cifar10-baseline.html
+            enc.conv1 = torch.nn.Conv2d(3, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            enc.maxpool = torch.nn.Identity()
+
         return enc
 
     raise RuntimeError('Unkown model name.')
@@ -297,6 +310,28 @@ def create_multicrop(config:Configuration):
             {'name':'local4', 'out_size':96, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
         ]
 
+    if config.mc == '2x128':
+        return [
+            {'name':'global1', 'out_size':128, 'min_scale':0.14, 'max_scale':1.0, 'teacher':True, 'student':True},
+            {'name':'global2', 'out_size':128, 'min_scale':0.14, 'max_scale':1.0, 'teacher':True, 'student':True},
+        ] 
+
+    if config.mc == '2x32+4x32':
+        return [
+            {'name':'global1', 'out_size':32, 'min_scale':0.4, 'max_scale':1.0, 'teacher':True, 'student':True},
+            {'name':'global2', 'out_size':32, 'min_scale':0.4, 'max_scale':1.0, 'teacher':True, 'student':True},
+            {'name':'local1', 'out_size':32, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
+            {'name':'local2', 'out_size':32, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
+            {'name':'local3', 'out_size':32, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
+            {'name':'local4', 'out_size':32, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
+        ]
+
+    if config.mc == '2x32':
+        return [
+            {'name':'global1', 'out_size':32, 'min_scale':0.14, 'max_scale':1.0, 'teacher':True, 'student':True},
+            {'name':'global2', 'out_size':32, 'min_scale':0.14, 'max_scale':1.0, 'teacher':True, 'student':True},
+        ]   
+
     if config.mc == '2x28+4x28':
         return [
             {'name':'global1', 'out_size':28, 'min_scale':0.4, 'max_scale':1.0, 'teacher':True, 'student':True},
@@ -305,12 +340,12 @@ def create_multicrop(config:Configuration):
             {'name':'local2', 'out_size':28, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
             {'name':'local3', 'out_size':28, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
             {'name':'local4', 'out_size':28, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
-        ]   
-    
+        ]
+
     if config.mc == '2x28':
         return [
-            {'name':'global1', 'out_size':28, 'min_scale':0.4, 'max_scale':1.0, 'teacher':True, 'student':True},
-            {'name':'global2', 'out_size':28, 'min_scale':0.4, 'max_scale':1.0, 'teacher':True, 'student':True},
+            {'name':'global1', 'out_size':28, 'min_scale':0.14, 'max_scale':1.0, 'teacher':True, 'student':True},
+            {'name':'global2', 'out_size':28, 'min_scale':0.14, 'max_scale':1.0, 'teacher':True, 'student':True},
         ]   
 
     raise RuntimeError('Unkown multicrop name.')

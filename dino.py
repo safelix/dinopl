@@ -98,9 +98,12 @@ def main(config:Configuration):
             ParamTracker(dino.student, dino.teacher, track_init=True),
             ParamTracker(dino.student.head, dino.teacher.head, 'head', True),
             ParamTracker(dino.student.enc, dino.teacher.enc, 'enc', True),
-            FeatureSaver(eval_valid_set, n_imgs=64, features=['projections', 'logits']),
             probing_cb,
         ]
+    
+    if len(config.save_features) > 0:
+        config.save_features = ['embeddings', 'projections', 'logits'] if 'all' in config.save_features else config.save_features
+        callbacks += [FeatureSaver(eval_valid_set, n_imgs=64, features=config.save_features)]
 
     # Logger
     wandb_logger = WandbLogger(
@@ -123,6 +126,7 @@ def main(config:Configuration):
         # acceleration
         accelerator='cpu' if config.force_cpu else 'gpu',
         devices=None if config.force_cpu else 1,
+        #gpus = [1],
         auto_select_gpus=True,
 
         # performance
