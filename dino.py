@@ -11,7 +11,7 @@ from configuration import Configuration, create_encoder, create_optimizer
 from dinopl import *
 from dinopl.probing import LinearProbe, LinearProber
 from dinopl.tracking import (FeatureTracker, HParamTracker, MetricsTracker,
-                             ParamTracker, PerCropEntropyTracker)
+                             ParamTracker, PerCropEntropyTracker, FeatureSaver)
 
 
 def main(config:Configuration):
@@ -98,6 +98,7 @@ def main(config:Configuration):
             ParamTracker(dino.student, dino.teacher, track_init=True),
             ParamTracker(dino.student.head, dino.teacher.head, 'head', True),
             ParamTracker(dino.student.enc, dino.teacher.enc, 'enc', True),
+            FeatureSaver(eval_valid_set, n_imgs=64, features=['projections', 'logits']),
             probing_cb,
         ]
 

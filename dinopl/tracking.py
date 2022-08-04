@@ -1,7 +1,13 @@
+import os
 from typing import Dict
 
 import pytorch_lightning as pl
 import torch
+import wandb
+import numpy as np
+from torch.utils import data
+import wandb
+import pandas as pd
 
 from . import utils as U
 from . import DINO
@@ -46,34 +52,47 @@ class PerCropEntropyTracker(pl.Callback):
     def on_validation_batch_end(self, _: pl.Trainer, dino: DINO, outputs:Dict[str, torch.Tensor], *args) -> None:
         self.step('valid', outputs, dino)
 
+def np_histogram(tensor: torch.Tensor, bins=64):
+    ndarray = tensor.detach().cpu().numpy()
+    range = np.nanmin(ndarray), np.nanmax(ndarray)
+    return np.histogram(ndarray, bins=bins, range=range)
+
 class FeatureTracker(pl.Callback):       
     def step(self, prefix, out:Dict[str, torch.Tensor], dino:DINO):
         logs = {}
         prefix += '/feat'
         for n in ['embeddings', 'projections', 'logits']:
-            t_x = out['teacher'][n].flatten(0,1)   # consider crops as batches
-            s_x = out['student'][n].flatten(0,1)   # consider crops as batches
-            s_gx = out['student'][n][:2].flatten(0,1)   # consider crops as batches
+            t_x = out['teacher'][n].flatten(0,1).detach().cpu()     # consider crops as batches
+            s_x = out['student'][n].flatten(0,1).detach().cpu()     # consider crops as batches
+            s_gx = out['student'][n][:2].flatten(0,1).detach().cpu()  # consider crops as batches
             n = n[:5]                       # shortname for plots
             
             for i, x in [('t', t_x), ('s', s_x)]:
                 # within batch cosine similarity distance
-                cossim = torch.corrcoef(x).triu(diagonal=1) # upper triangular
-                logs[f'{prefix}/{n}/{i}_x.corr().mean()'] = cossim.mean()
+                cossim = torch.corrcoef(x).nan_to_num() # similarity with anything of norm zero is zero
+                cossim_triu = cossim[torch.triu_indices(*cossim.shape, offset=1).unbind()] # upper triangular values
+                logs[f'{prefix}/{n}/{i}_x.corr().mean()'] = cossim_triu.mean()
+                logs[f'{prefix}/{n}/{i}_x.corr().hist()'] = wandb.Histogram(np_histogram=np_histogram(cossim_triu, 64))
+                logs[f'{prefix}/{n}/{i}_x.corr().rank()'] = torch.linalg.matrix_rank(cossim, hermitian=True)
                 
                 # within batch l2 distance
-                l2dist = torch.cdist(x, x).triu(diagonal=1) # upper triangular
-                logs[f'{prefix}/{n}/{i}_x.pdist().mean()'] = l2dist.mean()
+                l2dist = torch.cdist(x, x)
+                l2dist_triu = l2dist[torch.triu_indices(*l2dist.shape, offset=1).unbind()] # upper triangular values
+                logs[f'{prefix}/{n}/{i}_x.pdist().mean()'] = l2dist_triu.mean()
+                logs[f'{prefix}/{n}/{i}_x.pdist().hist()'] = wandb.Histogram(np_histogram=np_histogram(l2dist_triu, 64))
 
             # between student and teacher
             l2dist = (t_x - s_gx).norm(dim=-1)
             logs[f'{prefix}/{n}/l2(t_x,s_x).mean()'] = l2dist.mean()
+            logs[f'{prefix}/{n}/l2(t_x,s_x).hist()'] = wandb.Histogram(np_histogram=np_histogram(l2dist, 64))
 
             dot = (t_x * s_gx).sum(-1)
             cossim = dot / (t_x.norm(dim=-1) * s_gx.norm(dim=-1))
             logs[f'{prefix}/{n}/cos(t_x,s_x).mean()'] = cossim.mean()
+            logs[f'{prefix}/{n}/cos(t_x,s_x).hist()'] = wandb.Histogram(np_histogram=np_histogram(cossim, 64))
 
-        dino.log_dict(logs)
+        logs['trainer/global_step'] = dino.global_step
+        dino.logger.experiment.log(logs)
 
     def on_train_batch_end(self, _: pl.Trainer, dino: DINO, outputs:Dict[str, torch.Tensor], *args) -> None:
         self.step('train', outputs, dino)
@@ -92,7 +111,9 @@ class HParamTracker(pl.Callback):
         logs['hparams/s_temp'] = dino.student.head.temp
         logs['hparams/t_cent.norm()'] = dino.teacher.head.cent.norm()
         logs['hparams/t_cent.mean()'] = dino.teacher.head.cent.mean()
-        dino.log_dict(logs)
+        logs['hparams/t_cent'] = wandb.Histogram(np_histogram=np_histogram(dino.teacher.head.cent))
+        logs['trainer/global_step'] = dino.global_step
+        dino.logger.experiment.log(logs)
 
 class ParamTracker(pl.Callback):
     def __init__(self, student, teacher, name=None, track_init:bool=False) -> None:
@@ -139,3 +160,41 @@ class ParamTracker(pl.Callback):
             logs[f'params/{self.name}cos(teach-init, stud-init)'] = torch.dot(t_vec, s_vec) / (t_norm * s_norm)
             
         dino.log_dict(logs)
+
+
+class FeatureSaver(pl.Callback):
+    def __init__(self, valid_set, n_imgs, features=['embeddings', 'projections', 'logits']) -> None:
+        super().__init__()
+        self.valid_set = valid_set
+        self.n_imgs = n_imgs 
+        self.features = features
+        self.imgs : torch.Tensor
+        self.lbls : torch.Tensor
+        
+    def on_fit_start(self, _: pl.Trainer, dino: DINO) -> None:
+        self.imgs = []
+        self.lbls = []
+        for img, lbl in data.Subset(self.valid_set, range(0, self.n_imgs)):
+            self.imgs.append(img)
+            self.lbls.append(torch.tensor([lbl]))
+        self.imgs = torch.stack(self.imgs).to(dino.device)
+        self.lbls = torch.stack(self.lbls).to(dino.device)
+
+        prefix = os.path.join(wandb.run.dir, 'valid', 'feat')
+        for n in self.features:
+            os.makedirs(os.path.join(os.path.join(prefix, n[:5])), exist_ok=True)
+
+    def on_train_batch_end(self, _:pl.Trainer, dino: DINO, *args) -> None:
+        out = {}
+        out['teacher'] = dino.teacher(self.imgs)
+        out['student'] = dino.student(self.imgs)
+
+        prefix = os.path.join(wandb.run.dir, 'valid', 'feat')
+        for n in self.features:
+            t_xy = out['teacher'][n].squeeze()
+            s_xy = out['student'][n].squeeze()
+            
+            data = torch.cat((self.lbls, t_xy, s_xy), dim=1).detach().cpu()
+            pd.to_pickle(pd.DataFrame(data, columns=['lbl', 't_x', 't_y', 's_x', 's_y']), 
+                            os.path.join(prefix, n[:5], f'table_{dino.global_step:0>5d}.pckl'))
+        return
