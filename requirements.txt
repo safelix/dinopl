@@ -3,3 +3,4 @@ torchvision
 pytorch-lightning
 torchmetrics
 wandb
+pandas
