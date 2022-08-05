@@ -1,5 +1,6 @@
 import copy
 from collections import OrderedDict
+import math
 from typing import List, Type
 
 import pytorch_lightning as pl
@@ -71,7 +72,7 @@ class DINOHead(nn.Module):
         logits = (projections - self.cent) / self.temp
 
         # update centering after it is applied 
-        if self.cmom is not None and not torch.isnan(self.cmom): # only if activated
+        if self.cmom is not None and not math.isnan(self.cmom): # only if activated
             self.cent = self.cent * self.cmom  + batch_cent * (1 - self.cmom)
         
         out = dict(logits=logits, projections=projections)
