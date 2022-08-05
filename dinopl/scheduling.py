@@ -106,7 +106,7 @@ class Schedule():
         if isinstance(expr, str):
             expr = ast.parse(expr, mode='eval')
             if isinstance(expr.body, (ast.Constant, ast.Name)): # (named) constants
-                return ConstSched(Schedule.parse_const(expr))
+                return ConstSched(Schedule.parse_const(expr.body))
             if isinstance(expr.body, ast.Call):                      # call AST expression
                 return Schedule.parse(expr.body)
             raise RuntimeError(f'Unkown expression {expr}.')
