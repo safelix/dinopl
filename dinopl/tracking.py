@@ -107,6 +107,7 @@ class HParamTracker(pl.Callback):
         logs['hparams/wd'] = dino.optimizer.param_groups[0]['weight_decay']
         logs['hparams/t_mom'] = dino.t_updater.mom
         logs['hparams/t_cmom'] = dino.teacher.head.cmom
+        logs['hparams/s_cmom'] = dino.student.head.cmom
         logs['hparams/t_temp'] = dino.teacher.head.temp
         logs['hparams/s_temp'] = dino.student.head.temp
         logs['hparams/t_cent.norm()'] = dino.teacher.head.cent.norm()
