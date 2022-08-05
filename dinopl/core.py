@@ -190,7 +190,7 @@ class DINO(pl.LightningModule):
         self.out_dim = model.out_dim
         self.wn_freeze_epochs = wn_freeze_epochs
 
-        if loss not in ['CE', 'KL', 'H_preds']:
+        if loss not in ['CE', 'KL', 'H_pred']:
             raise RuntimeError(f'Loss {loss} not supported.')
         self.loss = loss
         
@@ -298,6 +298,7 @@ class DINO(pl.LightningModule):
         out = {}
         out['CE'] = CEs.mean(dim=-1).mean(dim=-1) # compute mean of batches, than of all matched crops
         out['KL'] = KLs.mean(dim=-1).mean(dim=-1) # compute mean of batches, than of all matched crops
+        out['H_pred'] = H_preds.mean(dim=-1).mean(dim=-1) # compute mean of batches, than of all matched crops
         out['H_preds'] = H_preds
         out['H_targs'] = H_targs
         return out

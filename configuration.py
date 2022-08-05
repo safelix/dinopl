@@ -139,7 +139,7 @@ class Configuration(object):
                             help='Teacher temperature of DINOHead.')
         dino.add_argument('--s_temp', type=Schedule.parse, default=ConstSched(0.1), 
                             help='Student temperature of DINOHead.')
-        dino.add_argument('--loss', type=str, choices={'CE', 'KL', 'H_preds'}, default='CE',
+        dino.add_argument('--loss', type=str, choices={'CE', 'KL', 'H_pred'}, default='CE',
                             help='Loss function to use in the multicrop loss.')
 
 
