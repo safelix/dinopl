@@ -1,3 +1,4 @@
+import argparse
 import ast
 from lib2to3.pgen2.parse import ParseError
 from typing import List, Tuple, Union
@@ -21,6 +22,11 @@ __all__ = [
 ###################### Schedule and Scheduler Definitions #####################
 ###############################################################################
 
+## Strings which are mapped to constants in the parser
+__named_const__ = {'nan':torch.nan,
+                    'NaN':torch.nan, 
+                    'none':torch.nan, 
+                    'None':torch.nan}
 
 class Schedule():
     '''A template class for parameter schedules, which allows to implement
@@ -73,28 +79,52 @@ class Schedule():
         return self.ys[it + epoch_offset * self.steps_per_epoch]
 
     @staticmethod
+    def parse_const(expr: ast.Expression):
+        if isinstance(expr, str): # just in case someone calls this with a string
+            expr = ast.parse(expr, mode='eval')
+            return Schedule.parse_const(expr)
+
+        if isinstance(expr, ast.Constant): # pythonic constants 
+            literal = ast.literal_eval(expr)    # resolve literal
+            if literal is None:                     # NoneType
+                return torch.nan
+            if isinstance(literal, (int, float)):   # numeric constants
+                return literal
+            if isinstance(literal, str) and literal in __named_const__.keys():
+                return __named_const__[literal]     # string as named constant 
+            raise RuntimeError(f'Unknown constant \'{literal}\', needs to be numeric or one of {__named_const__}.')
+        
+        if isinstance(expr, ast.Name):     # pythonic defined names
+            if expr.id in __named_const__.keys():
+                    return __named_const__[expr.id]
+            raise RuntimeError(f'Unknown name \'{expr.id}\', needs one of {__named_const__}.')
+
+    @staticmethod
     def parse(expr:Union[str, ast.AST]):
         'Parse string or AST expression into a schedule.'
-        # recursion start case
+        # recursion start case for expression
         if isinstance(expr, str):
             expr = ast.parse(expr, mode='eval')
-            if isinstance(expr.body, ast.Constant):
-                return ConstSched(expr.body.value)
-            return Schedule.parse(expr.body)
+            if isinstance(expr.body, (ast.Constant, ast.Name)): # (named) constants
+                return ConstSched(Schedule.parse_const(expr))
+            if isinstance(expr.body, ast.Call):                      # call AST expression
+                return Schedule.parse(expr.body)
+            raise RuntimeError(f'Unkown expression {expr}.')
 
-        # recursion base case
-        if not isinstance(expr, ast.Call):
-            lit = ast.literal_eval(expr)
-            if isinstance(lit, (int, float)) and not isinstance(lit, bool):
-                return lit
-            raise ParseError(f'Unkown schedule literal \'{lit}.')
+        # recursion base case for arguments
+        if isinstance(expr, (ast.Constant, ast.Name)): # (named) constants
+            return Schedule.parse_const(expr)
         
-        id = expr.func.id # recurse schedule types
-        args = list(map(Schedule.parse, expr.args))
-        for sclass in Schedule.__subclasses__():
-            if sclass.__name__ == id:
-                return sclass(*args)
-        raise ParseError(f'Unkown schedule \'{id}\' with args {args}.')
+        # recursion case for schedule types
+        if isinstance(expr, ast.Call): 
+            args = list(map(Schedule.parse, expr.args))     # recursively parse args
+            for sclass in Schedule.__subclasses__():        # find Schedule type from id
+                if sclass.__name__ == expr.func.id:
+                    return sclass(*args)
+            raise RuntimeError(f'Unkown schedule \'{expr.func.id}\' with args {args}.')
+        
+        # fall through case: don't know what happened
+        raise RuntimeError(f'Unkown expression {expr}.')
 
     def __repr__(self, args=[]) -> str:
         out = f'{self.__class__.__name__}('
@@ -234,3 +264,24 @@ class LinWarmup(CatSched, Schedule):
     
     def __repr__(self) -> str:
         return Schedule.__repr__(self, [self.y_start, self.y_end, self.epochs])
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('schedule', type=Schedule.parse,
+                        help='Schedule to parse, prep and print.')
+    parser.add_argument('--n_steps', type=int, default=None,
+                        help='Number of steps to prepare the Schedule for.')
+    parser.add_argument('--n_epochs', type=int, default=None,
+                        help='Number of epochs to prepare the Schedule for.')
+
+    args = parser.parse_args()
+    sched = args.schedule
+    print(f'Parsed: {sched}')
+
+    if args.n_steps and args.n_epochs:
+        sched.prep(args.n_steps, args.n_epochs)
+        print(f'Prepared Schedule: {sched.ys}')  
+    elif args.n_steps or args.n_epochs:
+        raise RuntimeError('Please specify n_steps and n_epochs.')
+        
