@@ -60,8 +60,10 @@ def main(config:Configuration):
                 t_mode = config.t_mode,
                 t_mom  = config.t_mom,
                 t_cmom = config.t_cmom,
+                s_cmom = config.s_cmom,
                 t_temp = config.t_temp,
                 s_temp = config.s_temp,
+                loss = config.loss,
                 opt = create_optimizer(config),
                 opt_lr = config.opt_lr,
                 opt_wd = config.opt_wd)

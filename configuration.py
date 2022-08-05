@@ -133,10 +133,14 @@ class Configuration(object):
                             help='Teacher momentum for exponential moving average.')
         dino.add_argument('--t_cmom', type=Schedule.parse, default=ConstSched(0.9), 
                             help='Teacher centering momentum of DINOHead.')
+        dino.add_argument('--s_cmom', type=Schedule.parse, default=ConstSched(torch.nan), 
+                            help='Student centering momentum of DINOHead.')
         dino.add_argument('--t_temp', type=Schedule.parse, default=LinWarmup(0.04, 0.04, 0), 
                             help='Teacher temperature of DINOHead.')
         dino.add_argument('--s_temp', type=Schedule.parse, default=ConstSched(0.1), 
-                            help='Teacher temperature of DINOHead.')
+                            help='Student temperature of DINOHead.')
+        dino.add_argument('--loss', type=str, choices={'CE', 'KL', 'H_preds'}, default='CE',
+                            help='Loss function to use in the multicrop loss.')
 
 
         

@@ -30,7 +30,7 @@ class DINOHead(nn.Module):
         act_fn:str = 'GELU',
         temp:float = 1.0,     
         cent:float = 0.0,
-        cmom:float = None,
+        cmom:float = torch.nan, # None or nan deactivates centering
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -70,7 +70,8 @@ class DINOHead(nn.Module):
         batch_cent = torch.mean(projections, dim=[0,1])
         logits = (projections - self.cent) / self.temp
 
-        if self.cmom: # update centering after it is applied 
+        # update centering after it is applied 
+        if self.cmom is not None and not torch.isnan(self.cmom): # only if activated
             self.cent = self.cent * self.cmom  + batch_cent * (1 - self.cmom)
         
         out = dict(logits=logits, projections=projections)
@@ -175,8 +176,10 @@ class DINO(pl.LightningModule):
         t_mode:str = 'ema',
         t_mom:Schedule = CosSched(0.996, 1),
         t_cmom:Schedule = ConstSched(0.9),
+        s_cmom:Schedule = ConstSched(torch.nan),
         t_temp:Schedule = LinWarmup(0.04, 0.04, 0),
         s_temp:Schedule = ConstSched(0.1),
+        loss:str = 'CE',
         opt:Type[optim.Optimizer] = optim.AdamW,
         opt_lr:Schedule = None,
         opt_wd:Schedule = None,
@@ -186,6 +189,10 @@ class DINO(pl.LightningModule):
         self.embed_dim = model.embed_dim
         self.out_dim = model.out_dim
         self.wn_freeze_epochs = wn_freeze_epochs
+
+        if loss not in ['CE', 'KL', 'H_preds']:
+            raise RuntimeError(f'Loss {loss} not supported.')
+        self.loss = loss
         
         # initiallize student and teacher with same params
         self.student = model
@@ -214,6 +221,7 @@ class DINO(pl.LightningModule):
         
         # configure teacher temperature and centering
         self.scheduler.add(self.teacher.head, 'cmom', t_cmom)
+        self.scheduler.add(self.student.head, 'cmom', s_cmom)
         self.scheduler.add(self.teacher.head, 'temp', t_temp)
         self.scheduler.add(self.student.head, 'temp', s_temp)
 
@@ -308,7 +316,7 @@ class DINO(pl.LightningModule):
         out = self.multicrop_loss(student_out['logits'], teacher_out['logits'])
 
         # minimize CE loss
-        out['loss'] = out['CE']
+        out['loss'] = out[self.loss]        
         out['teacher'] = teacher_out
         out['student'] = student_out
         return out
@@ -326,7 +334,7 @@ class DINO(pl.LightningModule):
         out = self.multicrop_loss(student_out['logits'], teacher_out['logits'])
         
         # minimize CE loss
-        out['loss'] = out['CE']
+        out['loss'] = out[self.loss]
         out['teacher'] = teacher_out
         out['student'] = student_out
         return out
