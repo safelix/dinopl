@@ -40,6 +40,10 @@ class LinearProbe():
         loading_pbar = tqdm(dl, leave=False)
         loading_pbar.set_description(f'Loading embeddings')
 
+        # store training mode and switch to eval
+        mode = self.encoder.training
+        self.encoder.eval()
+
         train_data, mem = [], 0
         with torch.no_grad():
             for batch in loading_pbar:
@@ -51,10 +55,13 @@ class LinearProbe():
                 mem += embeddings.element_size() * embeddings.nelement()
                 loading_pbar.set_postfix({'mem':f'{mem*1e-6:.1f}MB'})
 
+        # restore previous mode
+        self.encoder.train(mode)
         return train_data
 
     @torch.enable_grad()
     def train(self, epochs, train_data:List[Tuple[torch.Tensor]]):
+        self.clf.train()
         train_pbar = tqdm(range(epochs), leave=False)
         train_pbar.set_description(f'Training')
 
@@ -69,6 +76,7 @@ class LinearProbe():
             train_pbar.set_postfix({'loss':float(loss)})
 
     def valid(self, valid_data:List[Tuple[torch.Tensor]]):
+        self.clf.eval()
         valid_pbar = tqdm(valid_data, leave=False)
         valid_pbar.set_description('Validation')
 

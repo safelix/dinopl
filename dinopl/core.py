@@ -162,6 +162,7 @@ class DINOTeacherUpdater(pl.Callback):
             raise RuntimeError('Unkown teacher update mode.')
 
     def ema(self, _:pl.Trainer, dino: pl.LightningModule, *args):
+        # TODO: should the BN buffers (encoder only? or everything except centering?) also be updated?
         for p_s, p_t in zip(dino.student.parameters(), dino.teacher.parameters()):
             p_t.data = self.mom * p_t.data + (1 - self.mom) * p_s.data
 
@@ -200,7 +201,7 @@ class DINO(pl.LightningModule):
         self.teacher = copy.deepcopy(model)
       
         # prepare teacher in evaluation mode
-        self.teacher.eval() # TODO: will this stay in eval mode?
+        #self.teacher.eval() # TODO: will this stay in eval mode? should this be in eval mode?
         for p in self.teacher.parameters():
             p.requires_grad = False
 
@@ -310,7 +311,7 @@ class DINO(pl.LightningModule):
         # generate teacher's targets and student's predictions
         # [n_crops, n_batches, n_channels, height, width]
         # -> [n_crops, n_batches, out_dim]
-        with torch.no_grad():
+        with torch.no_grad(): # TODO: teacher is not in eval mode...
             teacher_out = self.teacher([batch[i] for i in self.teacher.crops['idx']])
         student_out = self.student([batch[i] for i in self.student.crops['idx']])
         

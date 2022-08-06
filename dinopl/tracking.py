@@ -187,8 +187,18 @@ class FeatureSaver(pl.Callback):
 
     def on_train_batch_end(self, _:pl.Trainer, dino: DINO, *args) -> None:
         out = {}
+
+        # store training mode and switch to eval
+        mode_t = dino.teacher.training
+        mode_s = dino.student.training
+        dino.eval()
+
         out['teacher'] = dino.teacher(self.imgs)
         out['student'] = dino.student(self.imgs)
+
+        # restore previous mode
+        dino.teacher.train(mode_t)
+        dino.student.train(mode_s)
 
         prefix = os.path.join(wandb.run.dir, 'valid', 'feat')
         for n in self.features:
