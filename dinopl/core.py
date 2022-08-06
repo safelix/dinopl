@@ -31,7 +31,7 @@ class DINOHead(nn.Module):
         act_fn:str = 'GELU',
         temp:float = 1.0,     
         cent:float = 0.0,
-        cmom:float = torch.nan, # None or nan deactivates centering
+        cmom:float = torch.nan,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -68,11 +68,11 @@ class DINOHead(nn.Module):
         # -> [n_crops, n_batches, out_dim]
 
         projections = self.mlp(x)
-        batch_cent = torch.mean(projections, dim=[0,1])
+        batch_cent = torch.mean(projections, dim=[0,1]).detach()
         logits = (projections - self.cent) / self.temp
 
-        # update centering after it is applied 
-        if self.cmom is not None and not math.isnan(self.cmom): # only if activated
+        # update centering after it is applied in training mode
+        if self.training and not math.isnan(self.cmom): # only if activated
             self.cent = self.cent * self.cmom  + batch_cent * (1 - self.cmom)
         
         out = dict(logits=logits, projections=projections)
