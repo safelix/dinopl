@@ -64,6 +64,7 @@ def main(config:Configuration):
                 t_temp = config.t_temp,
                 s_temp = config.s_temp,
                 loss = config.loss,
+                loss_pairing = config.loss_pairing,
                 opt = create_optimizer(config),
                 opt_lr = config.opt_lr,
                 opt_wd = config.opt_wd)

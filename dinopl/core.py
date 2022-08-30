@@ -182,6 +182,7 @@ class DINO(pl.LightningModule):
         t_temp:Schedule = LinWarmup(0.04, 0.04, 0),
         s_temp:Schedule = ConstSched(0.1),
         loss:str = 'CE',
+        loss_pairing:str = 'opposite',
         opt:Type[optim.Optimizer] = optim.AdamW,
         opt_lr:Schedule = None,
         opt_wd:Schedule = None,
@@ -193,8 +194,12 @@ class DINO(pl.LightningModule):
         self.wn_freeze_epochs = wn_freeze_epochs
 
         if loss not in ['CE', 'KL', 'H_pred']:
-            raise RuntimeError(f'Loss {loss} not supported.')
+            raise RuntimeError(f'Loss \'{loss}\' not supported.')
         self.loss = loss
+
+        if loss_pairing not in ['all', 'matching', 'opposite']:
+            raise RuntimeError(f'Pairing strategy \'{loss_pairing}\' not supported.')
+        self.loss_pairing = loss_pairing
         
         # initiallize student and teacher with same params
         self.student = model
@@ -286,12 +291,21 @@ class DINO(pl.LightningModule):
         for i_stud, targ, H_targ in zip(self.teacher.crops['idx'], targs, H_targs):  
             for i_teach, log_pred in zip(self.student.crops['idx'], log_preds):
                 
-                # don't match the same views
-                if i_stud == i_teach: 
+                # case 'oposite': don't pair matching views
+                if self.loss_pairing == 'opposite' and i_stud == i_teach: 
                     continue
+                
+                # case 'matching': don't pair oposite views
+                if self.loss_pairing == 'matching' and i_stud != i_teach:
+                    continue
+
+                # case 'all': pair all views
 
                 CEs.append(U.cross_entropy(log_pred, targ))         # list of [n_batches]
                 KLs.append(CEs[-1] - H_targ) # U.kl_divergence()    # list of [n_batches]
+
+        if len(CEs) == 0 or len(KLs) == 0:
+            raise RuntimeError('No pairwise losses where computed.')
 
         CEs = torch.stack(CEs, dim=-1) # [n_pairs, n_batches] 
         KLs = torch.stack(KLs, dim=-1) # [n_pairs, n_batches]

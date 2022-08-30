@@ -99,9 +99,12 @@ class Configuration(object):
         data = parser.add_argument_group('Data')
         data.add_argument('--dataset', type=str, choices=['mnist','cifar10'], default='mnist',
                             help='Datset to train on.')
-        data.add_argument('--mc', type=str, choices=['2x128+4x96', '2x128', 
-                                '2x32+4x32', '2x32', '2x28+4x28', '2x28'], default='2x128+4x96',
-                            help='Datset to train on.')
+        data.add_argument('--mc', type=str, choices=[
+                                '2x128+4x96', '2x128', '1x128',
+                                '2x32+4x32', '2x32', '1x32'
+                                '2x28+4x28', '2x28', '1x28'], 
+                                default='2x128+4x96',
+                            help='Specification of multicrop augmentation.')
         data.add_argument('--bs_train', type=int, default=64, 
                             help='Batch size for the training set.')
         data.add_argument('--bs_eval', type=int, default=256, 
@@ -141,6 +144,8 @@ class Configuration(object):
                             help='Student temperature of DINOHead.')
         dino.add_argument('--loss', type=str, choices={'CE', 'KL', 'H_pred'}, default='CE',
                             help='Loss function to use in the multicrop loss.')
+        dino.add_argument('--loss_pairing', type=str, choices=['all', 'matching', 'opposite'], default='opposite',
+                            help='Pairing strategy for the multicrop views in the loss function.')
 
 
         
@@ -320,6 +325,11 @@ def create_multicrop(config:Configuration):
             {'name':'global2', 'out_size':128, 'min_scale':0.14, 'max_scale':1.0, 'teacher':True, 'student':True},
         ] 
 
+    if config.mc == '1x128':
+        return [
+            {'name':'global1', 'out_size':128, 'min_scale':0.14, 'max_scale':1.0, 'teacher':True, 'student':True},
+        ]
+
     if config.mc == '2x32+4x32':
         return [
             {'name':'global1', 'out_size':32, 'min_scale':0.4, 'max_scale':1.0, 'teacher':True, 'student':True},
@@ -336,6 +346,11 @@ def create_multicrop(config:Configuration):
             {'name':'global2', 'out_size':32, 'min_scale':0.14, 'max_scale':1.0, 'teacher':True, 'student':True},
         ]   
 
+    if config.mc == '1x32':
+        return [
+            {'name':'global1', 'out_size':32, 'min_scale':0.14, 'max_scale':1.0, 'teacher':True, 'student':True},
+        ]   
+
     if config.mc == '2x28+4x28':
         return [
             {'name':'global1', 'out_size':28, 'min_scale':0.4, 'max_scale':1.0, 'teacher':True, 'student':True},
@@ -350,6 +365,11 @@ def create_multicrop(config:Configuration):
         return [
             {'name':'global1', 'out_size':28, 'min_scale':0.14, 'max_scale':1.0, 'teacher':True, 'student':True},
             {'name':'global2', 'out_size':28, 'min_scale':0.14, 'max_scale':1.0, 'teacher':True, 'student':True},
+        ]   
+
+    if config.mc == '1x28':
+        return [
+            {'name':'global1', 'out_size':28, 'min_scale':0.14, 'max_scale':1.0, 'teacher':True, 'student':True},
         ]   
 
     raise RuntimeError('Unkown multicrop name.')
