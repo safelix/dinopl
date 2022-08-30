@@ -197,7 +197,7 @@ class DINO(pl.LightningModule):
             raise RuntimeError(f'Loss \'{loss}\' not supported.')
         self.loss = loss
 
-        if loss_pairing not in ['all', 'matching', 'opposite']:
+        if loss_pairing not in ['all', 'same', 'opposite']:
             raise RuntimeError(f'Pairing strategy \'{loss_pairing}\' not supported.')
         self.loss_pairing = loss_pairing
         
@@ -291,12 +291,12 @@ class DINO(pl.LightningModule):
         for i_stud, targ, H_targ in zip(self.teacher.crops['idx'], targs, H_targs):  
             for i_teach, log_pred in zip(self.student.crops['idx'], log_preds):
                 
-                # case 'oposite': don't pair matching views
+                # case 'oposite': don't pair same views
                 if self.loss_pairing == 'opposite' and i_stud == i_teach: 
                     continue
                 
                 # case 'matching': don't pair oposite views
-                if self.loss_pairing == 'matching' and i_stud != i_teach:
+                if self.loss_pairing == 'same' and i_stud != i_teach:
                     continue
 
                 # case 'all': pair all views

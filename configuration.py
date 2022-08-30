@@ -144,7 +144,7 @@ class Configuration(object):
                             help='Student temperature of DINOHead.')
         dino.add_argument('--loss', type=str, choices={'CE', 'KL', 'H_pred'}, default='CE',
                             help='Loss function to use in the multicrop loss.')
-        dino.add_argument('--loss_pairing', type=str, choices=['all', 'matching', 'opposite'], default='opposite',
+        dino.add_argument('--loss_pairing', type=str, choices=['all', 'same', 'opposite'], default='opposite',
                             help='Pairing strategy for the multicrop views in the loss function.')
 
 
