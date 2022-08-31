@@ -101,7 +101,7 @@ class Configuration(object):
                             help='Datset to train on.')
         data.add_argument('--mc', type=str, choices=[
                                 '2x128+4x96', '2x128', '1x128',
-                                '2x32+4x32', '2x32', '1x32'
+                                '2x32+4x32', '2x32', '1x32',
                                 '2x28+4x28', '2x28', '1x28'], 
                                 default='2x128+4x96',
                             help='Specification of multicrop augmentation.')
