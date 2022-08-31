@@ -1,3 +1,4 @@
+import os
 import time
 
 import pytorch_lightning as pl
@@ -69,6 +70,13 @@ def main(config:Configuration):
                 opt_lr = config.opt_lr,
                 opt_wd = config.opt_wd)
 
+    # Logger
+    wandb_logger = WandbLogger(
+            project='DINO',
+            save_dir=C.RESULTS_DIR,
+            config=config,
+        )
+
     # Tracking Logic    
     probing_cb = LinearProber(
         probe_every = config.probe_every,
@@ -106,14 +114,9 @@ def main(config:Configuration):
     
     if len(config.save_features) > 0:
         config.save_features = ['embeddings', 'projections', 'logits'] if 'all' in config.save_features else config.save_features
-        callbacks += [FeatureSaver(eval_valid_set, n_imgs=64, features=config.save_features)]
+        callbacks += [FeatureSaver(eval_valid_set, n_imgs=64, features=config.save_features, 
+                            dir=os.path.join(C.RESULTS_DIR, wandb_logger.name, wandb_logger.version))]
 
-    # Logger
-    wandb_logger = WandbLogger(
-            project='DINO',
-            save_dir=C.RESULTS_DIR,
-            config=config,
-        )
 
     # Training
     trainer = pl.Trainer(

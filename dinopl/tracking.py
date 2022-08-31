@@ -164,10 +164,11 @@ class ParamTracker(pl.Callback):
 
 
 class FeatureSaver(pl.Callback):
-    def __init__(self, valid_set, n_imgs, features=['embeddings', 'projections', 'logits']) -> None:
+    def __init__(self, valid_set, n_imgs, dir, features=['embeddings', 'projections', 'logits']) -> None:
         super().__init__()
         self.valid_set = valid_set
         self.n_imgs = n_imgs 
+        self.dir = dir
         self.features = features
         self.imgs : torch.Tensor
         self.lbls : torch.Tensor
@@ -181,7 +182,7 @@ class FeatureSaver(pl.Callback):
         self.imgs = torch.stack(self.imgs).to(dino.device)
         self.lbls = torch.stack(self.lbls).to(dino.device)
 
-        prefix = os.path.join(wandb.run.dir, 'valid', 'feat')
+        prefix = os.path.join(self.dir, 'valid', 'feat')
         for n in self.features:
             os.makedirs(os.path.join(os.path.join(prefix, n[:5])), exist_ok=True)
 
