@@ -45,7 +45,7 @@ class DINOHead(nn.Module):
         for idx, (i, o) in enumerate(zip(dims[:-1], dims[1:])):
             layers[f'layer{idx}'] = U.mlp_layer(i, o, act_fn, use_bn)
         
-        if l2_bottleneck_dim is None:
+        if l2_bottleneck_dim is None or l2_bottleneck_dim <= 0:
             layers['output'] = nn.Linear(dims[-1], out_dim)
         else:
             layers['bottleneck'] = U.L2Bottleneck(dims[-1], l2_bottleneck_dim, out_dim)
@@ -176,6 +176,7 @@ class DINO(pl.LightningModule):
         mc:MultiCropAugmentation,
         model:DINOModel,
         t_mode:str = 'ema',
+        s_mode:str = 'self-supervised',
         t_mom:Schedule = CosSched(0.996, 1),
         t_cmom:Schedule = ConstSched(0.9),
         s_cmom:Schedule = ConstSched(torch.nan),
@@ -192,6 +193,14 @@ class DINO(pl.LightningModule):
         self.embed_dim = model.embed_dim
         self.out_dim = model.out_dim
         self.wn_freeze_epochs = wn_freeze_epochs
+
+        if t_mode not in ['ema', 'prev_epoch', 'no_update']:
+            raise RuntimeError(f'Teacher update mode \'{t_mode}\' not supported.')
+        self.t_mode = t_mode
+
+        if s_mode not in ['supervised', 'self-supervised']:
+            raise RuntimeError(f'Student update mode \'{s_mode}\' not supported.')
+        self.s_mode = s_mode
 
         if loss not in ['CE', 'KL', 'H_pred']:
             raise RuntimeError(f'Loss \'{loss}\' not supported.')
@@ -223,7 +232,7 @@ class DINO(pl.LightningModule):
         self.scheduler = Scheduler()
 
         # configure teacher updater
-        self.t_updater = DINOTeacherUpdater(t_mode)
+        self.t_updater = DINOTeacherUpdater(self.t_mode)
         self.scheduler.add(self.t_updater, 'mom', t_mom)
         
         # configure teacher temperature and centering
@@ -271,20 +280,26 @@ class DINO(pl.LightningModule):
         self.scheduler.get(self.optimizer.param_groups[0], 'lr').ys *=  bs / 256
     
 
-    def multicrop_loss(self, pred_logits: torch.Tensor, targ_logits: torch.Tensor):
+    def multicrop_loss(self, pred_logits: torch.Tensor, targ_logits: torch.Tensor = None, targ_labels: torch.Tensor = None):
         # [n_crops, n_batches, out_dim]
 
-        # compute log softmax
+        # compute (log) softmax and per-crop entropy for predictions
         log_preds = F.log_softmax(pred_logits, dim=-1)
-        log_targs = F.log_softmax(targ_logits, dim=-1)
-
-        # compute softmax outputs
         preds = torch.exp(log_preds)
-        targs = torch.exp(log_targs)
-
-        # compute per-crop entropy
         H_preds = U.entropy(preds, log_preds) # [n_crops, n_batches]
-        H_targs = U.entropy(targs, log_targs) # [n_crops, n_batches]
+        
+        if targ_logits is not None and targ_labels is None:
+            # compute (log) softmax and per-crop entropy for targets
+            log_targs = F.log_softmax(targ_logits, dim=-1)
+            targs = torch.exp(log_targs)
+            H_targs = U.entropy(targs, log_targs) # [n_crops, n_batches]
+        
+        elif targ_labels is not None and targ_logits is None:
+            # compute softmax and per-crop entropy for targets
+            targs = F.one_hot(targ_labels).unsqueeze(0).expand(len(self.teacher.crops), -1, -1)
+            H_targs = torch.zeros(*targs.shape[:2], device=self.device) # entropy of one-hot is zero
+        else:
+            raise RuntimeError('Please specify either targ_logits or targ_one_hot.')
 
         # compute pairwise losses
         KLs, CEs = [], []
@@ -330,7 +345,10 @@ class DINO(pl.LightningModule):
         student_out = self.student([batch[i] for i in self.student.crops['idx']])
         
         # compute multicrop loss
-        out = self.multicrop_loss(student_out['logits'], teacher_out['logits'])
+        if self.s_mode == 'self-supervised':
+            out = self.multicrop_loss(student_out['logits'], targ_logits=teacher_out['logits'])
+        else:
+            out = self.multicrop_loss(student_out['logits'], targ_labels=batch_labels)
 
         # minimize CE loss
         out['loss'] = out[self.loss]        
@@ -348,8 +366,11 @@ class DINO(pl.LightningModule):
         student_out = self.student([batch[i] for i in self.student.crops['idx']])
         
         # compute multicrop loss
-        out = self.multicrop_loss(student_out['logits'], teacher_out['logits'])
-        
+        if self.s_mode == 'self-supervised':
+            out = self.multicrop_loss(student_out['logits'], targ_logits=teacher_out['logits'])
+        else:
+            out = self.multicrop_loss(student_out['logits'], targ_labels=batch_labels)
+
         # minimize CE loss
         out['loss'] = out[self.loss]
         out['teacher'] = teacher_out

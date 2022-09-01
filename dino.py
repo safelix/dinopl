@@ -39,6 +39,7 @@ def main(config:Configuration):
 
 
     # Data Loading
+    # TODO: target transform for noisy label?
     DSet = create_dataset(config)
     self_train_set = DSet(root=C.DATA_DIR, train=True, transform=mc)
     self_valid_set = DSet(root=C.DATA_DIR, train=False, transform=mc)
@@ -59,6 +60,7 @@ def main(config:Configuration):
     # DINO Setup
     dino = DINO(mc=mc, model=model,
                 t_mode = config.t_mode,
+                s_mode = config.s_mode,
                 t_mom  = config.t_mom,
                 t_cmom = config.t_cmom,
                 s_cmom = config.s_cmom,

@@ -16,7 +16,7 @@ import warnings
 
 import torch
 import torchvision.models
-from torchvision.datasets import MNIST, CIFAR10
+from torchvision.datasets import MNIST, CIFAR10, VisionDataset
 
 
 from dinopl.scheduling import *
@@ -116,8 +116,8 @@ class Configuration(object):
                             help='Defines the model to train on.')
         model.add_argument('--tiny_input', action='store_true', 
                             help='Adjust encoder for tiny inputs, e.g. resnet for cifar 10.')
-        model.add_argument('--mlp_act', type=str, choices={'GELU', 'ReLu'}, default='GELU',
-                            help='Ativation function of DINOHead MLP.')
+        model.add_argument('--mlp_act', type=str, choices={'GELU', 'ReLU'}, default='GELU',
+                            help='Activation function of DINOHead MLP.')
         model.add_argument('--use_bn', action='store_true',
                             help='Use batchnorm in DINOHead MLP.')
         model.add_argument('--hid_dims', type=int, default=[2048, 2048], nargs='+',
@@ -132,6 +132,8 @@ class Configuration(object):
         dino = parser.add_argument_group('DINO')
         dino.add_argument('--t_mode', type=str, choices={'ema', 'prev_epoch', 'no_update'}, default='ema',
                             help='Mode of teacher update.')
+        dino.add_argument('--s_mode', type=str, choices={'supervised', 'self-supervised'}, default='self-supervised',
+                            help='Mode of student update.')
         dino.add_argument('--t_mom', type=Schedule.parse, default=CosSched(0.996, 1),
                             help='Teacher momentum for exponential moving average.')
         dino.add_argument('--t_cmom', type=Schedule.parse, default=ConstSched(0.9), 
@@ -266,7 +268,7 @@ def create_encoder(config:Configuration):
     raise RuntimeError('Unkown model name.')
 
 
-def create_optimizer(config:Configuration):
+def create_optimizer(config:Configuration) -> torch.optim.Optimizer:
     '''
     This is a helper function that can be useful if you have optimizers that you want to
     choose from via the command line.
@@ -285,7 +287,7 @@ def create_optimizer(config:Configuration):
     raise RuntimeError('Unkown optimizer name.')
 
 
-def create_dataset(config:Configuration):
+def create_dataset(config:Configuration) -> VisionDataset:
     '''
     This is a helper function that can be useful if you have several dataset definitions that you want to
     choose from via the command line.
@@ -327,7 +329,7 @@ def create_multicrop(config:Configuration):
 
     if config.mc == '1x128':
         return [
-            {'name':'global1', 'out_size':128, 'min_scale':0.14, 'max_scale':1.0, 'teacher':True, 'student':True},
+            {'name':'global1', 'out_size':128, 'min_scale':1.0, 'max_scale':1.0, 'teacher':True, 'student':True},
         ]
 
     if config.mc == '2x32+4x32':
@@ -348,7 +350,7 @@ def create_multicrop(config:Configuration):
 
     if config.mc == '1x32':
         return [
-            {'name':'global1', 'out_size':32, 'min_scale':0.14, 'max_scale':1.0, 'teacher':True, 'student':True},
+            {'name':'global1', 'out_size':32, 'min_scale':1.0, 'max_scale':1.0, 'teacher':True, 'student':True},
         ]   
 
     if config.mc == '2x28+4x28':
@@ -369,7 +371,7 @@ def create_multicrop(config:Configuration):
 
     if config.mc == '1x28':
         return [
-            {'name':'global1', 'out_size':28, 'min_scale':0.14, 'max_scale':1.0, 'teacher':True, 'student':True},
+            {'name':'global1', 'out_size':28, 'min_scale':1.0, 'max_scale':1.0, 'teacher':True, 'student':True},
         ]   
 
     raise RuntimeError('Unkown multicrop name.')
