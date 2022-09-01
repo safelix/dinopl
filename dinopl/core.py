@@ -383,7 +383,8 @@ class DINO(pl.LightningModule):
         opt.zero_grad(set_to_none=True)
 
     def on_before_optimizer_step(self, *args):
-        wn = self.student.head.mlp.bottleneck.weightnorm
-        if self.current_epoch < self.wn_freeze_epochs:
-            for p in wn.parameters():
-                p.grad = None
+        if hasattr(self.student.head.mlp, 'bottleneck'):
+            wn = self.student.head.mlp.bottleneck.weightnorm
+            if self.current_epoch < self.wn_freeze_epochs:
+                for p in wn.parameters():
+                    p.grad = None
