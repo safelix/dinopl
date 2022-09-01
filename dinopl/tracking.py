@@ -18,6 +18,7 @@ __all__ = [
     'FeatureTracker',
     'HParamTracker',
     'ParamTracker',
+    'FeatureSaver',
 ]
 
 class MetricsTracker(pl.Callback):
@@ -91,8 +92,9 @@ class FeatureTracker(pl.Callback):
             logs[f'{prefix}/{n}/cos(t_x,s_x).mean()'] = cossim.mean()
             logs[f'{prefix}/{n}/cos(t_x,s_x).hist()'] = wandb.Histogram(np_histogram=np_histogram(cossim, 64))
 
-        logs['trainer/global_step'] = dino.global_step
-        dino.logger.experiment.log(logs)
+        #logs['trainer/global_step'] = dino.global_step
+        #dino.logger.experiment.log(logs)
+        dino.logger.log_metrics(logs , step=max(dino.global_step - 1, 0)) # -1 because global step is updated just before on train_batch_end
 
     def on_train_batch_end(self, _: pl.Trainer, dino: DINO, outputs:Dict[str, torch.Tensor], *args) -> None:
         self.step('train', outputs, dino)
@@ -114,7 +116,10 @@ class HParamTracker(pl.Callback):
         logs['hparams/t_cent.mean()'] = dino.teacher.head.cent.mean()
         logs['hparams/t_cent'] = wandb.Histogram(np_histogram=np_histogram(dino.teacher.head.cent))
         logs['trainer/global_step'] = dino.global_step
-        dino.logger.experiment.log(logs)
+        
+        #logs['trainer/global_step'] = dino.global_step
+        #dino.logger.experiment.log(logs)
+        dino.logger.log_metrics(logs , step=dino.global_step)
 
 class ParamTracker(pl.Callback):
     def __init__(self, student, teacher, name=None, track_init:bool=False) -> None:
