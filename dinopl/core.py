@@ -307,8 +307,8 @@ class DINO(pl.LightningModule):
         if len(CEs) == 0 or len(KLs) == 0:
             raise RuntimeError('No pairwise losses where computed.')
 
-        CEs = torch.stack(CEs, dim=-1) # [n_pairs, n_batches] 
-        KLs = torch.stack(KLs, dim=-1) # [n_pairs, n_batches]
+        CEs = torch.stack(CEs, dim=0) # [n_pairs, n_batches] 
+        KLs = torch.stack(KLs, dim=0) # [n_pairs, n_batches]
 
         # aggregate losses
         out = {}
