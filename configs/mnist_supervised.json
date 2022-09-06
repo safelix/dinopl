@@ -9,6 +9,5 @@
     "t_mode":"no_update",
     "s_mode":"supervised",
     "loss_pairing":"same",
-    "opt_lr":"LinWarmup(0, 5e-4, 10)",
     "clip_grad":0
 }
