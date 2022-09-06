@@ -13,7 +13,7 @@ from dinopl import *
 from dinopl.probing import LinearProbe, LinearProber
 from dinopl.tracking import (FeatureTracker, HParamTracker, MetricsTracker,
                              ParamTracker, PerCropEntropyTracker, FeatureSaver)
-
+from torchinfo import summary
 
 def main(config:Configuration):
 
@@ -45,7 +45,7 @@ def main(config:Configuration):
     self_valid_set = DSet(root=C.DATA_DIR, train=False, transform=mc)
     eval_train_set = DSet(root=C.DATA_DIR, train=True, transform=eval_trfm)
     eval_valid_set = DSet(root=C.DATA_DIR, train=False, transform=eval_trfm)
-    print(f'Init {type(DSet).__name__}: size(train)={len(self_train_set)}, size(valid)={len(self_valid_set)}')
+    print(f'Init {DSet.__name__}: size(train)={len(self_train_set)}, size(valid)={len(self_valid_set)}')
 
     # Model Setup
     enc = create_encoder(config)
