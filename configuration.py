@@ -158,7 +158,7 @@ class Configuration(object):
         training.add_argument('--opt', type=str, choices={'adamw', 'adam', 'sgd'}, default='adamw', 
                             help='Optimizer to use for training.')                   
         training.add_argument('--opt_lr', type=Schedule.parse, default=CatSched(LinSched(0, 5e-4), CosSched(5e-4, 1e-6), 10), 
-                            help='Learning rate for optimizer.')
+                            help='Learning rate for optimizer: specified wrt batch size 256 and linearly scaled.')
         training.add_argument('--opt_wd', type=Schedule.parse, default=CosSched(0.04, 0.4), 
                             help='Weight decay for optimizer.')
         training.add_argument('--clip_grad', type=float, default=3, 

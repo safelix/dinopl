@@ -1,0 +1,14 @@
+{
+    "dataset":"mnist",
+    "mc":"1x28",
+    "tiny_input":true,
+    "bs_train":256,
+    "hidden_dims":[],
+    "bot_dim":0,
+    "out_dim":10,
+    "t_mode":"no_update",
+    "s_mode":"supervised",
+    "loss_pairing":"same",
+    "opt_lr":"LinWarmup(0, 5e-4, 10)",
+    "clip_grad":0
+}
