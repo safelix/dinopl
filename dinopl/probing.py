@@ -119,6 +119,8 @@ class LinearProber(pl.Callback):
         for id, probe in self.probes.items():
             probe.reset(device)
 
+            print(f'\nStarting {type(probe).__name__} of {id}..', end='')
+
             # load data
             t = time() 
             train_data = probe.load_data(self.train_dl)
