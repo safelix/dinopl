@@ -194,6 +194,7 @@ class DINO(pl.LightningModule):
         self.out_dim = model.out_dim
         self.wn_freeze_epochs = wn_freeze_epochs
 
+        # check if all string inputs are valid
         if t_mode not in ['ema', 'prev_epoch', 'no_update']:
             raise RuntimeError(f'Teacher update mode \'{t_mode}\' not supported.')
         self.t_mode = t_mode

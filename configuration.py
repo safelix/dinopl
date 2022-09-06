@@ -120,7 +120,7 @@ class Configuration(object):
                             help='Activation function of DINOHead MLP.')
         model.add_argument('--use_bn', action='store_true',
                             help='Use batchnorm in DINOHead MLP.')
-        model.add_argument('--hid_dims', type=int, default=[2048, 2048], nargs='+',
+        model.add_argument('--hid_dims', type=int, default=[2048, 2048], nargs='*',
                             help='Hidden dimensions of DINOHead MLP.')
         model.add_argument('--bot_dim', type=int, default=256,
                             help='L2-Bottleneck dimension of DINOHead MLP.')
