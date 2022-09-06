@@ -56,6 +56,9 @@ def main(config:Configuration):
             act_fn=config.mlp_act)
     model = DINOModel(enc, head)
 
+    print(f'Created encoder and head:')
+    summary(model, depth=4, device='cpu',
+            input_size=(config.bs_train, 3, config.mc_spec[0]['out_size'], config.mc_spec[0]['out_size']))
 
     # DINO Setup
     dino = DINO(mc=mc, model=model,
