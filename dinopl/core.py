@@ -176,6 +176,7 @@ class DINO(pl.LightningModule):
         mc:MultiCropAugmentation,
         model:DINOModel,
         t_mode:str = 'ema',
+        t_eval:bool = False,
         s_mode:str = 'self-supervised',
         t_mom:Schedule = CosSched(0.996, 1),
         t_cmom:Schedule = ConstSched(0.9),
@@ -190,6 +191,7 @@ class DINO(pl.LightningModule):
         wn_freeze_epochs = 1,
     ):
         super().__init__()
+        self.t_eval = t_eval
         self.embed_dim = model.embed_dim
         self.out_dim = model.out_dim
         self.wn_freeze_epochs = wn_freeze_epochs
@@ -341,7 +343,10 @@ class DINO(pl.LightningModule):
         # generate teacher's targets and student's predictions
         # [n_crops, n_batches, n_channels, height, width]
         # -> [n_crops, n_batches, out_dim]
-        with torch.no_grad(): # TODO: teacher is not in eval mode...
+
+        if self.t_eval: # set teacher in evaluation mode
+            self.teacher.eval() 
+        with torch.no_grad(): # don't compute gradients of teacher predictions
             teacher_out = self.teacher([batch[i] for i in self.teacher.crops['idx']])
         student_out = self.student([batch[i] for i in self.student.crops['idx']])
         

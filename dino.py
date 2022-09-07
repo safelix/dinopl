@@ -26,6 +26,13 @@ def main(config:Configuration):
     # Create Multicrop Specification from name
     config.mc_spec = create_multicrop(config)
     
+    # Logger
+    wandb_logger = WandbLogger(
+            project='DINO',
+            save_dir=C.RESULTS_DIR,
+            config=config,
+        )
+
     # Standard Augmentations, always work on RGB
     self_trfm = transforms.Compose([ # self-training
                     transforms.Lambda(lambda img: img.convert('RGB')),
@@ -64,6 +71,7 @@ def main(config:Configuration):
     dino = DINO(mc=mc, model=model,
                 t_mode = config.t_mode,
                 s_mode = config.s_mode,
+                t_eval = config.t_eval,
                 t_mom  = config.t_mom,
                 t_cmom = config.t_cmom,
                 s_cmom = config.s_cmom,
@@ -76,12 +84,6 @@ def main(config:Configuration):
                 opt_wd = config.opt_wd)
 
     # Logger
-    wandb_logger = WandbLogger(
-            project='DINO',
-            save_dir=C.RESULTS_DIR,
-            config=config,
-        )
-
     # Tracking Logic    
     probing_cb = LinearProber(
         probe_every = config.probe_every,

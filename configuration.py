@@ -134,6 +134,8 @@ class Configuration(object):
                             help='Mode of teacher update.')
         dino.add_argument('--s_mode', type=str, choices={'supervised', 'self-supervised'}, default='self-supervised',
                             help='Mode of student update.')
+        dino.add_argument('--t_eval', action='store_true',
+                            help='Run teacher in evaluation mode even on training data.')
         dino.add_argument('--t_mom', type=Schedule.parse, default=CosSched(0.996, 1),
                             help='Teacher momentum for exponential moving average.')
         dino.add_argument('--t_cmom', type=Schedule.parse, default=ConstSched(0.9), 
@@ -261,6 +263,7 @@ def create_encoder(config:Configuration):
         if hasattr(config, 'tiny_input') and config.tiny_input:
             # https://pytorch-lightning.readthedocs.io/en/stable/notebooks/lightning_examples/cifar10-baseline.html
             enc.conv1 = torch.nn.Conv2d(3, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            torch.nn.init.kaiming_normal_(enc.conv1.weight, mode="fan_out", nonlinearity="relu")
             enc.maxpool = torch.nn.Identity()
 
         return enc
