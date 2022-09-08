@@ -63,7 +63,7 @@ class DINOHead(nn.Module):
             if isinstance(m, nn.Linear) and m.bias is not None:
                 nn.init.constant_(m.bias, 0)
 
-    def forward(self, x:torch.Tensor):
+    def forward(self, x:torch.Tensor, update_cent:bool=False):
         # [n_crops, n_batches, embed_dim]
         # -> [n_crops, n_batches, out_dim]
 
@@ -71,8 +71,8 @@ class DINOHead(nn.Module):
         batch_cent = torch.mean(projections, dim=[0,1]).detach()
         logits = (projections - self.cent) / self.temp
 
-        # update centering after it is applied in training mode
-        if self.training and not math.isnan(self.cmom): # only if activated
+        # update centering after it is applied to projections
+        if update_cent and not math.isnan(self.cmom): # only if activated
             self.cent = self.cent * self.cmom  + batch_cent * (1 - self.cmom)
         
         out = dict(logits=logits, projections=projections)
@@ -91,7 +91,7 @@ class DINOModel(nn.Module):
         self.out_dim = head.out_dim
         self.crops = {'name':[], 'idx':[]}
 
-    def forward(self, crop_batches):
+    def forward(self, crop_batches, **kwargs):
         # [n_crops, n_batches, n_channels, height, width]
         if not isinstance(crop_batches, list):
             crop_batches = [crop_batches]
@@ -103,7 +103,7 @@ class DINOModel(nn.Module):
 
         # compute outputs from embeddings
         # -> [n_crops, n_batches, out_dim]
-        out = self.head(embeddings)
+        out = self.head(embeddings, **kwargs)
         out['embeddings'] = embeddings
         return out
 
@@ -347,8 +347,8 @@ class DINO(pl.LightningModule):
         if self.t_eval: # set teacher in evaluation mode
             self.teacher.eval() 
         with torch.no_grad(): # don't compute gradients of teacher predictions
-            teacher_out = self.teacher([batch[i] for i in self.teacher.crops['idx']])
-        student_out = self.student([batch[i] for i in self.student.crops['idx']])
+            teacher_out = self.teacher([batch[i] for i in self.teacher.crops['idx']], update_cent=True)
+        student_out = self.student([batch[i] for i in self.student.crops['idx']], update_cent=True)
         
         # compute multicrop loss
         if self.s_mode == 'self-supervised':
