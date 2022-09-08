@@ -156,17 +156,12 @@ class Scheduler(pl.Callback):
     def prep(self, n_steps:int, n_epochs:int):
         for loc, key, sched in self.scheduled_params: # prepare all schedules
             sched.prep(n_steps, n_epochs)
-            loc[key] = sched(0) # initiallizes all start values
-
-            if isinstance(sched, ConstSched): 
-                sched.unprep() # de-materialize ConstSched
 
     def on_fit_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):
         self.prep(trainer.estimated_stepping_batches, trainer.max_epochs)
 
     def on_train_batch_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):
         for loc, key, sched in self.scheduled_params: # update parameter
-            if not isinstance(sched, ConstSched): # don't update ConstSched
                 loc[key] = sched(trainer.global_step)
 
 
