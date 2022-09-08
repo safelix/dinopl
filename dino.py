@@ -83,31 +83,7 @@ def main(config:Configuration):
                 opt_lr = config.opt_lr,
                 opt_wd = config.opt_wd)
 
-    # Logger
     # Tracking Logic    
-    probing_cb = LinearProber(
-        probe_every = config.probe_every,
-        probing_epochs = config.probing_epochs,
-        # probes
-        probes = dict(
-            student=LinearProbe(
-                encoder=dino.student.enc,
-                embed_dim=config.embed_dim,
-                n_classes=config.n_classes),
-            teacher=LinearProbe(
-                encoder=dino.teacher.enc,
-                embed_dim=config.embed_dim,
-                n_classes=config.n_classes
-            )),
-        # data loading
-        train_set = eval_train_set,
-        valid_set = eval_valid_set,
-        dl_args=dict(
-            batch_size = config.bs_eval,
-            num_workers = config.n_workers,
-            pin_memory = False if config.force_cpu else True)
-    )
-
     callbacks = [
             MetricsTracker(), 
             PerCropEntropyTracker(), 
@@ -116,14 +92,31 @@ def main(config:Configuration):
             ParamTracker(dino.student, dino.teacher, track_init=True),
             ParamTracker(dino.student.head, dino.teacher.head, 'head', True),
             ParamTracker(dino.student.enc, dino.teacher.enc, 'enc', True),
-            probing_cb,
         ]
     
     if len(config.save_features) > 0:
         config.save_features = ['embeddings', 'projections', 'logits'] if 'all' in config.save_features else config.save_features
         callbacks += [FeatureSaver(eval_valid_set, n_imgs=64, features=config.save_features, 
-                            dir=os.path.join(C.RESULTS_DIR, wandb_logger.name, wandb_logger.version))]
+                        dir=os.path.join(C.RESULTS_DIR, wandb_logger.name, wandb_logger.version))]
 
+    if config.probe_every > 0 and config.probing_epochs > 0:
+        s_probe = LinearProbe(encoder=dino.student.enc,
+                                embed_dim=config.embed_dim,
+                                n_classes=config.n_classes)
+        t_probe = LinearProbe(encoder=dino.teacher.enc,
+                                embed_dim=config.embed_dim,
+                                n_classes=config.n_classes)
+        callbacks += [LinearProber(
+                        probe_every = config.probe_every,
+                        probing_epochs = config.probing_epochs,
+                        probes = dict(student=s_probe, teacher=t_probe),
+                        train_set = eval_train_set,
+                        valid_set = eval_valid_set,
+                        dl_args=dict( # arguments for dataloader
+                            batch_size = config.bs_eval,
+                            num_workers = config.n_workers,
+                            pin_memory = False if config.force_cpu else True)
+                    )]
 
     # Training
     trainer = pl.Trainer(
