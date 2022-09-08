@@ -81,7 +81,8 @@ def main(config:Configuration):
                 loss_pairing = config.loss_pairing,
                 opt = create_optimizer(config),
                 opt_lr = config.opt_lr,
-                opt_wd = config.opt_wd)
+                opt_wd = config.opt_wd,
+                wn_freeze_epochs=config.wn_freeze_epochs)
 
     # Tracking Logic    
     callbacks = [
