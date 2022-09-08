@@ -150,7 +150,7 @@ class MultiCropAugmentation(nn.Module):
 
 
 class DINOTeacherUpdater(pl.Callback):
-    def __init__(self, mode: str = 'ema', mom: float = 0.996):
+    def __init__(self, mode: str = 'ema', mom: float = 0.996, update_bn=True):
         if mode == 'no_update':
             pass
         elif mode == 'ema':
@@ -160,16 +160,29 @@ class DINOTeacherUpdater(pl.Callback):
             self.on_train_epoch_end = self.copy 
         else:
             raise RuntimeError('Unkown teacher update mode.')
+        self.update_bn = update_bn
 
     def ema(self, _:pl.Trainer, dino: pl.LightningModule, *args):
-        # TODO: should the BN buffers (encoder only? or everything except centering?) also be updated?
         for p_s, p_t in zip(dino.student.parameters(), dino.teacher.parameters()):
             p_t.data = self.mom * p_t.data + (1 - self.mom) * p_s.data
+
+        if not self.update_bn:
+            return # update BN stat buffers if required
+        for (n_s, m_s), (n_t, m_t) in zip(dino.student.named_modules(), dino.teacher.named_modules()):
+            if isinstance(m_s, torch.nn.modules.batchnorm._NormBase) and n_s == n_t:
+                m_t.running_mean.data = self.mom * m_t.running_mean.data + (1 - self.mom) * m_s.running_mean.data
+                m_t.running_var.data = self.mom * m_t.running_var.data + (1 - self.mom) * m_s.running_var.data
 
     def copy(self, _:pl.Trainer, dino: pl.LightningModule, *args):
         for p_s, p_t in zip(dino.student.parameters(), dino.teacher.parameters()):
             p_t.data = p_s.data
         
+        if not self.update_bn: 
+            return # update BN stat buffers if required
+        for (n_s, m_s), (n_t, m_t) in zip(dino.student.named_modules(), dino.teacher.named_modules()):
+            if isinstance(m_s, torch.nn.modules.batchnorm._NormBase) and n_s == n_t:
+                m_t.running_mean.data = m_s.running_mean.data
+                m_t.running_var.data = m_s.running_var.data
 
 class DINO(pl.LightningModule):
     def __init__(self,
@@ -177,8 +190,9 @@ class DINO(pl.LightningModule):
         model:DINOModel,
         t_mode:str = 'ema',
         t_eval:bool = False,
-        s_mode:str = 'self-supervised',
         t_mom:Schedule = CosSched(0.996, 1),
+        t_bn_mode:str = 'from_data',
+        s_mode:str = 'self-supervised',
         t_cmom:Schedule = ConstSched(0.9),
         s_cmom:Schedule = ConstSched(torch.nan),
         t_temp:Schedule = LinWarmup(0.04, 0.04, 0),
@@ -191,27 +205,33 @@ class DINO(pl.LightningModule):
         wn_freeze_epochs = 1,
     ):
         super().__init__()
-        self.t_eval = t_eval
         self.embed_dim = model.embed_dim
         self.out_dim = model.out_dim
+        self.t_mode = t_mode
+        self.t_eval = t_eval
+        self.s_mode = s_mode
+        self.loss = loss
+        self.loss_pairing = loss_pairing
         self.wn_freeze_epochs = wn_freeze_epochs
 
         # check if all string inputs are valid
         if t_mode not in ['ema', 'prev_epoch', 'no_update']:
             raise RuntimeError(f'Teacher update mode \'{t_mode}\' not supported.')
-        self.t_mode = t_mode
+        
+        if t_bn_mode not in ['from_data', 'from_student']:
+            raise RuntimeError(f'Teacher batchnorm update mode \'{t_mode}\' not supported.')
+        
+        if (t_bn_mode=='from_data' and t_eval==True) or (t_bn_mode=='from_student' and t_eval==False):
+            raise RuntimeError(f'Invalid configuration: t_bn_mode==\'{t_bn_mode}\' and t_eval=={t_eval}')
 
         if s_mode not in ['supervised', 'self-supervised']:
             raise RuntimeError(f'Student update mode \'{s_mode}\' not supported.')
-        self.s_mode = s_mode
 
         if loss not in ['CE', 'KL', 'H_pred']:
             raise RuntimeError(f'Loss \'{loss}\' not supported.')
-        self.loss = loss
 
         if loss_pairing not in ['all', 'same', 'opposite']:
             raise RuntimeError(f'Pairing strategy \'{loss_pairing}\' not supported.')
-        self.loss_pairing = loss_pairing
         
         # initiallize student and teacher with same params
         self.student = model
@@ -235,7 +255,7 @@ class DINO(pl.LightningModule):
         self.scheduler = Scheduler()
 
         # configure teacher updater
-        self.t_updater = DINOTeacherUpdater(self.t_mode)
+        self.t_updater = DINOTeacherUpdater(self.t_mode, update_bn=(t_bn_mode=='from_student'))
         self.scheduler.add(self.t_updater, 'mom', t_mom)
         
         # configure teacher temperature and centering

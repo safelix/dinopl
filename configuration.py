@@ -132,12 +132,14 @@ class Configuration(object):
         dino = parser.add_argument_group('DINO')
         dino.add_argument('--t_mode', type=str, choices={'ema', 'prev_epoch', 'no_update'}, default='ema',
                             help='Mode of teacher update.')
-        dino.add_argument('--s_mode', type=str, choices={'supervised', 'self-supervised'}, default='self-supervised',
-                            help='Mode of student update.')
         dino.add_argument('--t_eval', action='store_true',
                             help='Run teacher in evaluation mode even on training data.')
         dino.add_argument('--t_mom', type=Schedule.parse, default=CosSched(0.996, 1),
                             help='Teacher momentum for exponential moving average.')
+        dino.add_argument('--t_bn_mode', type=str, choices={'from_data', 'from_student'},
+                            help='Mode of teacher batchnorm updates: either from data stats or from student buffers.')
+        dino.add_argument('--s_mode', type=str, choices={'supervised', 'self-supervised'}, default='self-supervised',
+                            help='Mode of student update.')
         dino.add_argument('--t_cmom', type=Schedule.parse, default=ConstSched(0.9), 
                             help='Teacher centering momentum of DINOHead.')
         dino.add_argument('--s_cmom', type=Schedule.parse, default=ConstSched(torch.nan), 

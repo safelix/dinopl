@@ -70,9 +70,10 @@ def main(config:Configuration):
     # DINO Setup
     dino = DINO(mc=mc, model=model,
                 t_mode = config.t_mode,
-                s_mode = config.s_mode,
                 t_eval = config.t_eval,
                 t_mom  = config.t_mom,
+                t_bn_mode=config.t_bn_mode,
+                s_mode = config.s_mode,
                 t_cmom = config.t_cmom,
                 s_cmom = config.s_cmom,
                 t_temp = config.t_temp,
