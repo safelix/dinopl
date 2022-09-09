@@ -136,7 +136,7 @@ class Configuration(object):
                             help='Run teacher in evaluation mode even on training data.')
         dino.add_argument('--t_mom', type=Schedule.parse, default=CosSched(0.996, 1),
                             help='Teacher momentum for exponential moving average.')
-        dino.add_argument('--t_bn_mode', type=str, choices={'from_data', 'from_student'},
+        dino.add_argument('--t_bn_mode', type=str, choices={'from_data', 'from_student'}, default='from_data',
                             help='Mode of teacher batchnorm updates: either from data stats or from student buffers.')
         dino.add_argument('--s_mode', type=str, choices={'supervised', 'self-supervised'}, default='self-supervised',
                             help='Mode of student update.')

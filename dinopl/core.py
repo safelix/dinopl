@@ -219,7 +219,7 @@ class DINO(pl.LightningModule):
             raise RuntimeError(f'Teacher update mode \'{t_mode}\' not supported.')
         
         if t_bn_mode not in ['from_data', 'from_student']:
-            raise RuntimeError(f'Teacher batchnorm update mode \'{t_mode}\' not supported.')
+            raise RuntimeError(f'Teacher batchnorm update mode \'{t_bn_mode}\' not supported.')
         
         if (t_bn_mode=='from_data' and t_eval==True) or (t_bn_mode=='from_student' and t_eval==False):
             raise RuntimeError(f'Invalid configuration: t_bn_mode==\'{t_bn_mode}\' and t_eval=={t_eval}')

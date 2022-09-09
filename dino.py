@@ -72,7 +72,7 @@ def main(config:Configuration):
                 t_mode = config.t_mode,
                 t_eval = config.t_eval,
                 t_mom  = config.t_mom,
-                t_bn_mode=config.t_bn_mode,
+                t_bn_mode = config.t_bn_mode,
                 s_mode = config.s_mode,
                 t_cmom = config.t_cmom,
                 s_cmom = config.s_cmom,
