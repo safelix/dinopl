@@ -20,6 +20,7 @@ from torchvision.datasets import MNIST, CIFAR10, VisionDataset
 
 
 from dinopl.scheduling import *
+import dinopl.utils as U
 
 
 class Constants(object):
@@ -262,11 +263,8 @@ def create_encoder(config:Configuration):
         enc.fc = torch.nn.Identity()
 
         # adjust for tiny input, e.g. resnet for cifar10
-        if hasattr(config, 'tiny_input') and config.tiny_input:
-            # https://pytorch-lightning.readthedocs.io/en/stable/notebooks/lightning_examples/cifar10-baseline.html
-            enc.conv1 = torch.nn.Conv2d(3, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
-            torch.nn.init.kaiming_normal_(enc.conv1.weight, mode="fan_out", nonlinearity="relu")
-            enc.maxpool = torch.nn.Identity()
+        if getattr(config, 'tiny_input', False) and isinstance(enc, torchvision.models.ResNet):
+            return U.modify_resnet_for_tiny_input(enc)
 
         return enc
 
