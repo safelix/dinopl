@@ -127,7 +127,7 @@ class Schedule():
 
         # fall through case: argument was not a parseable string but a float
         if isinstance(expr, float):
-            return ConstSched(float)
+            return ConstSched(expr)
 
         # fall through case: argument was not a parseable string but a Schedule
         if isinstance(expr, Schedule):
