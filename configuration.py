@@ -134,20 +134,20 @@ class Configuration(object):
                             help='Mode of teacher update.')
         dino.add_argument('--t_eval', action='store_true',
                             help='Run teacher in evaluation mode even on training data.')
-        dino.add_argument('--t_mom', type=Schedule.parse, default=CosSched(0.996, 1),
-                            help='Teacher momentum for exponential moving average.')
+        dino.add_argument('--t_mom', type=str, default=str(CosSched(0.996, 1)),
+                            help='Teacher momentum for exponential moving average (float or Schedule).')
         dino.add_argument('--t_bn_mode', type=str, choices={'from_data', 'from_student'}, default='from_data',
                             help='Mode of teacher batchnorm updates: either from data stats or from student buffers.')
         dino.add_argument('--s_mode', type=str, choices={'supervised', 'self-supervised'}, default='self-supervised',
                             help='Mode of student update.')
-        dino.add_argument('--t_cmom', type=Schedule.parse, default=ConstSched(0.9), 
-                            help='Teacher centering momentum of DINOHead.')
-        dino.add_argument('--s_cmom', type=Schedule.parse, default=ConstSched(torch.nan), 
-                            help='Student centering momentum of DINOHead.')
-        dino.add_argument('--t_temp', type=Schedule.parse, default=LinWarmup(0.04, 0.04, 0), 
-                            help='Teacher temperature of DINOHead.')
-        dino.add_argument('--s_temp', type=Schedule.parse, default=ConstSched(0.1), 
-                            help='Student temperature of DINOHead.')
+        dino.add_argument('--t_cmom', type=str, default=str(ConstSched(0.9)), 
+                            help='Teacher centering momentum of DINOHead (float or Schedule).')
+        dino.add_argument('--s_cmom', type=str, default=str(ConstSched(torch.nan)), 
+                            help='Student centering momentum of DINOHead (float or Schedule).')
+        dino.add_argument('--t_temp', type=str, default=str(LinWarmup(0.04, 0.04, 0)), 
+                            help='Teacher temperature of DINOHead (float or Schedule).')
+        dino.add_argument('--s_temp', type=str, default=str(ConstSched(0.1)), 
+                            help='Student temperature of DINOHead (float or Schedule).')
         dino.add_argument('--loss', type=str, choices={'CE', 'KL', 'H_pred'}, default='CE',
                             help='Loss function to use in the multicrop loss.')
         dino.add_argument('--loss_pairing', type=str, choices=['all', 'same', 'opposite'], default='opposite',
@@ -161,10 +161,10 @@ class Configuration(object):
                             help='Number of epochs to train for.')
         training.add_argument('--opt', type=str, choices={'adamw', 'adam', 'sgd'}, default='adamw', 
                             help='Optimizer to use for training.')                   
-        training.add_argument('--opt_lr', type=Schedule.parse, default=CatSched(LinSched(0, 5e-4), CosSched(5e-4, 1e-6), 10), 
-                            help='Learning rate for optimizer: specified wrt batch size 256 and linearly scaled.')
-        training.add_argument('--opt_wd', type=Schedule.parse, default=CosSched(0.04, 0.4), 
-                            help='Weight decay for optimizer.')
+        training.add_argument('--opt_lr', type=str, default=str(CatSched(LinSched(0, 5e-4), CosSched(5e-4, 1e-6), 10)), 
+                            help='Learning rate for optimizer (float or Schedule): specified wrt batch size 256 and linearly scaled.')
+        training.add_argument('--opt_wd', type=str, default=str(CosSched(0.04, 0.4)), 
+                            help='Weight decay for optimizer (float or Schedule).')
         training.add_argument('--clip_grad', type=float, default=3, 
                             help='Value to clip gradient norm to.')
         training.add_argument('--wn_freeze_epochs', type=int, default=1,

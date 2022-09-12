@@ -11,6 +11,7 @@ from configuration import CONSTANTS as C, create_dataset, create_multicrop
 from configuration import Configuration, create_encoder, create_optimizer
 from dinopl import *
 from dinopl.probing import LinearProbe, LinearProber
+from dinopl.scheduling import Schedule
 from dinopl.tracking import (FeatureTracker, HParamTracker, MetricsTracker,
                              ParamTracker, PerCropEntropyTracker, FeatureSaver)
 from torchinfo import summary
@@ -71,18 +72,18 @@ def main(config:Configuration):
     dino = DINO(mc=mc, model=model,
                 t_mode = config.t_mode,
                 t_eval = config.t_eval,
-                t_mom  = config.t_mom,
+                t_mom  = Schedule.parse(config.t_mom),
                 t_bn_mode = config.t_bn_mode,
                 s_mode = config.s_mode,
-                t_cmom = config.t_cmom,
-                s_cmom = config.s_cmom,
-                t_temp = config.t_temp,
-                s_temp = config.s_temp,
+                t_cmom = Schedule.parse(config.t_cmom),
+                s_cmom = Schedule.parse(config.s_cmom),
+                t_temp = Schedule.parse(config.t_temp),
+                s_temp = Schedule.parse(config.s_temp),
                 loss = config.loss,
                 loss_pairing = config.loss_pairing,
                 opt = create_optimizer(config),
-                opt_lr = config.opt_lr,
-                opt_wd = config.opt_wd,
+                opt_lr = Schedule.parse(config.opt_lr),
+                opt_wd = Schedule.parse(config.opt_wd),
                 wn_freeze_epochs=config.wn_freeze_epochs)
 
     # Tracking Logic    

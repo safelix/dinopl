@@ -1,5 +1,6 @@
 import argparse
 import ast
+from cmath import exp
 from lib2to3.pgen2.parse import ParseError
 from typing import List, Tuple, Union
 
@@ -123,8 +124,17 @@ class Schedule():
                     return sclass(*args)
             raise RuntimeError(f'Unkown schedule \'{expr.func.id}\' with args {args}.')
         
+
+        # fall through case: argument was not a parseable string but a float
+        if isinstance(expr, float):
+            return ConstSched(float)
+
+        # fall through case: argument was not a parseable string but a Schedule
+        if isinstance(expr, Schedule):
+            return expr
+
         # fall through case: don't know what happened
-        raise RuntimeError(f'Unkown expression {expr}.')
+        raise RuntimeError(f'Unkown expression {expr} of type {type(expr).__name__}.')
 
     def __repr__(self, args=[]) -> str:
         out = f'{self.__class__.__name__}('
@@ -148,8 +158,10 @@ class Scheduler(pl.Callback):
         self.scheduled_params.append((loc, key, sched))
 
     def get(self, loc:Union[dict, object], key:str):
+        if not isinstance(loc, dict):
+            loc = loc.__dict__
         for curr_loc, curr_key, curr_sched in self.scheduled_params: # get first schedule
-            if curr_loc == loc and curr_key == key:
+            if curr_loc is loc and curr_key == key: # check if dicts are same objects
                 return curr_sched
         raise RuntimeError(f'Schedule {loc}[{key}] could not be retrieved.')
     
