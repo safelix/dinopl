@@ -4,9 +4,9 @@ import time
 
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.callbacks import ModelCheckpoint
 from torch.utils.data import DataLoader
 from torchvision import transforms
-from torchvision.datasets import MNIST
 
 from configuration import CONSTANTS as C, create_dataset, create_multicrop
 from configuration import Configuration, create_encoder, create_optimizer
@@ -18,22 +18,26 @@ from dinopl.tracking import (FeatureTracker, HParamTracker, MetricsTracker,
 from torchinfo import summary
 
 def main(config:Configuration):
-
+    
     # Fix random seed
     if config.seed is None:
         config.seed = int(time.time())
     pl.seed_everything(config.seed)
 
-
-    # Create Multicrop Specification from name
-    config.mc_spec = create_multicrop(config)
-    
     # Logger
     wandb_logger = WandbLogger(
             project='DINO',
             save_dir=C.RESULTS_DIR,
             config=config,
         )
+
+    # store into logging directory
+    config.logdir = os.path.join(C.RESULTS_DIR, wandb_logger.name, wandb_logger.version)
+    os.makedirs(config.logdir, exist_ok=True)
+    config.to_json(os.path.join(config.logdir, 'config.json'))
+
+    # Create Multicrop Specification from name
+    config.mc_spec = create_multicrop(config)
 
     # Standard Augmentations, always work on RGB
     self_trfm = transforms.Compose([ # self-training
@@ -66,11 +70,11 @@ def main(config:Configuration):
     student = DINOModel(enc, head)
 
     # initialize teacher with same params as student
-    if config.t_init == "student":
+    if config.t_init == 'student':
         teacher = copy.deepcopy(student)
     
     # initialize teacher with random parameters
-    elif config.t_init == "random":
+    elif config.t_init == 'random':
         t_enc = create_encoder(config)
         t_head = DINOHead(config.embed_dim, config.out_dim, 
             hidden_dims=config.hid_dims, 
@@ -79,7 +83,7 @@ def main(config:Configuration):
             act_fn=config.mlp_act)
         teacher = DINOModel(t_enc, t_head)
     else:
-        raise RuntimeError(f'Teacher initialization strategy mode \'{config.t_init}\' not supported.')
+        raise RuntimeError(f'Teacher initialization strategy \'{config.t_init}\' not supported.')
 
 
     print(f'Created encoder and head:')
@@ -117,8 +121,7 @@ def main(config:Configuration):
     
     if len(config.save_features) > 0:
         config.save_features = ['embeddings', 'projections', 'logits'] if 'all' in config.save_features else config.save_features
-        callbacks += [FeatureSaver(eval_valid_set, n_imgs=64, features=config.save_features, 
-                        dir=os.path.join(C.RESULTS_DIR, wandb_logger.name, wandb_logger.version))]
+        callbacks += [FeatureSaver(eval_valid_set, n_imgs=64, features=config.save_features, dir=config.logdir)]
 
     if config.probe_every > 0 and config.probing_epochs > 0:
         s_probe = LinearProbe(encoder=dino.student.enc,
@@ -138,6 +141,9 @@ def main(config:Configuration):
                             num_workers = config.n_workers,
                             pin_memory = False if config.force_cpu else True)
                     )]
+    
+    checkpoint_callback = ModelCheckpoint(dirpath=config.log_dir, monitor='probe/student', mode='max',
+                    filename='epoch={epoch}-step={step}-probe_student={valid/loss:.3f}', auto_insert_metric_name=False),
 
     # Training
     trainer = pl.Trainer(
@@ -145,6 +151,7 @@ def main(config:Configuration):
         max_epochs=config.n_epochs,
         gradient_clip_val=config.clip_grad,
         callbacks=callbacks,
+        checkpoint_callback=checkpoint_callback,
 
         # logging
         logger=wandb_logger,
@@ -171,6 +178,9 @@ def main(config:Configuration):
         pin_memory = False if config.force_cpu else True ) 
     self_train_dl = DataLoader(dataset=self_train_set, **dl_args)
     self_valid_dl = DataLoader(dataset=self_valid_set, **dl_args)
+
+    # log updated config to wandb before training
+    wandb_logger.experiment.config.update(config)
 
     trainer.fit(model=dino, 
                 train_dataloaders=self_train_dl,
