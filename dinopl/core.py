@@ -365,8 +365,8 @@ class DINO(pl.LightningModule):
         # gradient is not computed because of teacher.requires_grad_(False)
         teacher_out = self.teacher([batch[i] for i in self.teacher.crops['idx']], update_cent=True)
         student_out = self.student([batch[i] for i in self.student.crops['idx']], update_cent=True)
-        assert(teacher_out.grad is None)
-        assert(student_out.grad is not None)
+        assert(teacher_out['logits'].grad is None)
+        assert(student_out['logits'].grad is not None)
 
         # compute multicrop loss
         if self.s_mode == 'self-supervised':
