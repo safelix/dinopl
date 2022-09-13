@@ -320,7 +320,7 @@ class DINO(pl.LightningModule):
         
         elif targ_labels is not None and targ_logits is None:
             # compute softmax and per-crop entropy for targets
-            targs = F.one_hot(targ_labels).unsqueeze(0).expand(len(self.teacher.crops), -1, -1)
+            targs = F.one_hot(targ_labels, self.out_dim).unsqueeze(0).expand(len(self.teacher.crops), -1, -1)
             H_targs = torch.zeros(*targs.shape[:2], device=self.device) # entropy of one-hot is zero
         else:
             raise RuntimeError('Please specify either targ_logits or targ_one_hot.')
