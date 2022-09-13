@@ -119,11 +119,11 @@ class Configuration(object):
                             help='Adjust encoder for tiny inputs, e.g. resnet for cifar 10.')
         model.add_argument('--mlp_act', type=str, choices={'GELU', 'ReLU'}, default='GELU',
                             help='Activation function of DINOHead MLP.')
-        model.add_argument('--use_bn', action='store_true',
+        model.add_argument('--mlp_bn', action='store_true',
                             help='Use batchnorm in DINOHead MLP.')
         model.add_argument('--hid_dims', type=int, default=[2048, 2048], nargs='*',
                             help='Hidden dimensions of DINOHead MLP.')
-        model.add_argument('--bot_dim', type=int, default=256,
+        model.add_argument('--l2bot_dim', type=int, default=256,
                             help='L2-Bottleneck dimension of DINOHead MLP.')
         model.add_argument('--out_dim', type=int, default=65536, 
                             help='Output dimension of the DINOHead MLP.')
@@ -131,16 +131,18 @@ class Configuration(object):
 
         # Teacher Update, Temperature, Centering
         dino = parser.add_argument_group('DINO')
+        dino.add_argument('--s_mode', type=str, choices={'supervised', 'self-supervised'}, default='self-supervised',
+                            help='Mode of student update.')
+        dino.add_argument('--t_init', type=str, choices={'student', 'random'}, default='student',
+                            help='Initialization of teacher.')
         dino.add_argument('--t_mode', type=str, choices={'ema', 'prev_epoch', 'no_update'}, default='ema',
                             help='Mode of teacher update.')
-        dino.add_argument('--t_eval', action='store_true',
-                            help='Run teacher in evaluation mode even on training data.')
         dino.add_argument('--t_mom', type=str, default=str(CosSched(0.996, 1)),
                             help='Teacher momentum for exponential moving average (float or Schedule).')
         dino.add_argument('--t_bn_mode', type=str, choices={'from_data', 'from_student'}, default='from_data',
                             help='Mode of teacher batchnorm updates: either from data stats or from student buffers.')
-        dino.add_argument('--s_mode', type=str, choices={'supervised', 'self-supervised'}, default='self-supervised',
-                            help='Mode of student update.')
+        dino.add_argument('--t_eval', action='store_true',
+                            help='Run teacher in evaluation mode even on training data.')
         dino.add_argument('--t_cmom', type=str, default=str(ConstSched(0.9)), 
                             help='Teacher centering momentum of DINOHead (float or Schedule).')
         dino.add_argument('--s_cmom', type=str, default=str(ConstSched(torch.nan)), 

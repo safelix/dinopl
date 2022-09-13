@@ -160,8 +160,9 @@ cython_debug/
 #.idea/
 
 .vscode
-datasets/**/
 wandb
-lightning_logs
-DINO_MNIST
 results
+
+datasets/**
+!datasets/download_cifar10.py
+!datasets/download_mnist.py

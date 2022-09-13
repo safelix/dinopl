@@ -1,3 +1,4 @@
+import copy
 import os
 import time
 
@@ -59,22 +60,39 @@ def main(config:Configuration):
     enc = create_encoder(config)
     head = DINOHead(config.embed_dim, config.out_dim, 
             hidden_dims=config.hid_dims, 
-            l2_bottleneck_dim=config.bot_dim, 
-            use_bn=config.use_bn,
+            l2bot_dim=config.l2bot_dim, 
+            use_bn=config.mlp_bn,
             act_fn=config.mlp_act)
-    model = DINOModel(enc, head)
+    student = DINOModel(enc, head)
+
+    # initialize teacher with same params as student
+    if config.t_init == "student":
+        teacher = copy.deepcopy(student)
+    
+    # initialize teacher with random parameters
+    elif config.t_init == "random":
+        t_enc = create_encoder(config)
+        t_head = DINOHead(config.embed_dim, config.out_dim, 
+            hidden_dims=config.hid_dims, 
+            l2bot_dim=config.l2bot_dim, 
+            use_bn=config.mlp_bn,
+            act_fn=config.mlp_act)
+        teacher = DINOModel(t_enc, t_head)
+    else:
+        raise RuntimeError(f'Teacher initialization strategy mode \'{config.t_init}\' not supported.')
+
 
     print(f'Created encoder and head:')
-    summary(model, depth=4, device='cpu',
+    summary(student, depth=4, device='cpu',
             input_size=(config.bs_train, 3, config.mc_spec[0]['out_size'], config.mc_spec[0]['out_size']))
 
     # DINO Setup
-    dino = DINO(mc=mc, model=model,
+    dino = DINO(mc=mc, student=student, teacher=teacher,
+                s_mode = config.s_mode,
                 t_mode = config.t_mode,
-                t_eval = config.t_eval,
                 t_mom  = Schedule.parse(config.t_mom),
                 t_bn_mode = config.t_bn_mode,
-                s_mode = config.s_mode,
+                t_eval = config.t_eval,
                 t_cmom = Schedule.parse(config.t_cmom),
                 s_cmom = Schedule.parse(config.s_cmom),
                 t_temp = Schedule.parse(config.t_temp),

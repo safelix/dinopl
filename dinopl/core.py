@@ -1,4 +1,3 @@
-import copy
 from collections import OrderedDict
 import math
 from typing import List, Type
@@ -26,7 +25,7 @@ class DINOHead(nn.Module):
         embed_dim:int ,
         out_dim:int,
         hidden_dims:List[int] = [2048, 2048],
-        l2_bottleneck_dim:int = 256,
+        l2bot_dim:int = 256,
         use_bn:bool = False, 
         act_fn:str = 'GELU',
         temp:float = 1.0,     
@@ -45,10 +44,10 @@ class DINOHead(nn.Module):
         for idx, (i, o) in enumerate(zip(dims[:-1], dims[1:])):
             layers[f'layer{idx}'] = U.mlp_layer(i, o, act_fn, use_bn)
         
-        if l2_bottleneck_dim is None or l2_bottleneck_dim <= 0:
+        if l2bot_dim is None or l2bot_dim <= 0:
             layers['output'] = nn.Linear(dims[-1], out_dim)
         else:
-            layers['bottleneck'] = U.L2Bottleneck(dims[-1], l2_bottleneck_dim, out_dim)
+            layers['bottleneck'] = U.L2Bottleneck(dims[-1], l2bot_dim, out_dim)
 
         self.mlp = nn.Sequential(layers)  # build mlp
 
@@ -187,12 +186,13 @@ class DINOTeacherUpdater(pl.Callback):
 class DINO(pl.LightningModule):
     def __init__(self,
         mc:MultiCropAugmentation,
-        model:DINOModel,
+        student:DINOModel,
+        teacher:DINOModel,
+        s_mode:str = 'self-supervised',
         t_mode:str = 'ema',
-        t_eval:bool = False,
         t_mom:Schedule = CosSched(0.996, 1),
         t_bn_mode:str = 'from_data',
-        s_mode:str = 'self-supervised',
+        t_eval:bool = False,
         t_cmom:Schedule = ConstSched(0.9),
         s_cmom:Schedule = ConstSched(torch.nan),
         t_temp:Schedule = LinWarmup(0.04, 0.04, 0),
@@ -205,11 +205,13 @@ class DINO(pl.LightningModule):
         wn_freeze_epochs = 1,
     ):
         super().__init__()
-        self.embed_dim = model.embed_dim
-        self.out_dim = model.out_dim
+        self.student = student
+        self.teacher = teacher
+        self.embed_dim = student.embed_dim
+        self.out_dim = student.out_dim
+        self.s_mode = s_mode
         self.t_mode = t_mode
         self.t_eval = t_eval
-        self.s_mode = s_mode
         self.loss = loss
         self.loss_pairing = loss_pairing
         self.wn_freeze_epochs = wn_freeze_epochs
@@ -232,15 +234,6 @@ class DINO(pl.LightningModule):
 
         if loss_pairing not in ['all', 'same', 'opposite']:
             raise RuntimeError(f'Pairing strategy \'{loss_pairing}\' not supported.')
-        
-        # initiallize student and teacher with same params
-        self.student = model
-        self.teacher = copy.deepcopy(model)
-      
-        # prepare teacher in evaluation mode
-        #self.teacher.eval() # TODO: will this stay in eval mode? should this be in eval mode?
-        for p in self.teacher.parameters():
-            p.requires_grad = False
 
         # store crops
         for idx, crop in enumerate(mc.spec):
@@ -255,6 +248,7 @@ class DINO(pl.LightningModule):
         self.scheduler = Scheduler()
 
         # configure teacher updater
+        self.teacher.requires_grad_(False)
         self.t_updater = DINOTeacherUpdater(self.t_mode, update_bn=(t_bn_mode=='from_student'))
         self.scheduler.add(self.t_updater, 'mom', t_mom)
         
@@ -367,10 +361,13 @@ class DINO(pl.LightningModule):
 
         if self.t_eval: # set teacher in evaluation mode
             self.teacher.eval() 
-        with torch.no_grad(): # don't compute gradients of teacher predictions
-            teacher_out = self.teacher([batch[i] for i in self.teacher.crops['idx']], update_cent=True)
+            
+        # gradient is not computed because of teacher.requires_grad_(False)
+        teacher_out = self.teacher([batch[i] for i in self.teacher.crops['idx']], update_cent=True)
         student_out = self.student([batch[i] for i in self.student.crops['idx']], update_cent=True)
-        
+        assert(teacher_out.grad is None)
+        assert(student_out.grad is not None)
+
         # compute multicrop loss
         if self.s_mode == 'self-supervised':
             out = self.multicrop_loss(student_out['logits'], targ_logits=teacher_out['logits'])

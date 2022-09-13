@@ -130,7 +130,8 @@ class ParamTracker(pl.Callback):
         
     def on_fit_start(self, *_) -> None:
         if self.track_init:
-            self.i_vec = U.module_to_vector(self.teacher).clone()
+            self.t_ivec = U.module_to_vector(self.teacher).clone()
+            self.s_ivec = U.module_to_vector(self.student).clone()
 
     def on_after_backward(self, *_) -> None:
         self.g_vec = U.module_to_vector(self.student, grad=True)
@@ -155,8 +156,8 @@ class ParamTracker(pl.Callback):
 
         if self.track_init:           
             # get vector representations relative to init
-            t_vec = t_vec - self.i_vec
-            s_vec =  s_vec - self.i_vec
+            t_vec = t_vec - self.t_ivec
+            s_vec =  s_vec - self.s_ivec
 
             # log position and angle relative to init
             t_norm = torch.norm(t_vec)
