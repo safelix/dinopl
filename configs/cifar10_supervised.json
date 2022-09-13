@@ -1,6 +1,6 @@
 {
-    "dataset":"mnist",
-    "mc":"1x28",
+    "dataset":"cifar10",
+    "mc":"1x32",
     "tiny_input":true,
     "bs_train":256,
     "hid_dims":[],
