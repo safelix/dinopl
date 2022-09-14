@@ -35,6 +35,7 @@ def main(config:Configuration):
     config.logdir = os.path.join(C.RESULTS_DIR, wandb_logger.name, wandb_logger.version)
     os.makedirs(config.logdir, exist_ok=True)
     config.to_json(os.path.join(config.logdir, 'config.json'))
+    print(f'Logging Directory: {config.logdir}')
 
     # Create Multicrop Specification from name
     config.mc_spec = create_multicrop(config)
@@ -158,7 +159,7 @@ def main(config:Configuration):
         max_epochs=config.n_epochs,
         gradient_clip_val=config.clip_grad,
         callbacks=callbacks,
-        checkpoint_callback=checkpoint_callback,
+        enable_checkpointing=checkpoint_callback,
 
         # logging
         logger=wandb_logger,
