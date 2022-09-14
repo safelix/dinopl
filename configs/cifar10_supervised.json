@@ -6,11 +6,16 @@
     "hid_dims":[],
     "bot_dim":0,
     "out_dim":10,
-    "t_mode":"no_update",
     "s_mode":"supervised",
+    "t_mode":"no_update",
+    "t_bn_mode":"from_student",
+    "t_eval":true,
+    "t_temp":1,
+    "s_temp":1,
+    "loss":"CE",
     "loss_pairing":"same",
     "opt":"adamw",
-    "opt_lr": "LinWarmup(0, 0.001, 10)",
+    "opt_lr": 0.001,
     "opt_wd":0.01,
     "clip_grad":0
 }
