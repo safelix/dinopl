@@ -93,7 +93,7 @@ class Configuration(object):
                             help='Random number generator seed.')
         general.add_argument('--log_every', type=int, default=1,
                             help='Log every so many steps.')
-        general.add_argument('--ckpt_path', type=str, default='',
+        general.add_argument('--ckpt_path', type=os.path.expandvars, default='',
                             help='Path to checkpoint, used by \'--t_init\'.')
         #general.add_argument('--resume', action='store_true',
         #                    help='Resume training from checkpoint specified by \'--ckpt_path\'.')
