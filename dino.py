@@ -142,7 +142,7 @@ def main(config:Configuration):
                             pin_memory = False if config.force_cpu else True)
                     )]
     
-    checkpoint_callback = ModelCheckpoint(dirpath=config.log_dir, monitor='probe/student', mode='max',
+    checkpoint_callback = ModelCheckpoint(dirpath=config.logdir, monitor='probe/student', mode='max',
                     filename='epoch={epoch}-step={step}-probe_student={valid/loss:.3f}', auto_insert_metric_name=False),
 
     # Training
