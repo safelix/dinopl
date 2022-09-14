@@ -188,7 +188,7 @@ class DINO(pl.LightningModule):
         mc:MultiCropAugmentation,
         student:DINOModel,
         teacher:DINOModel,
-        s_mode:str = 'self-supervised',
+        s_mode:str = 'distillation',
         t_mode:str = 'ema',
         t_mom:Schedule = CosSched(0.996, 1),
         t_bn_mode:str = 'from_data',
@@ -226,7 +226,7 @@ class DINO(pl.LightningModule):
         if (t_bn_mode=='from_data' and t_eval==True) or (t_bn_mode=='from_student' and t_eval==False):
             raise RuntimeError(f'Invalid configuration: t_bn_mode==\'{t_bn_mode}\' and t_eval=={t_eval}')
 
-        if s_mode not in ['supervised', 'self-supervised']:
+        if s_mode not in ['supervised', 'distillation']:
             raise RuntimeError(f'Student update mode \'{s_mode}\' not supported.')
 
         if loss not in ['CE', 'KL', 'H_pred']:
@@ -369,7 +369,7 @@ class DINO(pl.LightningModule):
         assert(student_out['logits'].grad_fn is not None)
 
         # compute multicrop loss
-        if self.s_mode == 'self-supervised':
+        if self.s_mode == 'distillation':
             out = self.multicrop_loss(student_out['logits'], targ_logits=teacher_out['logits'])
         else:
             out = self.multicrop_loss(student_out['logits'], targ_labels=batch_labels)
@@ -390,7 +390,7 @@ class DINO(pl.LightningModule):
         student_out = self.student([batch[i] for i in self.student.crops['idx']])
         
         # compute multicrop loss
-        if self.s_mode == 'self-supervised':
+        if self.s_mode == 'distillation':
             out = self.multicrop_loss(student_out['logits'], targ_logits=teacher_out['logits'])
         else:
             out = self.multicrop_loss(student_out['logits'], targ_labels=batch_labels)

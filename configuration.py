@@ -93,6 +93,10 @@ class Configuration(object):
                             help='Random number generator seed.')
         general.add_argument('--log_every', type=int, default=1,
                             help='Log every so many steps.')
+        general.add_argument('--ckpt_path', type=str, default='',
+                            help='Path to checkpoint, used by \'--t_init\'.')
+        #general.add_argument('--resume', action='store_true',
+        #                    help='Resume training from checkpoint specified by \'--ckpt_path\'.')
         general.add_argument('--force_cpu', action='store_true',
                             help='Force training on CPU instead of GPU.')
 
@@ -131,10 +135,10 @@ class Configuration(object):
 
         # Teacher Update, Temperature, Centering
         dino = parser.add_argument_group('DINO')
-        dino.add_argument('--s_mode', type=str, choices={'supervised', 'self-supervised'}, default='self-supervised',
+        dino.add_argument('--s_mode', type=str, choices={'supervised', 'distillation'}, default='distillation',
                             help='Mode of student update.')
-        dino.add_argument('--t_init', type=str, choices={'student', 'random'}, default='student',
-                            help='Initialization of teacher.')
+        dino.add_argument('--t_init', type=str, choices={'student', 'random', 's_ckpt', 't_ckpt'}, default='student',
+                            help='Initialization of teacher, specify \'-ckpt_path\'.')
         dino.add_argument('--t_mode', type=str, choices={'ema', 'prev_epoch', 'no_update'}, default='ema',
                             help='Mode of teacher update.')
         dino.add_argument('--t_mom', type=str, default=str(CosSched(0.996, 1)),

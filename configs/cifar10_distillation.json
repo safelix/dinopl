@@ -1,0 +1,19 @@
+{
+    "dataset":"cifar10",
+    "mc":"1x32",
+    "tiny_input":true,
+    "bs_train":256,
+    "hid_dims":[2048, 2048],
+    "bot_dim":256,
+    "out_dim":65536,
+    "s_mode":"distillation",
+    "t_mode":"no_update",
+    "t_bn_mode":"from_student",
+    "t_eval":true,
+    "loss_pairing":"same",
+    "opt":"adamw",
+    "opt_lr":0.001,
+    "opt_wd":0.01,
+    "clip_grad":0,
+    "wn_freeze_epochs":0
+}
