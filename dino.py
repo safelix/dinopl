@@ -150,8 +150,8 @@ def main(config:Configuration):
                             pin_memory = False if config.force_cpu else True)
                     )]
     
-    checkpoint_callback = ModelCheckpoint(dirpath=config.logdir, monitor='probe/student', mode='max',
-                    filename='epoch={epoch}-step={step}-probe_student={valid/loss:.3f}', auto_insert_metric_name=False),
+    ckpt_callback = ModelCheckpoint(dirpath=config.logdir, monitor='probe/student', mode='max',
+                        filename='epoch={epoch}-step={step}-probe_student={valid/loss:.3f}', auto_insert_metric_name=False)
 
     # Training
     trainer = pl.Trainer(
@@ -159,7 +159,7 @@ def main(config:Configuration):
         max_epochs=config.n_epochs,
         gradient_clip_val=config.clip_grad,
         callbacks=callbacks,
-        enable_checkpointing=checkpoint_callback,
+        enable_checkpointing=ckpt_callback,
 
         # logging
         logger=wandb_logger,
