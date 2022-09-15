@@ -149,13 +149,14 @@ class MultiCropAugmentation(nn.Module):
 
 
 class DINOTeacherUpdater(pl.Callback):
-    def __init__(self, mode: str = 'ema', mom: float = 0.996, update_bn=True):
+    def __init__(self, mode: str = 'ema', mom: float = 0.996, update_every=1, update_bn=True):
         if mode == 'no_update':
             pass
         elif mode == 'ema':
             self.mom = mom
             self.on_train_batch_end = self.ema
         elif mode == 'prev_epoch':
+            self.update_every = update_every
             self.on_train_epoch_end = self.copy 
         else:
             raise RuntimeError('Unkown teacher update mode.')
@@ -173,6 +174,9 @@ class DINOTeacherUpdater(pl.Callback):
                 m_t.running_var.data = self.mom * m_t.running_var.data + (1 - self.mom) * m_s.running_var.data
 
     def copy(self, _:pl.Trainer, dino: pl.LightningModule, *args):
+        if not (dino.current_epoch % self.update_every == self.update_every - 1):
+            return # skip if not update_every
+
         for p_s, p_t in zip(dino.student.parameters(), dino.teacher.parameters()):
             p_t.data = p_s.data
         
@@ -191,6 +195,7 @@ class DINO(pl.LightningModule):
         s_mode:str = 'distillation',
         t_mode:str = 'ema',
         t_mom:Schedule = CosSched(0.996, 1),
+        t_update_every:int = 1,
         t_bn_mode:str = 'from_data',
         t_eval:bool = False,
         t_cmom:Schedule = ConstSched(0.9),
@@ -252,7 +257,9 @@ class DINO(pl.LightningModule):
 
         # configure teacher updater
         self.teacher.requires_grad_(False)
-        self.t_updater = DINOTeacherUpdater(self.t_mode, update_bn=(t_bn_mode=='from_student'))
+        self.t_updater = DINOTeacherUpdater(self.t_mode, 
+                                update_every=t_update_every, 
+                                update_bn=(t_bn_mode=='from_student'))
         self.scheduler.add(self.t_updater, 'mom', t_mom)
         
         # configure teacher temperature and centering

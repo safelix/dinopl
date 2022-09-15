@@ -117,6 +117,7 @@ def main(config:Configuration):
                 s_mode = config.s_mode,
                 t_mode = config.t_mode,
                 t_mom  = Schedule.parse(config.t_mom),
+                t_update_every = config.t_update_every,
                 t_bn_mode = config.t_bn_mode,
                 t_eval = config.t_eval,
                 t_cmom = Schedule.parse(config.t_cmom),

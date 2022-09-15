@@ -145,6 +145,8 @@ class Configuration(object):
                             help='Mode of teacher update.')
         dino.add_argument('--t_mom', type=str, default=str(CosSched(0.996, 1)),
                             help='Teacher momentum for exponential moving average (float or Schedule).')
+        dino.add_argument('--t_update_every', type=int, default=1,
+                            help='Teacher update frequency for prev_epoch mode.')
         dino.add_argument('--t_bn_mode', type=str, choices={'from_data', 'from_student'}, default='from_data',
                             help='Mode of teacher batchnorm updates: either from data stats or from student buffers.')
         dino.add_argument('--t_eval', action='store_true',
