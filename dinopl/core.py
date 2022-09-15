@@ -258,7 +258,8 @@ class DINO(pl.LightningModule):
         self.scheduler.add(self.teacher.head, 'temp', t_temp)
         self.scheduler.add(self.student.head, 'temp', s_temp)
 
-        # configure optimizer, learning rate & weight decay       
+        # configure optimizer, learning rate & weight decay
+        self.student.requires_grad_(True)       
         params = list(self.student.named_parameters()) # generator -> list
         self.optimizer = opt([
             {'params':[p for n,p in params if not U.is_bias(n,p)]},
