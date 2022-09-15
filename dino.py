@@ -109,7 +109,7 @@ def main(config:Configuration):
         teacher = DINOModel(t_enc, t_head)
     else:
         raise RuntimeError(f'Teacher initialization strategy \'{config.t_init}\' not supported.')
-    del model, temp_student, temp_teacher, dino_ckpt # free memory
+    # del model, temp_student, temp_teacher, dino_ckpt # let's hope for garbage collector
 
 
     # DINO Setup
