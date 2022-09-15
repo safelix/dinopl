@@ -1,6 +1,6 @@
 from collections import OrderedDict
 import math
-from typing import List, Type
+from typing import Dict, List, Type
 
 import pytorch_lightning as pl
 import torch
@@ -88,7 +88,7 @@ class DINOModel(nn.Module):
         self.embed_dim = enc.embed_dim
         self.head = head
         self.out_dim = head.out_dim
-        self.crops = {'name':[], 'idx':[]}
+        self.crops : Dict[str, List] = None
 
     def forward(self, crop_batches, **kwargs):
         # [n_crops, n_batches, n_channels, height, width]
@@ -235,7 +235,9 @@ class DINO(pl.LightningModule):
         if loss_pairing not in ['all', 'same', 'opposite']:
             raise RuntimeError(f'Pairing strategy \'{loss_pairing}\' not supported.')
 
-        # store crops
+        # store 
+        self.teacher.crops = {'name':[], 'idx':[]}
+        self.student.crops = {'name':[], 'idx':[]}
         for idx, crop in enumerate(mc.spec):
             if crop['teacher']:
                 self.teacher.crops['name'].append(crop['name'])
