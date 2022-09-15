@@ -84,21 +84,21 @@ def main(config:Configuration):
     
     # Initialize student network
     if config.s_init == 'random':
-        student = copy.deepcopy(model)  # initialize student with random params
+        student = copy.deepcopy(model)  # make student with random params
     elif config.s_init == 's_ckpt':
-        student = dino_ckpt.student     # initialize student from student checkpoint
+        student = copy.deepcopy(dino_ckpt.student)     # make student from student checkpoint
     elif config.s_init == 't_ckpt':
-        student = dino_ckpt.teacher     # initialize student from teacher checkpoint
+        student = copy.deepcopy(dino_ckpt.teacher)     # make student from teacher checkpoint
     else:
         raise RuntimeError(f'Student initialization strategy \'{config.t_init}\' not supported.')
 
     # Initialize teacher network
     if config.t_init == 'student':
-        teacher = copy.deepcopy(student) # initialize teacher with same params as student
+        teacher = copy.deepcopy(student) # make teacher with same params as student
     elif config.s_init == 's_ckpt':
-        teacher = dino_ckpt.student     # initialize teacher from student checkpoint
+        teacher = copy.deepcopy(dino_ckpt.student)     # make teacher from student checkpoint
     elif config.s_init == 't_ckpt':
-        teacher = dino_ckpt.teacher     # initialize teacher from teacher checkpoint
+        teacher = copy.deepcopy(dino_ckpt.teacher)     # make teacher from teacher checkpoint
     elif config.t_init == 'random':     
         t_enc = create_encoder(config)  # initialize teacher with random parameters
         t_head = DINOHead(config.embed_dim, config.out_dim, 
@@ -109,6 +109,7 @@ def main(config:Configuration):
         teacher = DINOModel(t_enc, t_head)
     else:
         raise RuntimeError(f'Teacher initialization strategy \'{config.t_init}\' not supported.')
+    del model, temp_student, temp_teacher, dino_ckpt # free memory
 
 
     # DINO Setup
