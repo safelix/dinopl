@@ -151,7 +151,7 @@ def main(config:Configuration):
                     )]
     
     ckpt_callback = ModelCheckpoint(dirpath=config.logdir, monitor='probe/student', mode='max',
-                        filename='epoch={epoch}-step={step}-probe_student={valid/loss:.3f}', auto_insert_metric_name=False)
+                        filename='epoch={epoch}-step={step}-probe_student={probe/student:.3f}', auto_insert_metric_name=False)
 
     # Training
     trainer = pl.Trainer(
