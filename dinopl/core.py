@@ -205,6 +205,7 @@ class DINO(pl.LightningModule):
         wn_freeze_epochs = 1,
     ):
         super().__init__()
+        assert(student is not teacher) # need to be different objects
         self.student = student
         self.teacher = teacher
         self.embed_dim = student.embed_dim

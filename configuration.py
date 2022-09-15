@@ -135,10 +135,12 @@ class Configuration(object):
 
         # Teacher Update, Temperature, Centering
         dino = parser.add_argument_group('DINO')
+        dino.add_argument('--s_init', type=str, choices={'random', 's_ckpt', 't_ckpt'}, default='random',
+                            help='Initialization of student, specify \'--ckpt_path\'.')
         dino.add_argument('--s_mode', type=str, choices={'supervised', 'distillation'}, default='distillation',
                             help='Mode of student update.')
-        dino.add_argument('--t_init', type=str, choices={'student', 'random', 's_ckpt', 't_ckpt'}, default='student',
-                            help='Initialization of teacher, specify \'-ckpt_path\'.')
+        dino.add_argument('--t_init', type=str, choices={'student', 's_ckpt', 't_ckpt', 'random'}, default='student',
+                            help='Initialization of teacher, specify \'--ckpt_path\'.')
         dino.add_argument('--t_mode', type=str, choices={'ema', 'prev_epoch', 'no_update'}, default='ema',
                             help='Mode of teacher update.')
         dino.add_argument('--t_mom', type=str, default=str(CosSched(0.996, 1)),

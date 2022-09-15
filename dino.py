@@ -68,36 +68,48 @@ def main(config:Configuration):
             l2bot_dim=config.l2bot_dim, 
             use_bn=config.mlp_bn,
             act_fn=config.mlp_act)
-    student = DINOModel(enc, head)
+    model = DINOModel(enc, head)
 
-    # initialize teacher with same params as student
-    if config.t_init == 'student':
-        teacher = copy.deepcopy(student)
+    print(f'Created encoder and head:')
+    summary(model, depth=4, device='cpu',
+            input_size=(config.bs_train, 3, config.mc_spec[0]['out_size'], config.mc_spec[0]['out_size']))
+
+    # load checkpoint if required
+    if config.s_init in ['s_ckpt', 't_ckpt'] or config.t_init in ['s_ckpt', 't_ckpt']:
+        if getattr(config, 'ckpt_path', '') == '':
+            raise RuntimeError('Student or teacher inititalization strategy requires \'--ckpt_path\' to be specified.')
+        temp_student = copy.deepcopy(model) # required to load state dict into instanciated copy
+        temp_teacher = copy.deepcopy(model) # required to load state dict into instanciated copy
+        dino_ckpt = DINO.load_from_checkpoint(config.ckpt_path,  mc=mc, student=temp_student, teacher=temp_teacher)
     
-    # initialize teacher with random parameters
-    elif config.t_init == 'random':
-        t_enc = create_encoder(config)
+    # Initialize student network
+    if config.s_init == 'random':
+        student = copy.deepcopy(model)  # initialize student with random params
+    elif config.s_init == 's_ckpt':
+        student = dino_ckpt.student     # initialize student from student checkpoint
+    elif config.s_init == 't_ckpt':
+        student = dino_ckpt.teacher     # initialize student from teacher checkpoint
+    else:
+        raise RuntimeError(f'Student initialization strategy \'{config.t_init}\' not supported.')
+
+    # Initialize teacher network
+    if config.t_init == 'student':
+        teacher = copy.deepcopy(student) # initialize teacher with same params as student
+    elif config.s_init == 's_ckpt':
+        teacher = dino_ckpt.student     # initialize teacher from student checkpoint
+    elif config.s_init == 't_ckpt':
+        teacher = dino_ckpt.teacher     # initialize teacher from teacher checkpoint
+    elif config.t_init == 'random':     
+        t_enc = create_encoder(config)  # initialize teacher with random parameters
         t_head = DINOHead(config.embed_dim, config.out_dim, 
             hidden_dims=config.hid_dims, 
             l2bot_dim=config.l2bot_dim, 
             use_bn=config.mlp_bn,
             act_fn=config.mlp_act)
         teacher = DINOModel(t_enc, t_head)
-
-    # initiallize teacher from checkpoint
-    elif config.t_init in ['s_ckpt', 't_ckpt']:
-        temp_student = copy.deepcopy(student) # required to load state dict into instanciated copy
-        temp_teacher = copy.deepcopy(student) # required to load state dict into instanciated copy
-        dino_ckpt = DINO.load_from_checkpoint(config.ckpt_path,  mc=mc, student=temp_student, teacher=temp_teacher)
-        teacher = dino_ckpt.student if config.t_init[0]=='s' else dino_ckpt.teacher
-    
     else:
         raise RuntimeError(f'Teacher initialization strategy \'{config.t_init}\' not supported.')
 
-
-    print(f'Created encoder and head:')
-    summary(student, depth=4, device='cpu',
-            input_size=(config.bs_train, 3, config.mc_spec[0]['out_size'], config.mc_spec[0]['out_size']))
 
     # DINO Setup
     dino = DINO(mc=mc, student=student, teacher=teacher,
