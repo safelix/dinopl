@@ -158,8 +158,8 @@ def main(config:Configuration):
         # training dynamics
         max_epochs=config.n_epochs,
         gradient_clip_val=config.clip_grad,
-        callbacks=callbacks,
-        enable_checkpointing=ckpt_callback,
+        callbacks=callbacks+[ckpt_callback],
+        #enable_checkpointing=ckpt_callback,
 
         # logging
         logger=wandb_logger,
