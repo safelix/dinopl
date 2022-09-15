@@ -127,6 +127,10 @@ class Schedule():
         if isinstance(expr, float):
             return ConstSched(expr)
 
+        # fall through case: argument was not a parseable string but an int
+        if isinstance(expr, int):
+            return ConstSched(float(expr))
+
         # fall through case: argument was not a parseable string but a Schedule
         if isinstance(expr, Schedule):
             return expr
