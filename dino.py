@@ -86,8 +86,8 @@ def main(config:Configuration):
 
     # initiallize teacher from checkpoint
     elif config.t_init in ['s_ckpt', 't_ckpt']:
-        # requires instanciated model to load state dict
-        dino_ckpt = DINO.load_from_checkpoint(config.ckpt_path, mc=mc, student=student, teacher=student)
+        temp_teacher = copy.deepcopy(student) # requires instanciated model to load state dict
+        dino_ckpt = DINO.load_from_checkpoint(config.ckpt_path,  mc=mc, student=student, teacher=temp_teacher)
         teacher = dino_ckpt.student if config.t_init[0]=='s' else dino_ckpt.teacher
     
     else:
