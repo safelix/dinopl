@@ -1,12 +1,11 @@
 from collections import OrderedDict
 import math
-from typing import Dict, List, Type
+from typing import Any, Dict, List, Type
 
 import pytorch_lightning as pl
 import torch
 import torch.optim as optim
 from torch import nn
-from torchvision import transforms
 from torch.nn import functional as F
 
 from . import utils as U
@@ -15,7 +14,6 @@ from .scheduling import *
 __all__ = [
     'DINOHead',
     'DINOModel',
-    'MultiCropAugmentation',
     'DINOTeacherUpdater',
     'DINO',
 ]
@@ -107,47 +105,6 @@ class DINOModel(nn.Module):
         return out
 
 
-
-mc_spec = [
-        {'name':'global1', 'out_size':244, 'min_scale':0.4, 'max_scale':1, 'teacher':True, 'student':True},
-        {'name':'global2', 'out_size':244, 'min_scale':0.4, 'max_scale':1, 'teacher':True, 'student':True},
-    ]
-class MultiCropAugmentation(nn.Module):
-    f'''
-    Takes a list of crop specifications.
-    Example:
-    {mc_spec}
-    '''
-
-    def __init__(self, spec:List[dict], per_crop_transform=torch.nn.Identity):
-        super().__init__()
-        self.spec = spec
-        self.per_crop_transform = per_crop_transform
-
-        self.transforms = {}
-        for crop_spec in self.spec:
-            name = crop_spec['name']
-            transform = self.get_transform(crop_spec)   
-            self.transforms[name] = transform
-            self.__dict__[name] = transform
-
-    def get_transform(self, crop_spec):
-        return transforms.RandomResizedCrop(
-                    size = crop_spec['out_size'],
-                    scale = (crop_spec['min_scale'], crop_spec['max_scale'])
-                )
-
-    def forward(self, img):
-        # [height, width, (n_channels)]
-        # -> [n_crops, n_channels, height, width]
-        crops = []
-        for name, transform in self.transforms.items():
-            crop = transform(img)
-            crop = self.per_crop_transform(crop)
-            crops.append(crop)
-        return crops
-
-
 class DINOTeacherUpdater(pl.Callback):
     def __init__(self, mode: str = 'ema', mom: float = 0.996, update_every=1, update_bn=True):
         if mode == 'no_update':
@@ -189,7 +146,7 @@ class DINOTeacherUpdater(pl.Callback):
 
 class DINO(pl.LightningModule):
     def __init__(self,
-        mc:MultiCropAugmentation,
+        mc_spec:List[Dict[str, Any]],
         student:DINOModel,
         teacher:DINOModel,
         s_mode:str = 'distillation',
@@ -244,7 +201,7 @@ class DINO(pl.LightningModule):
         # store 
         self.teacher.crops = {'name':[], 'idx':[]}
         self.student.crops = {'name':[], 'idx':[]}
-        for idx, crop in enumerate(mc.spec):
+        for idx, crop in enumerate(mc_spec):
             if crop['teacher']:
                 self.teacher.crops['name'].append(crop['name'])
                 self.teacher.crops['idx'].append(idx)

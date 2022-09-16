@@ -318,7 +318,7 @@ def create_dataset(config:Configuration) -> VisionDataset:
     raise RuntimeError('Unkown dataset name.')
 
 
-def create_multicrop(config:Configuration):
+def create_mc_spec(config:Configuration):
     '''
     This is a helper function that can be useful if you have several multicrop definitions that you want to
     choose from via the command line.

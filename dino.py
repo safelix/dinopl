@@ -8,9 +8,10 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
-from configuration import CONSTANTS as C, create_dataset, create_multicrop
+from configuration import CONSTANTS as C, create_dataset, create_mc_spec
 from configuration import Configuration, create_encoder, create_optimizer
 from dinopl import *
+from dinopl.augmentation import MultiCrop
 from dinopl.probing import LinearProbe, LinearProber
 from dinopl.scheduling import Schedule
 from dinopl.tracking import (FeatureTracker, HParamTracker, MetricsTracker,
@@ -38,7 +39,7 @@ def main(config:Configuration):
     print(f'Logging Directory: {config.logdir}')
 
     # Create Multicrop Specification from name
-    config.mc_spec = create_multicrop(config)
+    config.mc_spec = create_mc_spec(config)
 
     # Standard Augmentations, always work on RGB
     self_trfm = transforms.Compose([ # self-training
@@ -49,7 +50,7 @@ def main(config:Configuration):
                     transforms.Resize(size=config.mc_spec[0]['out_size']),
                     self_trfm
                 ])
-    mc = MultiCropAugmentation(config.mc_spec, per_crop_transform=self_trfm)
+    mc = MultiCrop(config.mc_spec, per_crop_transform=self_trfm)
 
 
     # Data Loading
@@ -113,7 +114,7 @@ def main(config:Configuration):
 
 
     # DINO Setup
-    dino = DINO(mc=mc, student=student, teacher=teacher,
+    dino = DINO(mc_spec=config.mc_spec, student=student, teacher=teacher,
                 s_mode = config.s_mode,
                 t_mode = config.t_mode,
                 t_mom  = Schedule.parse(config.t_mom),
