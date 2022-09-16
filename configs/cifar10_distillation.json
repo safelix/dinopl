@@ -4,7 +4,7 @@
     "tiny_input":true,
     "bs_train":256,
     "hid_dims":[2048, 2048],
-    "bot_dim":256,
+    "l2bot_dim":256,
     "out_dim":65536,
     "s_mode":"distillation",
     "t_mode":"no_update",
