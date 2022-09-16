@@ -257,7 +257,11 @@ class Configuration(object):
             s = json.dumps(vars(self), indent=2)
             f.write(s)
 
-    def update(self, adict:dict):
+    def update(self, adict:dict, allow_new_keys=False):
+        new_keys = adict.keys() - self.__dict__.keys()
+        
+        if not allow_new_keys and len(new_keys) > 0:
+            raise RuntimeError(f'Cannot update configuration with new keys {new_keys}.')
         self.__dict__.update(adict)
 
 
