@@ -104,6 +104,8 @@ class Configuration(object):
         data = parser.add_argument_group('Data')
         data.add_argument('--dataset', type=str, choices=['mnist','cifar10'], default='mnist',
                             help='Datset to train on.')
+        data.add_argument('--n_classes', type=int, default=None,
+                            help='Number of classes. By default determined from dataset but can be overwritten for logit noise.')
         data.add_argument('--mc', type=str, choices=[
                                 '2x128+4x96', '2x128', '1x128',
                                 '2x32+4x32', '2x32', '1x32',
@@ -114,6 +116,11 @@ class Configuration(object):
                             help='Batch size for the training set.')
         data.add_argument('--bs_eval', type=int, default=256, 
                             help='Batch size for valid/test set.')
+        data.add_argument('--label_noise_ratio', type=float, default=0,
+                            help='Add label noise (random assignemt) for supervised training.')
+        data.add_argument('--logit_noise_temp', type=float, default=0,
+                            help='Add logit noise (sharpened gaussian logits) for supervised training.')
+        data.add_argument('--resample_noise', action='store_true')
 
         # Model.
         model = parser.add_argument_group('Model')
@@ -312,11 +319,11 @@ def create_dataset(config:Configuration) -> VisionDataset:
     config.dataset = config.dataset.lower()
 
     if config.dataset == 'mnist':
-        config.n_classes = 10
+        config.n_classes = 10 if config.n_classes is None else config.n_classes
         return MNIST
 
     if config.dataset == 'cifar10':
-        config.n_classes = 10
+        config.n_classes = 10 if config.n_classes is None else config.n_classes
         return CIFAR10
 
     raise RuntimeError('Unkown dataset name.')

@@ -11,7 +11,7 @@ from torchvision import transforms
 from configuration import CONSTANTS as C, create_dataset, create_mc_spec
 from configuration import Configuration, create_encoder, create_optimizer
 from dinopl import *
-from dinopl.augmentation import MultiCrop
+from dinopl.augmentation import MultiCrop, LabelNoiseWrapper, LogitNoiseWrapper
 from dinopl.probing import LinearProbe, LinearProber
 from dinopl.scheduling import Schedule
 from dinopl.tracking import (FeatureTracker, HParamTracker, MetricsTracker,
@@ -51,18 +51,27 @@ def main(config:Configuration):
                     self_trfm
                 ])
     mc = MultiCrop(config.mc_spec, per_crop_transform=self_trfm)
-
-
-    # Data Loading
-    # TODO: target transform for noisy label?
+          
+    # Data Setup.
     DSet = create_dataset(config)
-    self_train_set = DSet(root=C.DATA_DIR, train=True, transform=mc)
-    self_valid_set = DSet(root=C.DATA_DIR, train=False, transform=mc)
+    dino_train_set = DSet(root=C.DATA_DIR, train=True, transform=mc)
+    dino_valid_set = DSet(root=C.DATA_DIR, train=False, transform=mc)
     eval_train_set = DSet(root=C.DATA_DIR, train=True, transform=eval_trfm)
     eval_valid_set = DSet(root=C.DATA_DIR, train=False, transform=eval_trfm)
-    print(f'Init {DSet.__name__}: size(train)={len(self_train_set)}, size(valid)={len(self_valid_set)}')
 
-    # Model Setup
+    if config.label_noise_ratio > 0 and config.logit_noise_temp > 0:
+            raise RuntimeError('Only either label noise or logit noise can be applied.')
+    elif config.label_noise_ratio > 0:
+        dino_train_set = LabelNoiseWrapper(dino_train_set, config.n_classes, config.label_noise_ratio, config.resample_noise)
+        dino_valid_set = LabelNoiseWrapper(dino_valid_set, config.n_classes, config.label_noise_ratio, config.resample_noise)
+    elif config.logit_noise_temp > 0:
+        dino_train_set = LogitNoiseWrapper(dino_train_set, config.n_classes, config.logit_noise_temp, config.resample_noise)
+        dino_valid_set = LogitNoiseWrapper(dino_valid_set, config.n_classes, config.logit_noise_temp, config.resample_noise)
+    
+    print(f'Init dino train set: {dino_train_set}')
+    print(f'Init dino valid set: {dino_valid_set}')
+
+    # Model Setup.
     enc = create_encoder(config)
     head = DINOHead(config.embed_dim, config.out_dim, 
             hidden_dims=config.hid_dims, 
@@ -200,8 +209,8 @@ def main(config:Configuration):
         batch_size = config.bs_train,
         num_workers = config.n_workers,
         pin_memory = False if config.force_cpu else True ) 
-    self_train_dl = DataLoader(dataset=self_train_set, **dl_args)
-    self_valid_dl = DataLoader(dataset=self_valid_set, **dl_args)
+    self_train_dl = DataLoader(dataset=dino_train_set, **dl_args)
+    self_valid_dl = DataLoader(dataset=dino_valid_set, **dl_args)
 
     # log updated config to wandb before training
     wandb_logger.experiment.config.update(config)

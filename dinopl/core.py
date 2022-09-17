@@ -285,7 +285,7 @@ class DINO(pl.LightningModule):
             targs = F.one_hot(targ_labels, self.out_dim).unsqueeze(0).expand(len(self.teacher.crops), -1, -1)
             H_targs = torch.zeros(*targs.shape[:2], device=self.device) # entropy of one-hot is zero
         else:
-            raise RuntimeError('Please specify either targ_logits or targ_one_hot.')
+            raise RuntimeError('Please specify either targ_logits or targ_labels.')
 
         # compute pairwise losses
         KLs, CEs = [], []
@@ -321,7 +321,7 @@ class DINO(pl.LightningModule):
         return out
 
     def training_step(self, batch, batch_idx):
-        batch, batch_labels = batch
+        batch, batch_targets = batch
 
         # generate teacher's targets and student's predictions
         # [n_crops, n_batches, n_channels, height, width]
@@ -339,8 +339,10 @@ class DINO(pl.LightningModule):
         # compute multicrop loss
         if self.s_mode == 'distillation':
             out = self.multicrop_loss(student_out['logits'], targ_logits=teacher_out['logits'])
-        else:
-            out = self.multicrop_loss(student_out['logits'], targ_labels=batch_labels)
+        elif batch_targets.dim() == 1:
+            out = self.multicrop_loss(student_out['logits'], targ_labels=batch_targets)
+        elif batch_targets.dim() == 2:
+            out = self.multicrop_loss(student_out['logits'], targ_logits=batch_targets)
 
         # minimize CE loss
         out['loss'] = out[self.loss]        
@@ -349,7 +351,7 @@ class DINO(pl.LightningModule):
         return out
             
     def validation_step(self, batch, batch_idx):
-        batch, batch_labels = batch
+        batch, batch_targets = batch
 
         # generate teacher's targets and student's predictions
         # [n_crops, n_batches, n_channels, height, width]
@@ -360,8 +362,10 @@ class DINO(pl.LightningModule):
         # compute multicrop loss
         if self.s_mode == 'distillation':
             out = self.multicrop_loss(student_out['logits'], targ_logits=teacher_out['logits'])
-        else:
-            out = self.multicrop_loss(student_out['logits'], targ_labels=batch_labels)
+        elif batch_targets.dim() == 1:
+            out = self.multicrop_loss(student_out['logits'], targ_labels=batch_targets)
+        elif batch_targets.dim() == 2:
+            out = self.multicrop_loss(student_out['logits'], targ_logits=batch_targets)
 
         # minimize CE loss
         out['loss'] = out[self.loss]
