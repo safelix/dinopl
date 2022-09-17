@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from typing import List, Any
+from typing import List, Any, Tuple
 from torchvision import transforms
 from torchvision.datasets import VisionDataset
 
