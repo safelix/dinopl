@@ -213,7 +213,7 @@ def main(config:Configuration):
     self_valid_dl = DataLoader(dataset=dino_valid_set, **dl_args)
 
     # log updated config to wandb before training
-    wandb_logger.experiment.config.update(config)
+    wandb_logger.experiment.config.update(config, allow_val_change=True)
 
     trainer.fit(model=dino, 
                 train_dataloaders=self_train_dl,
