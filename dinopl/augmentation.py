@@ -3,6 +3,7 @@ from torch import nn
 from typing import List, Any, Tuple
 from torchvision import transforms
 from torchvision.datasets import VisionDataset
+from math import sqrt
 
 
 mc_spec = [
