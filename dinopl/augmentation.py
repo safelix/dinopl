@@ -104,6 +104,7 @@ class LogitNoiseWrapper(VisionDataset):
 
         # precompute noisy logits from normal distribution 
         self.targets = torch.randn((len(self.dataset), self.n_classes)) 
+        self.targets = self.targets / sqrt(self.n_classes) # scale to l2-norm of 1
        
     def __getitem__(self, index: int) -> Tuple[Any, Any]:
         img, target = self.dataset.__getitem__(index)
