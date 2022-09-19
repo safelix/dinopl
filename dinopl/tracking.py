@@ -192,6 +192,8 @@ class FeatureSaver(pl.Callback):
         for n in self.features:
             os.makedirs(os.path.join(os.path.join(prefix, n[:5])), exist_ok=True)
 
+        self.on_train_batch_end(None, dino)
+
     def on_train_batch_end(self, _:pl.Trainer, dino: DINO, *args) -> None:
         out = {}
 
