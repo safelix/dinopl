@@ -207,7 +207,7 @@ class FeatureSaver(pl.Callback):
         dino.teacher.train(mode_t)
         dino.student.train(mode_s)
 
-        prefix = os.path.join(wandb.run.dir, 'valid', 'feat')
+        prefix = os.path.join(self.dir, 'valid', 'feat')
         for n in self.features:
             t_feat = out['teacher'][n].squeeze()
             s_feat = out['student'][n].squeeze()
