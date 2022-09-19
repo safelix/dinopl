@@ -1,5 +1,5 @@
 import os
-from typing import Dict
+from typing import Dict, List, Tuple
 
 import pytorch_lightning as pl
 import torch
@@ -221,3 +221,40 @@ class FeatureSaver(pl.Callback):
             pd.to_pickle(pd.DataFrame(data, columns=columns), 
                             os.path.join(prefix, n[:5], f'table_{dino.global_step:0>6d}.pckl'))
         return
+
+    @staticmethod
+    def load_data(dir:str, start:int=None, stop:int=None, step:int=None) -> Tuple[torch.Tensor, List[str], torch.Tensor]:
+        from glob import glob
+        from tqdm import tqdm
+
+        if not os.path.isdir(dir):
+            raise RuntimeError(f'Is not a directory: \'{dir}\'')
+
+        # get filenames
+        fnames = sorted(glob(os.path.join(dir, 'table_*.pckl')))
+        if len(fnames) == 0:
+            raise RuntimeError(f'No data in directory: \'{dir}\'')
+
+
+        data, columns, mem = [], None, 0
+        loading_pbar = tqdm(fnames[start:stop:step])
+        for fname in loading_pbar:
+            # load pandas dataframe, extract columnames only once
+            df = pd.read_pickle(fname)
+            columns = df.columns if columns is None else columns
+            
+            # load table into torch
+            table = torch.from_numpy(df.values)
+            data.append(table)
+
+            # log memory of all data
+            mem += table.element_size() * table.nelement()
+            loading_pbar.set_postfix({'mem':f'{mem*1e-6:.1f}MB'})
+
+        # gather data in one tensor frame
+        data = torch.stack(data, dim=0)
+
+        # add indices to data
+        indices = torch.arange(*slice(start, stop, step).indices(len(fnames)))
+
+        return data, list(columns), indices
