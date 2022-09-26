@@ -174,7 +174,9 @@ def main(config:Configuration):
                             num_workers = config.n_workers,
                             pin_memory = False if config.force_cpu else True)
                     )]
-    
+        wandb_logger.experiment.define_metric('probe/student', summary='max')
+        wandb_logger.experiment.define_metric('probe/teacher', summary='max')
+
     ckpt_callback = ModelCheckpoint(dirpath=config.logdir, monitor='probe/student', mode='max',
                         filename='epoch={epoch}-step={step}-probe_student={probe/student:.3f}', auto_insert_metric_name=False)
 
