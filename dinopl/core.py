@@ -367,6 +367,11 @@ class DINO(pl.LightningModule):
         elif batch_targets.dim() == 2:
             out = self.multicrop_loss(student_out['logits'], targ_logits=batch_targets)
 
+        # compute & log validation accuracy
+        if self.s_mode == 'supervised':
+            self.s_valid_acc(student_out['logits'], batch_targets)
+            self.log('valid/s_acc', self.s_valid_acc, on_step=False, on_epoch=True)
+
         # minimize CE loss
         out['loss'] = out[self.loss]
         out['teacher'] = teacher_out
