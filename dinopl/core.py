@@ -7,6 +7,7 @@ import torch
 import torch.optim as optim
 from torch import nn
 from torch.nn import functional as F
+from torchmetrics import Accuracy
 
 from . import utils as U
 from .scheduling import *
@@ -241,6 +242,10 @@ class DINO(pl.LightningModule):
 
         print(f'Init optimizer: {len(self.optimizer.param_groups)} paramgroups of sizes', 
             [len(group['params']) for group in self.optimizer.param_groups])
+
+        if self.s_mode == 'supervised':
+            self.s_train_acc = Accuracy()
+            self.s_valid_acc = Accuracy()
     
     
     def configure_optimizers(self):
@@ -343,6 +348,11 @@ class DINO(pl.LightningModule):
             out = self.multicrop_loss(student_out['logits'], targ_labels=batch_targets)
         elif batch_targets.dim() == 2:
             out = self.multicrop_loss(student_out['logits'], targ_logits=batch_targets)
+
+        # compute & log training accuracy
+        if self.s_mode == 'supervised':
+            self.s_train_acc(student_out['logits'], batch_targets)
+            self.log('train/s_acc', self.s_train_acc, on_step=True, on_epoch=False)
 
         # minimize CE loss
         out['loss'] = out[self.loss]        
