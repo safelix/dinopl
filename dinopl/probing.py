@@ -110,11 +110,11 @@ class LinearProber(pl.Callback):
         self.train_dl = None
         self.valid_dl = None
 
-    def on_fit_start(self, *_) -> None:
-        self.train_dl = DataLoader(dataset=self.train_set, **self.dl_args)
-        self.valid_dl = DataLoader(dataset=self.valid_set, **self.dl_args)
-
     def probe(self, device):
+        # instanciate dataloader if does not exist
+        self.train_dl = self.train_dl or DataLoader(dataset=self.train_set, **self.dl_args)
+        self.valid_dl = self.valid_dl or DataLoader(dataset=self.valid_set, **self.dl_args)
+
         out = {}
         for id, probe in self.probes.items():
             probe.reset(device)
