@@ -26,15 +26,18 @@ class SupervisedAccuracyTracker(pl.Callback):
     def __init__(self) -> None:
         self.s_train_acc = Accuracy()
         self.s_valid_acc = Accuracy()
-
+    
     def on_train_batch_end(self, _: pl.Trainer, dino:DINO, out, batch, *args):
         batch, batch_targets = batch
         self.s_train_acc.to(dino.device)
 
         # compute average probabilities over all crops
         probas = F.softmax(out['student']['logits'], dim=-1).mean(dim=0)
-        self.s_train_acc(probas, batch_targets)
-        dino.log('train/s_acc', self.s_train_acc, on_step=True, on_epoch=False)
+        s_acc = self.s_train_acc(probas, batch_targets)
+        dino.log('train/s_acc', s_acc, on_step=True, on_epoch=False)
+
+    def on_train_epoch_end(self, *args):
+        self.s_train_acc.reset()
 
     def on_validation_batch_end(self, _: pl.Trainer, dino:DINO, out, batch, *args):
         batch, batch_targets = batch
@@ -42,8 +45,11 @@ class SupervisedAccuracyTracker(pl.Callback):
         
         # compute average probabilities over all crops
         probas = F.softmax(out['student']['logits'], dim=-1).mean(dim=0)
-        self.s_valid_acc(probas, batch_targets)
-        dino.log('valid/s_acc', self.s_train_acc, on_step=False, on_epoch=True)
+        self.s_valid_acc.update(probas, batch_targets)
+    
+    def on_validation_epoch_end(self, _: pl.Trainer, dino:DINO, *args):
+        dino.log('valid/s_acc', self.s_train_acc.compute(), on_step=False, on_epoch=True)
+        self.s_train_acc.reset()
 
 
 class MetricsTracker(pl.Callback):
