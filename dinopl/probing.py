@@ -112,7 +112,7 @@ class LinearProber(pl.Callback):
 
     def probe(self, device):
         # instanciate dataloader if does not exist
-        self.train_dl = self.train_dl or DataLoader(dataset=self.train_set, shuffle = True, **self.dl_args)
+        self.train_dl = self.train_dl or DataLoader(dataset=self.train_set, shuffle=True, **self.dl_args)
         self.valid_dl = self.valid_dl or DataLoader(dataset=self.valid_set, **self.dl_args)
 
         out = {}
