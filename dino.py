@@ -15,7 +15,7 @@ from dinopl.augmentation import MultiCrop, LabelNoiseWrapper, LogitNoiseWrapper
 from dinopl.probing import LinearProbe, LinearProber
 from dinopl.scheduling import Schedule
 from dinopl.tracking import (FeatureTracker, HParamTracker, MetricsTracker,
-                             ParamTracker, PerCropEntropyTracker, FeatureSaver)
+                             ParamTracker, PerCropEntropyTracker, FeatureSaver, SupervisedAccuracyTracker)
 from torchinfo import summary
 
 def main(config:Configuration):
@@ -60,8 +60,10 @@ def main(config:Configuration):
     eval_valid_set = DSet(root=C.DATA_DIR, train=False, transform=eval_trfm)
 
     if config.label_noise_ratio > 0 and config.logit_noise_temp > 0:
-            raise RuntimeError('Only either label noise or logit noise can be applied.')
-    elif config.label_noise_ratio > 0:
+        raise RuntimeError('Only either label noise or logit noise can be applied.')
+    elif config.label_noise_ratio > 0 and config.ds_classes != config.n_classes:
+        raise RuntimeError('Cannot change number of classes with label noise.')
+    elif config.label_noise_ratio > 0 and config.ds_classes == config.n_classes:
         dino_train_set = LabelNoiseWrapper(dino_train_set, config.n_classes, config.label_noise_ratio, config.resample_noise)
         #dino_valid_set = LabelNoiseWrapper(dino_valid_set, config.n_classes, config.label_noise_ratio, config.resample_noise)
     elif config.logit_noise_temp > 0:
@@ -159,10 +161,10 @@ def main(config:Configuration):
     if config.probe_every > 0 and config.probing_epochs > 0:
         s_probe = LinearProbe(encoder=dino.student.enc,
                                 embed_dim=config.embed_dim,
-                                n_classes=config.n_classes)
+                                n_classes=config.ds_classes)
         t_probe = LinearProbe(encoder=dino.teacher.enc,
                                 embed_dim=config.embed_dim,
-                                n_classes=config.n_classes)
+                                n_classes=config.ds_classes)
         callbacks += [LinearProber(
                         probe_every = config.probe_every,
                         probing_epochs = config.probing_epochs,
@@ -176,6 +178,9 @@ def main(config:Configuration):
                     )]
         wandb_logger.experiment.define_metric('probe/student', summary='max')
         wandb_logger.experiment.define_metric('probe/teacher', summary='max')
+
+    if config.s_mode == 'supervised' and config.ds_classes == config.n_classes:
+        callbacks += [SupervisedAccuracyTracker()]
 
     ckpt_callback = ModelCheckpoint(dirpath=config.logdir, monitor='probe/student', mode='max',
                         filename='epoch={epoch}-step={step}-probe_student={probe/student:.3f}', auto_insert_metric_name=False)
@@ -191,6 +196,7 @@ def main(config:Configuration):
         # logging
         logger=wandb_logger,
         log_every_n_steps=config.log_every,
+        num_sanity_val_steps=0, # call trainer.validate() before trainer.fit() instead
 
         # acceleration
         accelerator='cpu' if config.force_cpu else 'gpu',
@@ -217,6 +223,7 @@ def main(config:Configuration):
     # log updated config to wandb before training
     wandb_logger.experiment.config.update(config, allow_val_change=True)
 
+    trainer.validate(model=dino, dataloaders=self_valid_dl)
     trainer.fit(model=dino, 
                 train_dataloaders=self_train_dl,
                 val_dataloaders=self_valid_dl)

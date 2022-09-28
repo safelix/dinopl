@@ -319,11 +319,13 @@ def create_dataset(config:Configuration) -> VisionDataset:
     config.dataset = config.dataset.lower()
 
     if config.dataset == 'mnist':
-        config.n_classes = 10 if config.n_classes is None else config.n_classes
+        config.ds_classes = 10
+        config.n_classes = config.ds_classes if config.n_classes is None else config.n_classes
         return MNIST
 
     if config.dataset == 'cifar10':
-        config.n_classes = 10 if config.n_classes is None else config.n_classes
+        config.ds_classes = 10
+        config.n_classes = config.ds_classes if config.n_classes is None else config.n_classes
         return CIFAR10
 
     raise RuntimeError('Unkown dataset name.')

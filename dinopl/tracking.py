@@ -1,16 +1,17 @@
 import os
 from typing import Dict, List, Tuple
 
+import numpy as np
+import pandas as pd
 import pytorch_lightning as pl
 import torch
 import wandb
-import numpy as np
+from torch.nn import functional as F
 from torch.utils import data
-import wandb
-import pandas as pd
+from torchmetrics import Accuracy
 
-from . import utils as U
 from . import DINO
+from . import utils as U
 
 __all__ = [
     'MetricsTracker',
@@ -20,6 +21,28 @@ __all__ = [
     'ParamTracker',
     'FeatureSaver',
 ]
+
+class SupervisedAccuracyTracker(pl.Callback):
+    def __init__(self) -> None:
+        self.s_train_acc = Accuracy()
+        self.s_valid_acc = Accuracy()
+
+    def on_train_batch_end(self, _: pl.Trainer, dino:DINO, out, batch, *args):
+        batch, batch_targets = batch
+
+        # compute average probabilities over all crops
+        probas = F.softmax(out['student']['logits'], dim=-1).mean(dim=0)
+        self.s_train_acc(probas, batch_targets)
+        dino.log('train/s_acc', self.s_train_acc, on_step=True, on_epoch=False)
+
+    def on_validation_batch_end(self, _: pl.Trainer, dino:DINO, out, batch, *args):
+        batch, batch_targets = batch
+
+        # compute average probabilities over all crops
+        probas = F.softmax(out['student']['logits'], dim=-1).mean(dim=0)
+        self.s_train_acc(probas, batch_targets)
+        dino.log('valid/s_acc', self.s_train_acc, on_step=False, on_epoch=True)
+
 
 class MetricsTracker(pl.Callback):
     def step(self, prefix, out:Dict[str, torch.Tensor], dino:DINO):
@@ -192,6 +215,7 @@ class FeatureSaver(pl.Callback):
         for n in self.features:
             os.makedirs(os.path.join(os.path.join(prefix, n[:5])), exist_ok=True)
 
+        # save features of before training
         self.on_train_batch_end(None, dino)
 
     def on_train_batch_end(self, _:pl.Trainer, dino: DINO, *args) -> None:

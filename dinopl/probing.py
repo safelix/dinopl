@@ -137,10 +137,10 @@ class LinearProber(pl.Callback):
         print('')
         return dict((f'probe/{k}', v) for (k,v) in out.items())
     
-    def on_train_epoch_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):
+    # trainer.validate() needs to be called before trainer.fit() for per-training probe
+    def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         if trainer.current_epoch % self.probe_every == 0: # only probe every so many epochs
-            pl_module.log_dict(self.probe(pl_module.device)) 
-    
-    def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):
-        if trainer.current_epoch == trainer.max_epochs - 1: # probe after last epoch
-            pl_module.log_dict(self.probe(pl_module.device)) 
+            pl_module.log_dict(self.probe(pl_module.device))
+        
+        elif trainer.current_epoch == trainer.max_epochs - 1: # probe after last epoch
+            pl_module.log_dict(self.probe(pl_module.device))

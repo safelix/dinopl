@@ -242,10 +242,6 @@ class DINO(pl.LightningModule):
 
         print(f'Init optimizer: {len(self.optimizer.param_groups)} paramgroups of sizes', 
             [len(group['params']) for group in self.optimizer.param_groups])
-
-        if self.s_mode == 'supervised':
-            self.s_train_acc = Accuracy()
-            self.s_valid_acc = Accuracy()
     
     
     def configure_optimizers(self):
@@ -349,11 +345,6 @@ class DINO(pl.LightningModule):
         elif batch_targets.dim() == 2:
             out = self.multicrop_loss(student_out['logits'], targ_logits=batch_targets)
 
-        # compute & log training accuracy
-        if self.s_mode == 'supervised':
-            self.s_train_acc(F.softmax(student_out['logits'], dim=-1).mean(dim=0), batch_targets)
-            self.log('train/s_acc', self.s_train_acc, on_step=True, on_epoch=False)
-
         # minimize CE loss
         out['loss'] = out[self.loss]        
         out['teacher'] = teacher_out
@@ -376,11 +367,6 @@ class DINO(pl.LightningModule):
             out = self.multicrop_loss(student_out['logits'], targ_labels=batch_targets)
         elif batch_targets.dim() == 2:
             out = self.multicrop_loss(student_out['logits'], targ_logits=batch_targets)
-
-        # compute & log validation accuracy
-        if self.s_mode == 'supervised':
-            self.s_valid_acc(F.softmax(student_out['logits'], dim=-1).mean(dim=0), batch_targets)
-            self.log('valid/s_acc', self.s_valid_acc, on_step=False, on_epoch=True)
 
         # minimize CE loss
         out['loss'] = out[self.loss]
