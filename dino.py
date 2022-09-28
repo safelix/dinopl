@@ -197,7 +197,7 @@ def main(config:Configuration):
         # logging
         logger=wandb_logger,
         log_every_n_steps=config.log_every,
-        num_sanity_val_steps=0, # call trainer.validate() before trainer.fit() instead
+        num_sanity_val_steps=-1, # call trainer.validate() before trainer.fit() instead
 
         # acceleration
         accelerator='cpu' if config.force_cpu else 'gpu',
@@ -225,7 +225,7 @@ def main(config:Configuration):
     # log updated config to wandb before training
     wandb_logger.experiment.config.update(config, allow_val_change=True)
 
-    trainer.validate(model=dino, dataloaders=self_valid_dl)
+    #trainer.validate(model=dino, dataloaders=self_valid_dl)
     trainer.fit(model=dino, 
                 train_dataloaders=self_train_dl,
                 val_dataloaders=self_valid_dl)
