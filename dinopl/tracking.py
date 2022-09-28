@@ -48,8 +48,8 @@ class SupervisedAccuracyTracker(pl.Callback):
         self.s_valid_acc.update(probas, batch_targets)
     
     def on_validation_epoch_end(self, _: pl.Trainer, dino:DINO, *args):
-        dino.log('valid/s_acc', self.s_train_acc.compute(), on_step=False, on_epoch=True)
-        self.s_train_acc.reset()
+        dino.log('valid/s_acc', self.s_valid_acc.compute(), on_step=False, on_epoch=True)
+        self.s_valid_acc.reset()
 
 
 class MetricsTracker(pl.Callback):
