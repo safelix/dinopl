@@ -1,5 +1,6 @@
 import argparse
 import ast
+from math import log
 from typing import List, Tuple, Union
 
 import pytorch_lightning as pl
@@ -218,6 +219,19 @@ class CosSched(Schedule):
     def set_ys(self) -> Self:
         cos = 0.5 + torch.cos(self.xs(-torch.pi,0)) / 2
         self.ys = self.y_start + (self.y_end - self.y_start) * cos
+
+    def __repr__(self) -> str:
+        return super().__repr__([self.y_start, self.y_end])
+
+
+class ExpSched(Schedule):
+    def __init__(self, y_start, y_end):
+        super().__init__()
+        self.y_start = y_start
+        self.y_end = y_end
+
+    def set_ys(self):
+        self.ys = torch.exp(self.xs(log(self.y_start), log(self.y_end)))
 
     def __repr__(self) -> str:
         return super().__repr__([self.y_start, self.y_end])
