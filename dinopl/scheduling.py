@@ -12,7 +12,8 @@ __all__ = [
     'Scheduler',
     'ConstSched',
     'LinSched',
-    'CosSched',
+    'CosSched'
+    'ExpSched',
     'CatSched',
     'LinWarmup'
 ]
