@@ -172,7 +172,6 @@ def main(config:Configuration):
                         train_set = eval_train_set,
                         valid_set = eval_valid_set,
                         dl_args=dict( # arguments for dataloader
-                            shuffle = True,
                             batch_size = config.bs_eval,
                             num_workers = config.n_workers,
                             pin_memory = False if config.force_cpu else True)
