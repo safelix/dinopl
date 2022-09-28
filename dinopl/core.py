@@ -351,7 +351,7 @@ class DINO(pl.LightningModule):
 
         # compute & log training accuracy
         if self.s_mode == 'supervised':
-            self.s_train_acc(student_out['logits'], batch_targets)
+            self.s_train_acc(F.softmax(student_out['logits'], dim=-1).mean(dim=0), batch_targets)
             self.log('train/s_acc', self.s_train_acc, on_step=True, on_epoch=False)
 
         # minimize CE loss
@@ -379,7 +379,7 @@ class DINO(pl.LightningModule):
 
         # compute & log validation accuracy
         if self.s_mode == 'supervised':
-            self.s_valid_acc(student_out['logits'], batch_targets)
+            self.s_valid_acc(F.softmax(student_out['logits'], dim=-1).mean(dim=0), batch_targets)
             self.log('valid/s_acc', self.s_valid_acc, on_step=False, on_epoch=True)
 
         # minimize CE loss
