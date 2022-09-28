@@ -214,11 +214,10 @@ def main(config:Configuration):
         )
 
     dl_args = dict(
-        shuffle = True,
         batch_size = config.bs_train,
         num_workers = config.n_workers,
         pin_memory = False if config.force_cpu else True ) 
-    self_train_dl = DataLoader(dataset=dino_train_set, **dl_args)
+    self_train_dl = DataLoader(dataset=dino_train_set, shuffle = True, **dl_args)
     self_valid_dl = DataLoader(dataset=dino_valid_set, **dl_args)
 
     # log updated config to wandb before training
