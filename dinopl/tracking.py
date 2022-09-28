@@ -91,7 +91,7 @@ def np_histogram(tensor: torch.Tensor, bins=64):
 
 class FeatureTracker(pl.Callback):       
     def step(self, prefix, out:Dict[str, torch.Tensor], dino:DINO):
-        logs = {}
+        logs, logs_wandb = {}, {}
         prefix += '/feat'
         for n in ['embeddings', 'projections', 'logits']:
             t_x = out['teacher'][n].flatten(0,1)     # consider crops as batches
@@ -104,28 +104,29 @@ class FeatureTracker(pl.Callback):
                 cossim = torch.corrcoef(x).nan_to_num() # similarity with anything of norm zero is zero
                 cossim_triu = cossim[torch.triu_indices(*cossim.shape, offset=1).unbind()] # upper triangular values
                 logs[f'{prefix}/{n}/{i}_x.corr().mean()'] = cossim_triu.mean()
-                logs[f'{prefix}/{n}/{i}_x.corr().hist()'] = wandb.Histogram(np_histogram=np_histogram(cossim_triu, 64))
+                logs_wandb[f'{prefix}/{n}/{i}_x.corr().hist()'] = wandb.Histogram(np_histogram=np_histogram(cossim_triu, 64))
                 logs[f'{prefix}/{n}/{i}_x.corr().rank()'] = torch.linalg.matrix_rank(cossim, hermitian=True)
                 
                 # within batch l2 distance
                 l2dist = torch.cdist(x, x)
                 l2dist_triu = l2dist[torch.triu_indices(*l2dist.shape, offset=1).unbind()] # upper triangular values
                 logs[f'{prefix}/{n}/{i}_x.pdist().mean()'] = l2dist_triu.mean()
-                logs[f'{prefix}/{n}/{i}_x.pdist().hist()'] = wandb.Histogram(np_histogram=np_histogram(l2dist_triu, 64))
+                logs_wandb[f'{prefix}/{n}/{i}_x.pdist().hist()'] = wandb.Histogram(np_histogram=np_histogram(l2dist_triu, 64))
 
             # between student and teacher
             l2dist = (t_x - s_gx).norm(dim=-1)
             logs[f'{prefix}/{n}/l2(t_x,s_x).mean()'] = l2dist.mean()
-            logs[f'{prefix}/{n}/l2(t_x,s_x).hist()'] = wandb.Histogram(np_histogram=np_histogram(l2dist, 64))
+            logs_wandb[f'{prefix}/{n}/l2(t_x,s_x).hist()'] = wandb.Histogram(np_histogram=np_histogram(l2dist, 64))
 
             dot = (t_x * s_gx).sum(-1)
             cossim = dot / (t_x.norm(dim=-1) * s_gx.norm(dim=-1))
             logs[f'{prefix}/{n}/cos(t_x,s_x).mean()'] = cossim.mean()
-            logs[f'{prefix}/{n}/cos(t_x,s_x).hist()'] = wandb.Histogram(np_histogram=np_histogram(cossim, 64))
+            logs_wandb[f'{prefix}/{n}/cos(t_x,s_x).hist()'] = wandb.Histogram(np_histogram=np_histogram(cossim, 64))
 
         #logs['trainer/global_step'] = dino.global_step
         #dino.logger.experiment.log(logs)
-        dino.logger.log_metrics(logs , step=max(dino.global_step - 1, 0)) # -1 because global step is updated just before on train_batch_end
+        dino.log_dict(logs)
+        dino.logger.log_metrics(logs_wandb, step=max(dino.global_step - 1, 0)) # -1 because global step is updated just before on train_batch_end
 
     def on_train_batch_end(self, _: pl.Trainer, dino: DINO, outputs:Dict[str, torch.Tensor], *args) -> None:
         self.step('train', outputs, dino)
@@ -135,7 +136,7 @@ class FeatureTracker(pl.Callback):
 
 class HParamTracker(pl.Callback):  
     def on_train_batch_start(self, _:pl.Trainer, dino:DINO, *args) -> None:
-        logs = {}
+        logs, logs_wandb = {}, {}
         logs['hparams/lr'] = dino.optimizer.param_groups[0]['lr']
         logs['hparams/wd'] = dino.optimizer.param_groups[0]['weight_decay']
         logs['hparams/t_mom'] = dino.t_updater.mom
@@ -145,12 +146,12 @@ class HParamTracker(pl.Callback):
         logs['hparams/s_temp'] = dino.student.head.temp
         logs['hparams/t_cent.norm()'] = dino.teacher.head.cent.norm()
         logs['hparams/t_cent.mean()'] = dino.teacher.head.cent.mean()
-        logs['hparams/t_cent'] = wandb.Histogram(np_histogram=np_histogram(dino.teacher.head.cent))
-        logs['trainer/global_step'] = dino.global_step
+        logs_wandb['hparams/t_cent'] = wandb.Histogram(np_histogram=np_histogram(dino.teacher.head.cent))
         
+        dino.log_dict(logs)
+        dino.logger.log_metrics(logs_wandb , step=dino.global_step)
         #logs['trainer/global_step'] = dino.global_step
         #dino.logger.experiment.log(logs)
-        dino.logger.log_metrics(logs , step=dino.global_step)
 
 class ParamTracker(pl.Callback):
     def __init__(self, student, teacher, name=None, track_init:bool=False) -> None:
