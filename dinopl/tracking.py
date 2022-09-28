@@ -29,6 +29,7 @@ class SupervisedAccuracyTracker(pl.Callback):
 
     def on_train_batch_end(self, _: pl.Trainer, dino:DINO, out, batch, *args):
         batch, batch_targets = batch
+        self.s_train_acc.to(dino.device)
 
         # compute average probabilities over all crops
         probas = F.softmax(out['student']['logits'], dim=-1).mean(dim=0)
@@ -37,10 +38,11 @@ class SupervisedAccuracyTracker(pl.Callback):
 
     def on_validation_batch_end(self, _: pl.Trainer, dino:DINO, out, batch, *args):
         batch, batch_targets = batch
-
+        self.s_valid_acc.to(dino.device)
+        
         # compute average probabilities over all crops
         probas = F.softmax(out['student']['logits'], dim=-1).mean(dim=0)
-        self.s_train_acc(probas, batch_targets)
+        self.s_valid_acc(probas, batch_targets)
         dino.log('valid/s_acc', self.s_train_acc, on_step=False, on_epoch=True)
 
 
