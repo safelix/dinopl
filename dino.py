@@ -181,6 +181,8 @@ def main(config:Configuration):
 
     if config.s_mode == 'supervised' and config.ds_classes == config.n_classes:
         callbacks += [SupervisedAccuracyTracker()]
+        wandb_logger.experiment.define_metric('train/s_acc', summary='max')
+        wandb_logger.experiment.define_metric('valid/s_acc', summary='max')
 
     ckpt_callback = ModelCheckpoint(dirpath=config.logdir, monitor='probe/student', mode='max',
                         filename='epoch={epoch}-step={step}-probe_student={probe/student:.3f}', auto_insert_metric_name=False)
