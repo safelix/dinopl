@@ -85,9 +85,13 @@ class PerCropEntropyTracker(pl.Callback):
         self.step('valid', outputs, dino)
 
 def np_histogram(tensor: torch.Tensor, bins=64):
-    ndarray = tensor.detach().cpu().numpy()
-    range = np.nanmin(ndarray), np.nanmax(ndarray)
-    return np.histogram(ndarray, bins=bins, range=range)
+    try:
+        ndarray = tensor.detach().cpu().numpy()
+        range = np.nanmin(ndarray), np.nanmax(ndarray)
+        return np.histogram(ndarray, bins=bins, range=range)
+    except Exception as e:
+        warn('Cannot create histogram, returning None', e)
+        return None
 
 class FeatureTracker(pl.Callback):       
     def step(self, prefix, out:Dict[str, torch.Tensor], dino:DINO):

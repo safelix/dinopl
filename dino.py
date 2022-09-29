@@ -203,7 +203,6 @@ def main(config:Configuration):
         # acceleration
         accelerator='cpu' if config.force_cpu else 'gpu',
         devices=None if config.force_cpu else 1,
-        #gpus = [1],
         auto_select_gpus=True,
 
         # performance
