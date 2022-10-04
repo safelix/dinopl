@@ -92,7 +92,7 @@ def main(config:Configuration):
             raise RuntimeError('Student or teacher inititalization strategy requires \'--ckpt_path\' to be specified.')
         temp_student = copy.deepcopy(model) # required to load state dict into instanciated copy
         temp_teacher = copy.deepcopy(model) # required to load state dict into instanciated copy
-        dino_ckpt = DINO.load_from_checkpoint(config.ckpt_path,  mc=mc, student=temp_student, teacher=temp_teacher)
+        dino_ckpt = DINO.load_from_checkpoint(config.ckpt_path,  mc_spec=config.mc_spec, student=temp_student, teacher=temp_teacher)
     
     # Initialize student network
     if config.s_init == 'random':
