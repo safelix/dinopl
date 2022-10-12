@@ -120,7 +120,9 @@ class Configuration(object):
                             help='Add label noise (random assignemt) for supervised training.')
         data.add_argument('--logit_noise_temp', type=float, default=0,
                             help='Add logit noise (sharpened gaussian logits) for supervised training.')
-        data.add_argument('--resample_noise', action='store_true')
+        data.add_argument('--resample_noise', type=bool, default=False) # TODO: help
+        #data.add_argument('--aug', type=str, choices={'rot', 'blur', 'shift', 'crop'}, nargs='*',)
+        #data.add_argument('--per_crop_aug', type=str, choices={'rot', 'blur', 'shift', 'simclr'})
 
         # Model.
         model = parser.add_argument_group('Model')
