@@ -63,6 +63,8 @@ def module_to_vector(module:nn.Module, grad=False):
         else:
             vec.append(param.data.view(-1)) 
 
+    if len(vec) == 0:
+        return torch.empty(0)
     return torch.cat(vec)
 
 
