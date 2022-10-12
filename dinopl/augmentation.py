@@ -76,7 +76,7 @@ class LabelNoiseWrapper(VisionDataset):
         
         # overwrite original target with propability self.noise_ratio
         if torch.rand((1,)) < self.noise_ratio:
-            target = torch.randint(0, self.n_classes, (1,))
+            target = torch.randint(0, self.n_classes, (1,)).item()
         return img, target
 
     def __len__(self) -> int:
