@@ -57,7 +57,7 @@ class DINOHead(nn.Module):
         if isinstance(m, U.WeightNormalizedLinear):
             return # explicitely do not apply to weight normalized
         if isinstance(m, nn.Linear):
-            U.trunc_normal_(m.weight, std=.02)
+            nn.init.trunc_normal_(m.weight, std=.02)
             if isinstance(m, nn.Linear) and m.bias is not None:
                 nn.init.constant_(m.bias, 0)
 
