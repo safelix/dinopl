@@ -144,3 +144,43 @@ class LinearProber(pl.Callback):
         
         elif trainer.current_epoch == trainer.max_epochs - 1: # probe after last epoch
             pl_module.log_dict(self.probe(pl_module.device))
+
+
+if __name__ == '__main__':
+    import argparse
+    from random import shuffle
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--n_samples', type=int, default=100)
+    args = parser.parse_args()
+
+    # make probe
+    probe = LinearProbe(
+        encoder=torch.nn.Identity(),
+        embed_dim=2,
+        n_classes=2)
+
+    # generate clustered data
+    xs = torch.cat([torch.normal(-1.0, 1.0, (args.n_samples // 2, 2)),
+                        torch.normal(+1.0, 1.0, (args.n_samples // 2, 2))])
+    lbls = torch.cat([torch.full((args.n_samples // 2,), 0),
+                        torch.full((args.n_samples // 2,), 1)])
+
+    # build data sets
+    data_set = list(zip(xs, lbls))
+    shuffle(data_set)
+    train_set = data_set[:args.n_samples // 2]
+    valid_set = data_set[args.n_samples // 2:]
+
+    # load data
+    probe.reset(torch.device('cpu'))
+    train_dl = DataLoader(dataset=train_set, shuffle=True, batch_size=10)
+    valid_dl = DataLoader(dataset=valid_set)
+    train_data = probe.load_data(train_dl)
+    valid_data = probe.load_data(valid_dl)
+
+    # train and validate
+    probe.train(100, train_data=train_data)
+    acc = probe.valid(valid_data=valid_data)
+
+    print(f'Accuracy: {acc:.3f}')

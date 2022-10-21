@@ -24,7 +24,7 @@ def recshape(curr, recprefix='', prefix=''):
             out += recshape(child, recprefix=f'{recprefix}  ', prefix=f'\'{name}\': ') 
     
     elif t == torch.Tensor or t==np.ndarray:
-        if len(curr.shape) == 1:
+        if len(curr.shape) <= 1:
             out += (f'{recprefix}{prefix}{t.__name__} of shape {curr.shape}: {curr}')
         else:
             out += (f'{recprefix}{prefix}{t.__name__} of shape {curr.shape}')
