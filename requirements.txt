@@ -4,3 +4,4 @@ pytorch-lightning
 torchmetrics
 wandb
 pandas
+torchinfo

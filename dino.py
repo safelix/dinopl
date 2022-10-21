@@ -18,6 +18,12 @@ from dinopl.tracking import (FeatureTracker, HParamTracker, MetricsTracker,
                              ParamTracker, PerCropEntropyTracker, FeatureSaver, SupervisedAccuracyTracker)
 from torchinfo import summary
 
+try: # torch bug: autoselect only works the second time
+    from pytorch_lightning.tuner.auto_gpu_select import pick_multiple_gpus
+    pick_multiple_gpus(1)
+except RuntimeError:
+    pass
+
 def main(config:Configuration):
     
     # Fix random seed
@@ -225,7 +231,7 @@ def main(config:Configuration):
     wandb_logger.experiment.config.update(config, allow_val_change=True)
 
     # move dino to selected GPU, validate, then fit
-    dino = dino.to(trainer.device_ids[0]) 
+    dino = dino if config.force_cpu else dino.to(trainer.device_ids[0])
     trainer.validate(model=dino, dataloaders=self_valid_dl)
     trainer.fit(model=dino, 
                 train_dataloaders=self_train_dl,
