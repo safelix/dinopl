@@ -120,7 +120,9 @@ class Configuration(object):
                             help='Add label noise (random assignemt) for supervised training.')
         data.add_argument('--logit_noise_temp', type=float, default=0,
                             help='Add logit noise (sharpened gaussian logits) for supervised training.')
-        data.add_argument('--resample_noise', action='store_true')
+        data.add_argument('--resample_noise', type=bool, default=False) # TODO: help
+        #data.add_argument('--aug', type=str, choices={'rot', 'blur', 'shift', 'crop'}, nargs='*',)
+        #data.add_argument('--per_crop_aug', type=str, choices={'rot', 'blur', 'shift', 'simclr'})
 
         # Model.
         model = parser.add_argument_group('Model')
@@ -277,6 +279,13 @@ def create_encoder(config:Configuration):
     This is a helper function that can be useful if you have several model definitions that you want to
     choose from via the command line.
     '''
+
+    if config.enc == 'flatten':
+        enc = torch.nn.Flatten(start_dim=1, end_dim=-1)
+        enc.embed_dim = 3 * config.ds_pixels
+        config.embed_dim = 3 * config.ds_pixels
+        return enc
+
     if config.enc in torchvision.models.__dict__.keys():
         enc = torchvision.models.__dict__[config.enc](pretrained=False)
         enc.embed_dim = enc.fc.in_features
@@ -319,11 +328,15 @@ def create_dataset(config:Configuration) -> VisionDataset:
     config.dataset = config.dataset.lower()
 
     if config.dataset == 'mnist':
-        config.n_classes = 10 if config.n_classes is None else config.n_classes
+        config.ds_pixels = 784
+        config.ds_classes = 10
+        config.n_classes = config.ds_classes if config.n_classes is None else config.n_classes
         return MNIST
 
     if config.dataset == 'cifar10':
-        config.n_classes = 10 if config.n_classes is None else config.n_classes
+        config.ds_pixels = 1024
+        config.ds_classes = 10
+        config.n_classes = config.ds_classes if config.n_classes is None else config.n_classes
         return CIFAR10
 
     raise RuntimeError('Unkown dataset name.')

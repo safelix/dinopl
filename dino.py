@@ -15,8 +15,14 @@ from dinopl.augmentation import MultiCrop, LabelNoiseWrapper, LogitNoiseWrapper
 from dinopl.probing import LinearProbe, LinearProber
 from dinopl.scheduling import Schedule
 from dinopl.tracking import (FeatureTracker, HParamTracker, MetricsTracker,
-                             ParamTracker, PerCropEntropyTracker, FeatureSaver)
+                             ParamTracker, PerCropEntropyTracker, FeatureSaver, SupervisedAccuracyTracker)
 from torchinfo import summary
+
+try: # torch bug: autoselect only works the second time
+    from pytorch_lightning.tuner.auto_gpu_select import pick_multiple_gpus
+    pick_multiple_gpus(1)
+except RuntimeError:
+    pass
 
 def main(config:Configuration):
     
@@ -60,8 +66,10 @@ def main(config:Configuration):
     eval_valid_set = DSet(root=C.DATA_DIR, train=False, transform=eval_trfm)
 
     if config.label_noise_ratio > 0 and config.logit_noise_temp > 0:
-            raise RuntimeError('Only either label noise or logit noise can be applied.')
-    elif config.label_noise_ratio > 0:
+        raise RuntimeError('Only either label noise or logit noise can be applied.')
+    elif config.label_noise_ratio > 0 and config.ds_classes != config.n_classes:
+        raise RuntimeError('Cannot change number of classes with label noise.')
+    elif config.label_noise_ratio > 0 and config.ds_classes == config.n_classes:
         dino_train_set = LabelNoiseWrapper(dino_train_set, config.n_classes, config.label_noise_ratio, config.resample_noise)
         #dino_valid_set = LabelNoiseWrapper(dino_valid_set, config.n_classes, config.label_noise_ratio, config.resample_noise)
     elif config.logit_noise_temp > 0:
@@ -90,7 +98,7 @@ def main(config:Configuration):
             raise RuntimeError('Student or teacher inititalization strategy requires \'--ckpt_path\' to be specified.')
         temp_student = copy.deepcopy(model) # required to load state dict into instanciated copy
         temp_teacher = copy.deepcopy(model) # required to load state dict into instanciated copy
-        dino_ckpt = DINO.load_from_checkpoint(config.ckpt_path,  mc=mc, student=temp_student, teacher=temp_teacher)
+        dino_ckpt = DINO.load_from_checkpoint(config.ckpt_path,  mc_spec=config.mc_spec, student=temp_student, teacher=temp_teacher)
     
     # Initialize student network
     if config.s_init == 'random':
@@ -159,10 +167,10 @@ def main(config:Configuration):
     if config.probe_every > 0 and config.probing_epochs > 0:
         s_probe = LinearProbe(encoder=dino.student.enc,
                                 embed_dim=config.embed_dim,
-                                n_classes=config.n_classes)
+                                n_classes=config.ds_classes)
         t_probe = LinearProbe(encoder=dino.teacher.enc,
                                 embed_dim=config.embed_dim,
-                                n_classes=config.n_classes)
+                                n_classes=config.ds_classes)
         callbacks += [LinearProber(
                         probe_every = config.probe_every,
                         probing_epochs = config.probing_epochs,
@@ -176,6 +184,11 @@ def main(config:Configuration):
                     )]
         wandb_logger.experiment.define_metric('probe/student', summary='max')
         wandb_logger.experiment.define_metric('probe/teacher', summary='max')
+
+    if config.s_mode == 'supervised' and config.ds_classes == config.n_classes:
+        callbacks += [SupervisedAccuracyTracker()]
+        wandb_logger.experiment.define_metric('train/s_acc', summary='max')
+        wandb_logger.experiment.define_metric('valid/s_acc', summary='max')
 
     ckpt_callback = ModelCheckpoint(dirpath=config.logdir, monitor='probe/student', mode='max',
                         filename='epoch={epoch}-step={step}-probe_student={probe/student:.3f}', auto_insert_metric_name=False)
@@ -191,11 +204,11 @@ def main(config:Configuration):
         # logging
         logger=wandb_logger,
         log_every_n_steps=config.log_every,
+        num_sanity_val_steps=0, # call trainer.validate() before trainer.fit() instead
 
         # acceleration
         accelerator='cpu' if config.force_cpu else 'gpu',
         devices=None if config.force_cpu else 1,
-        #gpus = [1],
         auto_select_gpus=True,
 
         # performance
@@ -211,12 +224,15 @@ def main(config:Configuration):
         batch_size = config.bs_train,
         num_workers = config.n_workers,
         pin_memory = False if config.force_cpu else True ) 
-    self_train_dl = DataLoader(dataset=dino_train_set, **dl_args)
+    self_train_dl = DataLoader(dataset=dino_train_set, shuffle = True, **dl_args)
     self_valid_dl = DataLoader(dataset=dino_valid_set, **dl_args)
 
     # log updated config to wandb before training
     wandb_logger.experiment.config.update(config, allow_val_change=True)
 
+    # move dino to selected GPU, validate, then fit
+    dino = dino if config.force_cpu else dino.to(trainer.device_ids[0])
+    trainer.validate(model=dino, dataloaders=self_valid_dl)
     trainer.fit(model=dino, 
                 train_dataloaders=self_train_dl,
                 val_dataloaders=self_valid_dl)
