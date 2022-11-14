@@ -287,7 +287,7 @@ def create_encoder(config:Configuration):
         return enc
 
     if config.enc in torchvision.models.__dict__.keys():
-        enc = torchvision.models.__dict__[config.enc](pretrained=False)
+        enc = torchvision.models.__dict__[config.enc](weights=None)
         enc.embed_dim = enc.fc.in_features
         config.embed_dim = enc.fc.in_features
         enc.fc = torch.nn.Identity()
