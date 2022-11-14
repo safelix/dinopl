@@ -16,13 +16,9 @@ from dinopl.probing import LinearProbe, LinearProber
 from dinopl.scheduling import Schedule
 from dinopl.tracking import (FeatureTracker, HParamTracker, MetricsTracker,
                              ParamTracker, PerCropEntropyTracker, FeatureSaver, SupervisedAccuracyTracker)
+from dinopl import utils as U
 from torchinfo import summary
 
-try: # torch bug: autoselect only works the second time
-    from pytorch_lightning.tuner.auto_gpu_select import pick_multiple_gpus
-    pick_multiple_gpus(1)
-except RuntimeError:
-    pass
 
 def main(config:Configuration):
     
@@ -208,8 +204,8 @@ def main(config:Configuration):
 
         # acceleration
         accelerator='cpu' if config.force_cpu else 'gpu',
-        devices=None if config.force_cpu else 1,
-        auto_select_gpus=True,
+        devices=None if config.force_cpu else [U.pick_single_gpu()],
+        auto_select_gpus=False,
 
         # performance
         benchmark=True,

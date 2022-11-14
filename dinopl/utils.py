@@ -180,3 +180,16 @@ class WeightNormalizedLinear(nn.Linear):
         # _weight_norm() must be called manually before forward
 
 
+def pick_single_gpu() -> int:
+    for i in range(torch.cuda.device_count()):
+
+        # Try to allocate on device:
+        device = torch.device(f"cuda:{i}")
+        try:
+            torch.ones(1).to(device=device)
+            torch.cuda.synchronize(device=device)
+        except RuntimeError:
+            continue
+        return i
+
+    raise RuntimeError("No GPUs available.")
