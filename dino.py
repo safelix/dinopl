@@ -8,8 +8,9 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
-from configuration import CONSTANTS as C, create_dataset, create_mc_spec
-from configuration import Configuration, get_encoder, create_optimizer
+from configuration import CONSTANTS as C
+from configuration import (Configuration, create_dataset, create_mc_spec,
+                           create_optimizer, get_encoder)
 from dinopl import *
 from dinopl.augmentation import MultiCrop, LabelNoiseWrapper, LogitNoiseWrapper
 from dinopl.probing import LinearProbe, LinearProber
@@ -22,10 +23,14 @@ from torchinfo import summary
 
 def main(config:Configuration):
     
-    # Fix random seed
+    # Fix random seeds
     if config.seed is None:
         config.seed = int(time.time())
     pl.seed_everything(config.seed)
+
+    if config.enc_seed is None:
+        config.enc_seed = int(time.time())
+    enc_generator = torch.Generator().manual_seed(config.enc_seed)
 
     # Logger
     wandb_logger = WandbLogger(
@@ -81,9 +86,11 @@ def main(config:Configuration):
     head = DINOHead(config.embed_dim, config.out_dim, 
             hidden_dims=config.hid_dims, 
             l2bot_dim=config.l2bot_dim, 
+            l2bot_cfg=config.l2bot_cfg,
             use_bn=config.mlp_bn,
             act_fn=config.mlp_act)
     model = DINOModel(enc, head)
+    model.reset_parameters(generator=enc_generator)
 
     print(f'Created encoder and head:')
     summary(model, depth=4, device='cpu',
@@ -96,6 +103,7 @@ def main(config:Configuration):
         temp_student = copy.deepcopy(model) # required to load state dict into instanciated copy
         temp_teacher = copy.deepcopy(model) # required to load state dict into instanciated copy
         dino_ckpt = DINO.load_from_checkpoint(config.ckpt_path,  mc_spec=config.mc_spec, student=temp_student, teacher=temp_teacher)
+        del temp_student, temp_teacher
     
     # Initialize student network
     if config.s_init == 'random':
@@ -115,16 +123,10 @@ def main(config:Configuration):
     elif config.s_init == 't_ckpt':
         teacher = copy.deepcopy(dino_ckpt.teacher)     # make teacher from teacher checkpoint
     elif config.t_init == 'random':     
-        t_enc = get_encoder(config)  # initialize teacher with random parameters
-        t_head = DINOHead(config.embed_dim, config.out_dim, 
-            hidden_dims=config.hid_dims, 
-            l2bot_dim=config.l2bot_dim, 
-            use_bn=config.mlp_bn,
-            act_fn=config.mlp_act)
-        teacher = DINOModel(t_enc, t_head)
+        teacher = copy.deepcopy(student).reset_parameters()  # initialize teacher with random parameters
     else:
         raise RuntimeError(f'Teacher initialization strategy \'{config.t_init}\' not supported.')
-    # del model, temp_student, temp_teacher, dino_ckpt # let's hope for garbage collector
+    del model #, dino_ckpt # let's hope for garbage collector
 
 
     # DINO Setup

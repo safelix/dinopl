@@ -130,6 +130,8 @@ class Configuration(object):
         model = parser.add_argument_group('Model')
         model.add_argument('--enc', type=str, choices=models.__all__, default='resnet18', 
                             help='Defines the model to train on.')
+        model.add_argument('--enc_seed', type=int, default=None,
+                            help='The seed for model creation, use numbers with good balance of 0 and 1 bits.')
         model.add_argument('--enc_norm_layer', type=str, choices=['BatchNorm', 'InstanceNorm', 'GroupNorm8', 'LayerNorm'], default=None,
                             help='Overwrite the normalization layer of the model if supported.')
         model.add_argument('--tiny_input', action='store_true', 
@@ -142,6 +144,8 @@ class Configuration(object):
                             help='Hidden dimensions of DINOHead MLP.')
         model.add_argument('--l2bot_dim', type=int, default=256,
                             help='L2-Bottleneck dimension of DINOHead MLP.')
+        model.add_argument('--l2bot_cfg', type=str, default='-/lb/fn/wn/l/-',
+                            help='L2-Bottleneck configuration string: \'{wn,-}/{l,lb,-}/{fn,-}/{wn,-}/{l,lb,-}/{wn,-}\'.')
         model.add_argument('--out_dim', type=int, default=65536, 
                             help='Output dimension of the DINOHead MLP.')
 
