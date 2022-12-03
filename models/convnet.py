@@ -1,48 +1,72 @@
-# Copy from Sotiris Anagnostidis
+from typing import Optional, Type
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
+from math import floor
+from . import init
 
 
 class ConvNet(nn.Module):
-    def __init__(self, n_layers=None, n_filters=16, depth=2):
+    def __init__(self, 
+            width:int = 16, 
+            depth:int = 2, 
+            num_classes:Optional[int] = 10, 
+            norm_layer:Type[nn.Module] = nn.BatchNorm2d,
+    ) -> None :
         super().__init__()
-        self.conv1 = nn.Conv2d(3, out_channels=n_filters, kernel_size=3, padding="same")
-        self.bn1 = nn.BatchNorm2d(n_filters)
-        self.pool = nn.MaxPool2d(2, 2)
-
+        tail = str(depth).endswith('.5')
+        depth = floor(depth)
+        
+        # make stem
+        self.conv1 = nn.Conv2d(3, out_channels=width, kernel_size=3, padding='same')
+        self.bn1 = nn.Identity()
+        self.relu1 = nn.ReLU()
+    
         module_list = []
-        for _ in range(depth - 2):
-            module_list.append(
-                nn.Conv2d(
-                    n_filters, out_channels=n_filters, kernel_size=3, padding="same"
-                )
-            )
-            module_list.append(nn.BatchNorm2d(n_filters))
+        if depth > 1 or tail:
+            module_list.append(nn.MaxPool2d(2, 2))
+
+        for _ in range(depth - 1):
+            module_list.append(nn.Conv2d(width, out_channels=width, kernel_size=3, padding='same'))
+            module_list.append(norm_layer(width))
             module_list.append(nn.ReLU())
 
-        module_list.append(
-            nn.Conv2d(n_filters, out_channels=n_filters, kernel_size=3, padding="same")
-        )
+        if tail:
+            module_list.append(nn.Conv2d(width, out_channels=width, kernel_size=3, padding='same'))
+        
         self.block = nn.Sequential(*module_list)
 
-        # self.bn2 = norm_layer(16)
-        self.avgpool = nn.AdaptiveAvgPool2d((2, 2))  # nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(n_filters * 4, n_filters * 2)
+        self.avgpool = nn.AdaptiveAvgPool2d((2, 2))
+        self.fc = nn.Identity()
+        
+        if num_classes is not None:
+            self.fc = nn.Linear(self.embed_dim, num_classes)
+        self.embed_dim:int = width * 4
+
+        self.reset_parameters()
+    
+    def reset_parameters(self, mode='fan_out', nonlinearity='relu', generator:torch.Generator=None):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                init.kaiming_normal_(m.weight, mode=mode, nonlinearity=nonlinearity, generator=generator)
 
     def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.avgpool(self.block(x))
+
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu1(x)
+
+        x = self.block(x)
+
+        x = self.avgpool(x)
         x = torch.flatten(x, 1)  # flatten all dimensions except batch
         x = self.fc(x)
         return x
 
 
-def conv_net(**kwargs):
-    r"""ResNet-18 model from
-    `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>`_
+def convnet(**kwargs):
+    r"""Simple ConvNet with constant width and specified depth.
     Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
+        **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
     """
     return ConvNet(**kwargs)
