@@ -163,6 +163,7 @@ cython_debug/
 wandb
 results
 
+scratchspace
 datasets/**
 !datasets/download_cifar10.py
 !datasets/download_mnist.py
