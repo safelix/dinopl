@@ -132,7 +132,7 @@ class Configuration(object):
                             help='Defines the model to train on.')
         model.add_argument('--enc_seed', type=int, default=None,
                             help='The seed for model creation, use numbers with good balance of 0 and 1 bits.')
-        model.add_argument('--enc_norm_layer', type=str, choices=['BatchNorm', 'InstanceNorm', 'GroupNorm8', 'LayerNorm'], default=None,
+        model.add_argument('--enc_norm_layer', type=str, choices=['BatchNorm', 'InstanceNorm', 'GroupNorm8', 'LayerNorm', 'Identity'], default=None,
                             help='Overwrite the normalization layer of the model if supported.')
         model.add_argument('--tiny_input', action='store_true', 
                             help='Adjust encoder for tiny inputs, e.g. resnet for cifar 10.')
@@ -166,7 +166,7 @@ class Configuration(object):
                             help='Teacher update frequency for prev_epoch mode.')
         dino.add_argument('--t_bn_mode', type=str, choices={'from_data', 'from_student'}, default='from_data',
                             help='Mode of teacher batchnorm updates: either from data stats or from student buffers.')
-        dino.add_argument('--t_eval', action='store_true',
+        dino.add_argument('--t_eval', type=U.bool_parser, default=False,
                             help='Run teacher in evaluation mode even on training data.')
         dino.add_argument('--t_cmom', type=str, default=str(ConstSched(0.9)), 
                             help='Teacher centering momentum of DINOHead (float or Schedule).')
@@ -296,6 +296,9 @@ def get_enc_norm_layer(config:Configuration) -> typing.Type[torch.nn.Module]:
 
     if config.enc_norm_layer == 'LayerNorm':
         return (lambda dim: torch.nn.GroupNorm(1, dim, affine=True))
+
+    if config.enc_norm_layer == 'Identity':
+        return (lambda dim: torch.nn.Identity())
 
     raise RuntimeError('Unkown normalization layer name.')
 

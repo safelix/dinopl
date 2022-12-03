@@ -6,6 +6,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 import torchvision
+import argparse
 
 ## Recursive shape for debugging multicrop
 def recshape(curr, recprefix='', prefix=''):
@@ -117,6 +118,19 @@ def modify_resnet_for_tiny_input(model:nn.Module, *, cifar_stem:bool=True, v1:bo
                 block.conv2.stride = (1, 1)
     return model
 
+
+def bool_parser(s):
+    '''
+    Parse boolean arguments from the command line.
+    '''
+    FALSY_STRINGS = {"off", "false", "0"}
+    TRUTHY_STRINGS = {"on", "true", "1"}
+    if s.lower() in FALSY_STRINGS:
+        return False
+    elif s.lower() in TRUTHY_STRINGS:
+        return True
+    else:
+        raise argparse.ArgumentTypeError("invalid value for a boolean flag")
 
 
 def pick_single_gpu() -> int:
