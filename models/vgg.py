@@ -5,7 +5,7 @@ from typing import Any, cast, Dict, List, Optional, Union
 
 import torch
 import torch.nn as nn
-from . import init
+from dinopl.modules import init
 
 __all__ = [
     "VGG",

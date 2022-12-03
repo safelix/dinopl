@@ -2,7 +2,7 @@ from typing import Optional, Type
 from math import floor
 import torch.nn as nn
 import torch
-from . import init
+from dinopl.modules import init
 
 __all__ = [
     "ConvNet",

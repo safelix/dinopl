@@ -8,7 +8,7 @@ from typing import Any, Callable, List, Optional, Type, Union
 import torch
 import torch.nn as nn
 from torch import Tensor
-from . import init
+from dinopl.modules import init
 
 __all__ = [
     "ResNet",
@@ -252,7 +252,7 @@ class ResNet(nn.Module):
             if isinstance(m, nn.Conv2d):
                 init.kaiming_normal_(m.weight, mode=mode, nonlinearity=nonlinearity, generator=generator)
                 
-            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+            elif isinstance(m, (nn.modules.batchnorm._NormBase, nn.GroupNorm, nn.LayerNorm)):
                 if m.weight is not None:
                     init.constant_(m.weight, 1)
                 if m.bias is not None:
