@@ -1,3 +1,4 @@
+from math import sqrt
 from time import time
 from typing import Dict, List, Tuple
 
@@ -9,6 +10,8 @@ from torch.optim import AdamW, Optimizer
 from torch.utils.data import DataLoader, Dataset
 from torchmetrics import Accuracy
 from tqdm import tqdm
+
+from .modules import init
 
 __all__ = [
     'LinearProbe', 
@@ -30,11 +33,17 @@ class LinearProbe():
         self.clf = None
         self.opt = None
 
-    def reset(self, dev):   
-        self.dev = dev         
+    def reset(self, dev, generator=None):   
+        self.dev = dev     
         self.clf = nn.Linear(self.embed_dim, self.n_classes, device=dev)
         self.opt = AdamW(self.clf.parameters())
         self.acc = Accuracy().to(device=dev)
+
+        #m.reset_parameters() is equal to:
+        bound = 1 / sqrt(self.clf.in_features)
+        init.uniform_(self.clf.weight, -bound, bound, generator=generator)
+        if self.clf.bias is not None:
+            init.uniform_(self.clf.bias, -bound, bound, generator=generator)
 
     def load_data(self, dl:DataLoader):
         loading_pbar = tqdm(dl, leave=False)
@@ -93,9 +102,9 @@ class LinearProber(pl.Callback):
             probe_every:int, 
             probing_epochs:int,
             probes:Dict[str, LinearProbe],
-            train_set:Dataset, 
-            valid_set:Dataset,
-            dl_args:Dict,
+            train_dl:DataLoader, 
+            valid_dl:DataLoader,
+            seed = None
             ):
         super().__init__()
 
@@ -103,21 +112,23 @@ class LinearProber(pl.Callback):
         self.probing_epochs = probing_epochs
         self.probes = probes
 
-        self.train_set =  train_set
-        self.valid_set =  valid_set
-
-        self.dl_args = dl_args
-        self.train_dl = None
-        self.valid_dl = None
+        self.train_dl = train_dl
+        self.valid_dl = valid_dl
+        self.seed = seed
 
     def probe(self, device):
-        # instanciate dataloader if does not exist
-        self.train_dl = self.train_dl or DataLoader(dataset=self.train_set, shuffle=True, **self.dl_args)
-        self.valid_dl = self.valid_dl or DataLoader(dataset=self.valid_set, **self.dl_args)
 
         out = {}
         for id, probe in self.probes.items():
-            probe.reset(device)
+  
+            # prepare dataloader: everything is random if seed is None
+            generator = torch.Generator(device=device)
+            if self.seed is not None:
+                generator.manual_seed(self.seed)
+                if self.train_dl.generator is not None:
+                    self.train_dl.generator.manual_seed(self.seed)
+
+            probe.reset(device, generator)
 
             print(f'\nStarting {type(probe).__name__} of {id}..', end='')
 

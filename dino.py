@@ -3,22 +3,24 @@ import os
 import time
 
 import pytorch_lightning as pl
-from pytorch_lightning.loggers import WandbLogger
+import torch
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.loggers import WandbLogger
 from torch.utils.data import DataLoader
+from torchinfo import summary
 from torchvision import transforms
 
 from configuration import CONSTANTS as C
 from configuration import (Configuration, create_dataset, create_mc_spec,
                            create_optimizer, get_encoder)
 from dinopl import *
-from dinopl.augmentation import MultiCrop, LabelNoiseWrapper, LogitNoiseWrapper
+from dinopl import utils as U
+from dinopl.augmentation import LabelNoiseWrapper, LogitNoiseWrapper, MultiCrop
 from dinopl.probing import LinearProbe, LinearProber
 from dinopl.scheduling import Schedule
-from dinopl.tracking import (FeatureTracker, HParamTracker, MetricsTracker,
-                             ParamTracker, PerCropEntropyTracker, FeatureSaver, SupervisedAccuracyTracker)
-from dinopl import utils as U
-from torchinfo import summary
+from dinopl.tracking import (FeatureSaver, FeatureTracker, HParamTracker,
+                             MetricsTracker, ParamTracker,
+                             PerCropEntropyTracker, SupervisedAccuracyTracker)
 
 
 def main(config:Configuration):
@@ -63,8 +65,8 @@ def main(config:Configuration):
     DSet = create_dataset(config)
     dino_train_set = DSet(root=C.DATA_DIR, train=True, transform=mc)
     dino_valid_set = DSet(root=C.DATA_DIR, train=False, transform=mc)
-    eval_train_set = DSet(root=C.DATA_DIR, train=True, transform=eval_trfm)
-    eval_valid_set = DSet(root=C.DATA_DIR, train=False, transform=eval_trfm)
+    probe_train_set = DSet(root=C.DATA_DIR, train=True, transform=eval_trfm)
+    probe_valid_set = DSet(root=C.DATA_DIR, train=False, transform=eval_trfm)
 
     if config.label_noise_ratio > 0 and config.logit_noise_temp > 0:
         raise RuntimeError('Only either label noise or logit noise can be applied.')
@@ -79,6 +81,15 @@ def main(config:Configuration):
     
     print(f'Init dino train set: {dino_train_set}')
     print(f'Init dino valid set: {dino_valid_set}')
+
+    dl_args = dict(
+        batch_size = config.bs_train,
+        num_workers = config.n_workers,
+        pin_memory = False if config.force_cpu else True ) 
+    dino_train_dl = DataLoader(dataset=dino_train_set, shuffle = True, **dl_args)
+    dino_valid_dl = DataLoader(dataset=dino_valid_set, **dl_args)
+    probe_train_dl = DataLoader(dataset=probe_train_set, shuffle = True, **dl_args)
+    probe_valid_dl = DataLoader(dataset=probe_valid_set, **dl_args)
 
     # Model Setup.
     enc = get_encoder(config)()
@@ -161,7 +172,7 @@ def main(config:Configuration):
     
     if len(config.save_features) > 0:
         config.save_features = ['embeddings', 'projections', 'logits'] if 'all' in config.save_features else config.save_features
-        callbacks += [FeatureSaver(eval_valid_set, n_imgs=64, features=config.save_features, dir=config.logdir)]
+        callbacks += [FeatureSaver(probe_valid_set, n_imgs=64, features=config.save_features, dir=config.logdir)]
 
     if config.probe_every > 0 and config.probing_epochs > 0:
         s_probe = LinearProbe(encoder=dino.student.enc,
@@ -174,12 +185,9 @@ def main(config:Configuration):
                         probe_every = config.probe_every,
                         probing_epochs = config.probing_epochs,
                         probes = dict(student=s_probe, teacher=t_probe),
-                        train_set = eval_train_set,
-                        valid_set = eval_valid_set,
-                        dl_args=dict( # arguments for dataloader
-                            batch_size = config.bs_eval,
-                            num_workers = config.n_workers,
-                            pin_memory = False if config.force_cpu else True)
+                        train_dl = probe_train_dl,
+                        valid_dl = probe_valid_dl,
+                        seed=config.prober_seed
                     )]
         wandb_logger.experiment.define_metric('probe/student', summary='max')
         wandb_logger.experiment.define_metric('probe/teacher', summary='max')
@@ -219,22 +227,15 @@ def main(config:Configuration):
         #limit_val_batches=2,
         )
 
-    dl_args = dict(
-        batch_size = config.bs_train,
-        num_workers = config.n_workers,
-        pin_memory = False if config.force_cpu else True ) 
-    self_train_dl = DataLoader(dataset=dino_train_set, shuffle = True, **dl_args)
-    self_valid_dl = DataLoader(dataset=dino_valid_set, **dl_args)
-
     # log updated config to wandb before training
     wandb_logger.experiment.config.update(config, allow_val_change=True)
 
     # move dino to selected GPU, validate, then fit
     dino = dino if config.force_cpu else dino.to(trainer.device_ids[0])
-    trainer.validate(model=dino, dataloaders=self_valid_dl)
+    trainer.validate(model=dino, dataloaders=dino_valid_dl)
     trainer.fit(model=dino, 
-                train_dataloaders=self_train_dl,
-                val_dataloaders=self_valid_dl)
+                train_dataloaders=dino_train_dl,
+                val_dataloaders=dino_valid_dl)
 
 
 if __name__ == '__main__':
