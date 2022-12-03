@@ -2,10 +2,10 @@ import torch
 from torch import nn
 
 __all__ = [
-    "flatten"
+    "Flatten"
 ]
 
-class flatten(nn.Module):
+class Flatten(nn.Module):
     def __init__(self, n_pixels, n_channels) -> None:
         super().__init__()
         self.embed_dim = n_pixels * n_channels

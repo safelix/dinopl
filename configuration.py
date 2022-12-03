@@ -300,8 +300,8 @@ def get_encoder(config:Configuration) -> typing.Type[models.Encoder]:
     choose from via the command line.
     '''
 
-    if config.enc == 'flatten':
-        return (lambda : models.flatten(n_pixels=config.ds_pixels, n_channels=3))
+    if config.enc == 'Flatten':
+        return (lambda : models.Flatten(n_pixels=config.ds_pixels, n_channels=3))
 
     if config.enc in models.__dict__.keys():
         # prepare keyword arguments
