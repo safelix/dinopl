@@ -15,8 +15,10 @@ import pprint
 import warnings
 
 import torch
-import torchvision.models
+import models
 from torchvision.datasets import MNIST, CIFAR10, VisionDataset
+import pyparsing
+import typing
 
 
 from dinopl.scheduling import *
@@ -126,8 +128,10 @@ class Configuration(object):
 
         # Model.
         model = parser.add_argument_group('Model')
-        model.add_argument('--enc', type=str, default='resnet18', 
+        model.add_argument('--enc', type=str, choices=models.__all__, default='resnet18', 
                             help='Defines the model to train on.')
+        model.add_argument('--enc_norm_layer', type=str, choices=['BatchNorm', 'InstanceNorm', 'GroupNorm8', 'LayerNorm'], default=None,
+                            help='Overwrite the normalization layer of the model if supported.')
         model.add_argument('--tiny_input', action='store_true', 
                             help='Adjust encoder for tiny inputs, e.g. resnet for cifar 10.')
         model.add_argument('--mlp_act', type=str, choices={'GELU', 'ReLU'}, default='GELU',
@@ -273,30 +277,42 @@ class Configuration(object):
             raise RuntimeError(f'Cannot update configuration with new keys {new_keys}.')
         self.__dict__.update(adict)
 
+def get_enc_norm_layer(config:Configuration) -> typing.Type[torch.nn.Module]:
 
-def create_encoder(config:Configuration):
+    if config.enc_norm_layer == 'BatchNorm':
+        return (lambda dim: torch.nn.BatchNorm2d(dim, affine=True, track_running_stats=True))
+
+    if config.enc_norm_layer == 'InstanceNorm':
+        return (lambda dim: torch.nn.GroupNorm(dim, dim, affine=True))
+
+    if config.enc_norm_layer == 'GroupNorm8':
+        return (lambda dim: torch.nn.GroupNorm(dim//8, dim, affine=True))
+
+    if config.enc_norm_layer == 'LayerNorm':
+        return (lambda dim: torch.nn.GroupNorm(1, dim, affine=True))
+
+    raise RuntimeError('Unkown normalization layer name.')
+
+
+def get_encoder(config:Configuration) -> typing.Type[models.Encoder]:
     '''
     This is a helper function that can be useful if you have several model definitions that you want to
     choose from via the command line.
     '''
 
     if config.enc == 'flatten':
-        enc = torch.nn.Flatten(start_dim=1, end_dim=-1)
-        enc.embed_dim = 3 * config.ds_pixels
-        config.embed_dim = 3 * config.ds_pixels
-        return enc
+        return (lambda : models.flatten(n_pixels=config.ds_pixels, n_channels=3))
 
-    if config.enc in torchvision.models.__dict__.keys():
-        enc = torchvision.models.__dict__[config.enc](weights=None)
-        enc.embed_dim = enc.fc.in_features
-        config.embed_dim = enc.fc.in_features
-        enc.fc = torch.nn.Identity()
+    if config.enc in models.__dict__.keys():
+        # prepare keyword arguments
+        kwargs = dict(num_classes=None)
+        if 'resnet' in config.enc.lower():
+            kwargs['tiny_input'] = getattr(config, 'tiny_input', False)
 
-        # adjust for tiny input, e.g. resnet for cifar10
-        if getattr(config, 'tiny_input', False) and isinstance(enc, torchvision.models.ResNet):
-            return U.modify_resnet_for_tiny_input(enc)
+        if getattr(config, 'enc_norm_layer', None) is not None:
+            kwargs['norm_layer'] = get_enc_norm_layer(config)
 
-        return enc
+        return (lambda : models.__dict__[config.enc](**kwargs))
 
     raise RuntimeError('Unkown model name.')
 

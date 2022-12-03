@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 
 from configuration import CONSTANTS as C, create_dataset, create_mc_spec
-from configuration import Configuration, create_encoder, create_optimizer
+from configuration import Configuration, get_encoder, create_optimizer
 from dinopl import *
 from dinopl.augmentation import MultiCrop, LabelNoiseWrapper, LogitNoiseWrapper
 from dinopl.probing import LinearProbe, LinearProber
@@ -76,7 +76,8 @@ def main(config:Configuration):
     print(f'Init dino valid set: {dino_valid_set}')
 
     # Model Setup.
-    enc = create_encoder(config)
+    enc = get_encoder(config)()
+    config.embed_dim = enc.embed_dim
     head = DINOHead(config.embed_dim, config.out_dim, 
             hidden_dims=config.hid_dims, 
             l2bot_dim=config.l2bot_dim, 
@@ -114,7 +115,7 @@ def main(config:Configuration):
     elif config.s_init == 't_ckpt':
         teacher = copy.deepcopy(dino_ckpt.teacher)     # make teacher from teacher checkpoint
     elif config.t_init == 'random':     
-        t_enc = create_encoder(config)  # initialize teacher with random parameters
+        t_enc = get_encoder(config)  # initialize teacher with random parameters
         t_head = DINOHead(config.embed_dim, config.out_dim, 
             hidden_dims=config.hid_dims, 
             l2bot_dim=config.l2bot_dim, 

@@ -1,9 +1,13 @@
 from typing import Optional, Type
-import torch.nn as nn
-import torch.nn.functional as F
-import torch
 from math import floor
+import torch.nn as nn
+import torch
 from . import init
+
+__all__ = [
+    "ConvNet",
+    "convnet_16_2"
+]
 
 
 class ConvNet(nn.Module):
@@ -64,9 +68,9 @@ class ConvNet(nn.Module):
         return x
 
 
-def convnet(**kwargs):
-    r"""Simple ConvNet with constant width and specified depth.
+def convnet_16_2(**kwargs):
+    r"""Simple ConvNet with constant width 16 and depth 2.
     Args:
         **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
     """
-    return ConvNet(**kwargs)
+    return ConvNet(width=16, depth=2, **kwargs)

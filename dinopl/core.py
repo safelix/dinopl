@@ -1,6 +1,6 @@
 from collections import OrderedDict
 import math
-from typing import Any, Dict, List, Type
+from typing import Any, Dict, List, Type, Union
 
 import pytorch_lightning as pl
 import torch
@@ -8,6 +8,7 @@ import torch.optim as optim
 from torch import nn
 from torch.nn import functional as F
 from torchmetrics import Accuracy
+from models import Encoder
 
 from . import utils as U
 from .scheduling import *
@@ -79,7 +80,7 @@ class DINOHead(nn.Module):
 
 class DINOModel(nn.Module):
     def __init__(self,
-        enc: nn.Module,
+        enc: Union[Encoder, nn.Module],
         head: DINOHead,
         ):
         super().__init__()
@@ -120,7 +121,7 @@ class DINOTeacherUpdater(pl.Callback):
             raise RuntimeError('Unkown teacher update mode.')
         self.update_bn = update_bn
 
-    def ema(self, _:pl.Trainer, dino: pl.LightningModule, *args):
+    def ema(self, _:pl.Trainer, dino: 'DINO', *args):
         for p_s, p_t in zip(dino.student.parameters(), dino.teacher.parameters()):
             p_t.data = self.mom * p_t.data + (1 - self.mom) * p_s.data
 
@@ -131,7 +132,7 @@ class DINOTeacherUpdater(pl.Callback):
                 m_t.running_mean.data = self.mom * m_t.running_mean.data + (1 - self.mom) * m_s.running_mean.data
                 m_t.running_var.data = self.mom * m_t.running_var.data + (1 - self.mom) * m_s.running_var.data
 
-    def copy(self, _:pl.Trainer, dino: pl.LightningModule, *args):
+    def copy(self, _:pl.Trainer, dino: 'DINO', *args):
         if not (dino.current_epoch % self.update_every == self.update_every - 1):
             return # skip if not update_every
 
