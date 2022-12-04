@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 from torchvision.datasets import CIFAR10
 from tqdm import tqdm
-from models import resnet, nf_resnet, convnet, norm, vgg
+from models import resnet, convnet, vgg
 from torchvision import models as tvm
 
 
@@ -137,7 +137,7 @@ teacher.eval(), student.eval()
 logs = pd.DataFrame()
 print(f'Starting Training on {device}')
 for epoch in range(n_epochs):
-    probe = prober.probe(device, shuffle=False) # perform linear probe
+    probe = prober.probe(device) # perform linear probe
     logs = pd.concat([logs, pd.DataFrame(probe, index=[0])])
 
     progress_bar = tqdm(train_loader, desc=f'Epoch {epoch}')
