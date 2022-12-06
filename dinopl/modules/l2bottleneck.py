@@ -37,11 +37,14 @@ class L2Bottleneck(nn.Module):
             mid_dim = out_dim # overwrite mid_dim if lin2 doesn't exist
         # TODO: Warn if both are not defined? store dimensions for parent modules?
 
+
+        self.lin1, self.wn1 = None, None
         if 'l' in self.cfg[1]: # if lin1 exists
             self.wn1 = LpNormalize(p=2, dim=-1) if self.cfg[0] == 'wn' else nn.Identity()
             self.lin1 = nn.Linear(in_dim, mid_dim, bias='b' in self.cfg[1])
         self.fn1 = LpNormalize(p=2, dim=-1) if self.cfg[2] == 'fn' else nn.Identity()
 
+        self.lin2, self.wn2 = None, None
         if 'l' in self.cfg[4]: # if lin2 exists
             self.wn2 = LpNormalize(p=2, dim=-1) if self.cfg[3] == 'wn' else nn.Identity()
             self.lin2 = nn.Linear(mid_dim, out_dim, bias='b' in self.cfg[4]) if 'l' in self.cfg[4] else None
