@@ -53,7 +53,7 @@ class DINOHead(nn.Module):
         self.mlp.reset_parameters(method='trunc_normal', generator=generator)
 
         if isinstance(self.last_layer, L2Bottleneck):
-            self.last_layer.reset_parameters('default', generator=generator)
+            self.last_layer.reset_parameters(generator=generator)
 
         if isinstance(self.last_layer, nn.Linear):
             #m.reset_parameters() is equal to:
@@ -386,8 +386,6 @@ class DINO(pl.LightningModule):
         opt.zero_grad(set_to_none=True)
 
     def on_before_optimizer_step(self, *args):
-        if isinstance(self.student.head.last_layer, L2Bottleneck):
-            wn = self.student.head.last_layer.lin2
-            if self.current_epoch < self.wn_freeze_epochs:
-                for p in wn.parameters():
-                    p.grad = None
+        if self.current_epoch < self.wn_freeze_epochs:
+            if getattr(self.student.head.last_layer, 'lin2') is not None:
+                self.student.head.last_layer.lin2.zero_grad(True)

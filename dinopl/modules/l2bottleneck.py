@@ -49,20 +49,22 @@ class L2Bottleneck(nn.Module):
 
         self.reset_parameters()
     
-    def reset_parameters(self, method='default', generator:torch.Generator=None):
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                if method == 'default':
-                    #m.reset_parameters() is equal to:
-                    bound = 1 / sqrt(m.in_features)
-                    init.uniform_(m.weight, -bound, bound, generator=generator)
-                    if m.bias is not None:
-                        init.uniform_(m.bias, -bound, bound, generator=generator)
+    def reset_parameters(self, generator:torch.Generator=None):
+        if self.lin1 is not None:
+            m = self.lin1
+            init.trunc_normal_(m.weight, std=.02, generator=generator)
+            if m.bias is not None:
+                init.constant_(m.bias, 0)
 
-                if method == 'trunc_normal':
-                    init.trunc_normal_(m.weight, std=.02, generator=generator)
-                    if m.bias is not None:
-                        init.constant_(m.bias, 0)
+        if self.lin2 is not None:
+            m = self.lin2
+            #m.reset_parameters() is equal to:
+            bound = 1 / sqrt(m.in_features)
+            #init.uniform_(m.weight, -bound, bound, generator=generator)
+            init.trunc_normal_(m.weight, std=.02, generator=generator)
+            if m.bias is not None:
+                #init.uniform_(m.bias, -bound, bound, generator=generator)
+                init.constant_(m.bias, 0)
 
 
     def forward(self, x):
@@ -88,7 +90,7 @@ class LpNormalize(nn.Module):
         self.dim = dim
 
     def forward(self, x):
-        return F.normalize(x, p=self.p, dim=-1)
+        return F.normalize(x, p=self.p, dim=self.dim)
 
     def extra_repr(self):
         return f'p={self.p}, dim={self.dim}'

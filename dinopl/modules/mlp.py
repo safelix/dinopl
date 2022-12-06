@@ -38,7 +38,7 @@ class MLP(nn.Sequential):
         super().__init__(layers)
         self.reset_parameters()
     
-    def reset_parameters(self, method='default', generator:torch.Generator=None):
+    def reset_parameters(self, method='trunc_normal', generator:torch.Generator=None):
         for m in self.modules():
             if isinstance(m, nn.Linear):
                 if method == 'default':
