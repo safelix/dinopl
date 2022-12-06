@@ -41,13 +41,13 @@ class L2Bottleneck(nn.Module):
         self.lin1, self.wn1 = None, None
         if 'l' in self.cfg[1]: # if lin1 exists
             self.wn1 = LpNormalize(p=2, dim=-1) if self.cfg[0] == 'wn' else nn.Identity()
-            self.lin1 = nn.Linear(in_dim, mid_dim, bias='b' in self.cfg[1])
+            self.lin1 = Linear(in_dim, mid_dim, bias='b' in self.cfg[1])
         self.fn1 = LpNormalize(p=2, dim=-1) if self.cfg[2] == 'fn' else nn.Identity()
 
         self.lin2, self.wn2 = None, None
         if 'l' in self.cfg[4]: # if lin2 exists
             self.wn2 = LpNormalize(p=2, dim=-1) if self.cfg[3] == 'wn' else nn.Identity()
-            self.lin2 = nn.Linear(mid_dim, out_dim, bias='b' in self.cfg[4]) if 'l' in self.cfg[4] else None
+            self.lin2 = Linear(mid_dim, out_dim, bias='b' in self.cfg[4])
         self.fn2 = LpNormalize(p=2, dim=-1) if self.cfg[5] == 'fn' else nn.Identity()
 
         self.reset_parameters()
@@ -74,17 +74,22 @@ class L2Bottleneck(nn.Module):
         # transform to bottleneck
         if self.lin1 is not None:
             w1 = self.wn1(self.lin1.weight) # prepare weight normalization
-            x = F.linear(input=x, weight=w1, bias=self.lin1.bias) # compute linear map
+            x = self.lin1(input=x, weight=w1, bias=self.lin1.bias) # compute linear map
         x = self.fn1(x)     # compute feature normalization
 
         # transform to output
         if self.lin2 is not None:
             w2 = self.wn2(self.lin2.weight)    # prepare weight normalization
-            x = F.linear(input=x, weight=w2, bias=self.lin2.bias) # compute linear map
+            x = self.lin2(input=x, weight=w2, bias=self.lin2.bias) # compute linear map
         x = self.fn2(x)     # compute feature normalization
 
         return x
 
+class Linear(nn.Linear):
+    def forward(self, input: torch.Tensor, weight:torch.Tensor=None, bias:torch.Tensor=None) -> torch.Tensor:
+        weight = self.weight if weight is None else weight
+        bias = self.bias if bias is None else bias
+        return F.linear(input, self.weight, self.bias)
 
 class LpNormalize(nn.Module):
     def __init__(self, p:float = 2, dim:int = -1):
