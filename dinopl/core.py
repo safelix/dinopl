@@ -334,6 +334,7 @@ class DINO(pl.LightningModule):
         # [n_crops, n_batches, n_channels, height, width]
         # -> [n_crops, n_batches, out_dim]
 
+        assert(self.student.training)
         if self.t_eval: # set teacher in evaluation mode
             self.teacher.eval() 
             

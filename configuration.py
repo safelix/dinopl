@@ -16,7 +16,7 @@ import warnings
 
 import torch
 import models
-from torchvision.datasets import MNIST, CIFAR10, VisionDataset
+from datasets import MNIST, CIFAR10
 import pyparsing
 import typing
 
@@ -345,7 +345,7 @@ def create_optimizer(config:Configuration) -> torch.optim.Optimizer:
     raise RuntimeError('Unkown optimizer name.')
 
 
-def create_dataset(config:Configuration) -> VisionDataset:
+def get_dataset(config:Configuration) -> typing.Union[MNIST, CIFAR10]:
     '''
     This is a helper function that can be useful if you have several dataset definitions that you want to
     choose from via the command line.
@@ -353,14 +353,14 @@ def create_dataset(config:Configuration) -> VisionDataset:
     config.dataset = config.dataset.lower()
 
     if config.dataset == 'mnist':
-        config.ds_pixels = 784
-        config.ds_classes = 10
-        config.n_classes = config.ds_classes if config.n_classes is None else config.n_classes
+        config.ds_pixels = MNIST.ds_pixels
+        config.ds_classes = MNIST.ds_pixels
+        config.n_classes = MNIST.ds_classes if config.n_classes is None else config.n_classes
         return MNIST
 
     if config.dataset == 'cifar10':
-        config.ds_pixels = 1024
-        config.ds_classes = 10
+        config.ds_pixels = CIFAR10.ds_pixels
+        config.ds_classes = CIFAR10.ds_classes
         config.n_classes = config.ds_classes if config.n_classes is None else config.n_classes
         return CIFAR10
 

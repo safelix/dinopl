@@ -11,7 +11,7 @@ from torchinfo import summary
 from torchvision import transforms
 
 from configuration import CONSTANTS as C
-from configuration import (Configuration, create_dataset, create_mc_spec,
+from configuration import (Configuration, get_dataset, create_mc_spec,
                            create_optimizer, get_encoder)
 from dinopl import *
 from dinopl import utils as U
@@ -32,7 +32,7 @@ def main(config:Configuration):
 
     if config.enc_seed is None:
         config.enc_seed = int(time.time())
-    enc_generator = torch.Generator().manual_seed(config.enc_seed)
+    generator = torch.Generator().manual_seed(config.enc_seed)
 
     # Logger
     wandb_logger = WandbLogger(
@@ -51,9 +51,10 @@ def main(config:Configuration):
     config.mc_spec = create_mc_spec(config)
 
     # Standard Augmentations, always work on RGB
+    DSet = get_dataset(config)
     self_trfm = transforms.Compose([ # self-training
-                    transforms.Lambda(lambda img: img.convert('RGB')),
-                    transforms.ToTensor()
+                    transforms.Lambda(lambda img: img.convert('RGB')), transforms.ToTensor(),
+                    transforms.Normalize(DSet.mean, DSet.std),
                 ])
     eval_trfm = transforms.Compose([ # evaluation
                     transforms.Resize(size=config.mc_spec[0]['out_size']),
@@ -62,7 +63,6 @@ def main(config:Configuration):
     mc = MultiCrop(config.mc_spec, per_crop_transform=self_trfm)
           
     # Data Setup.
-    DSet = create_dataset(config)
     dino_train_set = DSet(root=C.DATA_DIR, train=True, transform=mc)
     dino_valid_set = DSet(root=C.DATA_DIR, train=False, transform=mc)
     probe_train_set = DSet(root=C.DATA_DIR, train=True, transform=eval_trfm)
@@ -85,10 +85,10 @@ def main(config:Configuration):
     dl_args = dict(
         batch_size = config.bs_train,
         num_workers = config.n_workers,
-        pin_memory = False if config.force_cpu else True ) 
-    dino_train_dl = DataLoader(dataset=dino_train_set, shuffle = True, **dl_args)
+        pin_memory = False if config.force_cpu else True) 
+    dino_train_dl = DataLoader(dataset=dino_train_set, shuffle=True, generator=generator, **dl_args, )
     dino_valid_dl = DataLoader(dataset=dino_valid_set, **dl_args)
-    probe_train_dl = DataLoader(dataset=probe_train_set, shuffle = True, **dl_args)
+    probe_train_dl = DataLoader(dataset=probe_train_set, shuffle=True, generator=torch.Generator(), **dl_args)
     probe_valid_dl = DataLoader(dataset=probe_valid_set, **dl_args)
 
     # Model Setup.
@@ -101,7 +101,7 @@ def main(config:Configuration):
             use_bn=config.mlp_bn,
             act_fn=config.mlp_act)
     model = DINOModel(enc, head)
-    model.reset_parameters(generator=enc_generator)
+    model.reset_parameters(generator=generator)
 
     print(f'Created encoder and head:')
     summary(model, depth=4, device='cpu',
