@@ -165,5 +165,6 @@ results
 
 scratchspace
 datasets/**
+!__init__.py
 !datasets/cifar.py
 !datasets/mnist.py
