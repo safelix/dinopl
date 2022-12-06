@@ -6,6 +6,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 import torchvision
+import argparse
 
 ## Recursive shape for debugging multicrop
 def recshape(curr, recprefix='', prefix=''):
@@ -118,66 +119,18 @@ def modify_resnet_for_tiny_input(model:nn.Module, *, cifar_stem:bool=True, v1:bo
     return model
 
 
-## MLP Utilities
-def mlp_layer(in_dim:int, out_dim:int, act_fn:str = 'GELU', use_bn:bool = False):
-    sublayers = OrderedDict()
-    sublayers['lin'] = nn.Linear(in_dim, out_dim)
-
-    if use_bn:
-        sublayers['bn'] = nn.BatchNorm1d(out_dim)
-    
-    if act_fn.lower() == 'gelu':
-        sublayers['act'] = nn.GELU()
-    elif act_fn.lower() == 'relu':
-        sublayers['act'] = nn.ReLU()
+def bool_parser(s):
+    '''
+    Parse boolean arguments from the command line.
+    '''
+    FALSY_STRINGS = {"off", "false", "0"}
+    TRUTHY_STRINGS = {"on", "true", "1"}
+    if s.lower() in FALSY_STRINGS:
+        return False
+    elif s.lower() in TRUTHY_STRINGS:
+        return True
     else:
-        raise RuntimeError('Unkown activation function.')
-    
-    return nn.Sequential(sublayers)
-
-class L2Bottleneck(nn.Sequential):
-    def __init__(self, in_dim:int, mid_dim:int, out_dim:int):
-        sublayers = OrderedDict()
-        sublayers['lin'] = nn.Linear(in_dim, mid_dim)
-        sublayers['featurenorm'] = LpNormalizeFeatures(p=2, dim=-1)
-        sublayers['weightnorm'] = WeightNormalizedLinear(mid_dim, out_dim, bias=False, norm=1)
-        super().__init__(sublayers) 
-
-class LpNormalizeFeatures(nn.Module):
-    def __init__(self, p:float = 2, dim:int = -1):
-        super().__init__()
-        self.p = p
-        self.dim = dim
-
-    def forward(self, x):
-        return F.normalize(x, p=self.p, dim=-1)
-
-    def extra_repr(self):
-        return f'p={self.p}, dim={self.dim}' 
-
-class WeightNormalizedLinear(nn.Linear):
-    def __init__(self, in_features:int, out_features:int, bias:bool = True, norm:Optional[float] = None):
-        super().__init__(in_features, out_features, bias)
-
-        # attach weight norm like in vision_transformer.py
-        nn.utils.weight_norm(self)
-        if norm:
-            self.weight_g.data.fill_(norm)
-            self.weight_g.requires_grad = False
-            self.weight_g.requires_grad_ = (lambda x: x)
-
-        # This doesn't work with deepcopy, see:
-        # https://github.com/pytorch/pytorch/issues/28594 and
-        # https://discuss.pytorch.org/t/when-can-you-not-deepcopy-a-model/153226/2
-        
-        # Workaround 1: detach the initiallized weight.. forward_pre_hook will reattach it again
-        self.weight = self.weight_v.detach()
-
-        # Workaround 2:
-        #self.weight_g = nn.Parameter(torch.full((self.weight.shape[0],1), 1.0))
-        #self.weight_g.requires_grad = False
-        #self.weight.data = torch._weight_norm(self.weight, self.weight_g, 0)
-        # _weight_norm() must be called manually before forward
+        raise argparse.ArgumentTypeError("invalid value for a boolean flag")
 
 
 def pick_single_gpu() -> int:

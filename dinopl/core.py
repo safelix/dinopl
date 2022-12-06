@@ -1,15 +1,16 @@
-from collections import OrderedDict
 import math
-from typing import Any, Dict, List, Type
+from typing import Any, Dict, List, Type, Union
 
 import pytorch_lightning as pl
 import torch
 import torch.optim as optim
 from torch import nn
 from torch.nn import functional as F
-from torchmetrics import Accuracy
+
+from models import Encoder
 
 from . import utils as U
+from .modules import L2Bottleneck, MLP, init
 from .scheduling import *
 
 __all__ = [
@@ -25,6 +26,7 @@ class DINOHead(nn.Module):
         out_dim:int,
         hidden_dims:List[int] = [2048, 2048],
         l2bot_dim:int = 256,
+        l2bot_cfg:str = '-/lb/fn/wn/l/-',
         use_bn:bool = False, 
         act_fn:str = 'GELU',
         temp:float = 1.0,     
@@ -39,33 +41,33 @@ class DINOHead(nn.Module):
         self.register_buffer('cent', torch.full((out_dim,), cent))
 
         # multi-layer perceptron classification head
-        layers, dims = OrderedDict(), [embed_dim] + hidden_dims
-        for idx, (i, o) in enumerate(zip(dims[:-1], dims[1:])):
-            layers[f'layer{idx}'] = U.mlp_layer(i, o, act_fn, use_bn)
-        
+        dims = [embed_dim] + hidden_dims
+        self.mlp = MLP(dims, act_fn=act_fn, use_bn=use_bn)  # build mlp
+
         if l2bot_dim is None or l2bot_dim <= 0:
-            layers['output'] = nn.Linear(dims[-1], out_dim)
+            self.last_layer = nn.Linear(dims[-1], out_dim)
         else:
-            layers['bottleneck'] = U.L2Bottleneck(dims[-1], l2bot_dim, out_dim)
+            self.last_layer = L2Bottleneck(dims[-1], l2bot_dim, out_dim, l2bot_cfg)
 
-        self.mlp = nn.Sequential(layers)  # build mlp
+    def reset_parameters(self, generator:torch.Generator=None):
+        self.mlp.reset_parameters(method='trunc_normal', generator=generator)
 
-        # Initallization with trunc_normal()
-        self.mlp.apply(self._init_weights)
+        if isinstance(self.last_layer, L2Bottleneck):
+            self.last_layer.reset_parameters(generator=generator)
 
-    def _init_weights(self, m):
-        if isinstance(m, U.WeightNormalizedLinear):
-            return # explicitely do not apply to weight normalized
-        if isinstance(m, nn.Linear):
-            nn.init.trunc_normal_(m.weight, std=.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
+        if isinstance(self.last_layer, nn.Linear):
+            #m.reset_parameters() is equal to:
+            bound = 1 / math.sqrt(self.last_layer.in_features)
+            init.uniform_(self.last_layer.weight, -bound, bound, generator=generator)
+            if self.last_layer.bias is not None:
+                init.uniform_(self.last_layer.bias, -bound, bound, generator=generator)
+
 
     def forward(self, x:torch.Tensor, update_cent:bool=False):
         # [n_crops, n_batches, embed_dim]
         # -> [n_crops, n_batches, out_dim]
 
-        projections = self.mlp(x)
+        projections = self.last_layer(self.mlp(x))
         batch_cent = torch.mean(projections, dim=[0,1]).detach()
         logits = (projections - self.cent) / self.temp
 
@@ -79,7 +81,7 @@ class DINOHead(nn.Module):
 
 class DINOModel(nn.Module):
     def __init__(self,
-        enc: nn.Module,
+        enc: Union[Encoder, nn.Module],
         head: DINOHead,
         ):
         super().__init__()
@@ -88,6 +90,10 @@ class DINOModel(nn.Module):
         self.head = head
         self.out_dim = head.out_dim
         self.crops : Dict[str, List] = None
+
+    def reset_parameters(self, generator:torch.Generator=None):
+        self.enc.reset_parameters(generator=generator)
+        self.head.reset_parameters(generator=generator)
 
     def forward(self, crop_batches, **kwargs):
         # [n_crops, n_batches, n_channels, height, width]
@@ -120,7 +126,7 @@ class DINOTeacherUpdater(pl.Callback):
             raise RuntimeError('Unkown teacher update mode.')
         self.update_bn = update_bn
 
-    def ema(self, _:pl.Trainer, dino: pl.LightningModule, *args):
+    def ema(self, _:pl.Trainer, dino: 'DINO', *args):
         for p_s, p_t in zip(dino.student.parameters(), dino.teacher.parameters()):
             p_t.data = self.mom * p_t.data + (1 - self.mom) * p_s.data
 
@@ -131,7 +137,7 @@ class DINOTeacherUpdater(pl.Callback):
                 m_t.running_mean.data = self.mom * m_t.running_mean.data + (1 - self.mom) * m_s.running_mean.data
                 m_t.running_var.data = self.mom * m_t.running_var.data + (1 - self.mom) * m_s.running_var.data
 
-    def copy(self, _:pl.Trainer, dino: pl.LightningModule, *args):
+    def copy(self, _:pl.Trainer, dino: 'DINO', *args):
         if not (dino.current_epoch % self.update_every == self.update_every - 1):
             return # skip if not update_every
 
@@ -187,7 +193,7 @@ class DINO(pl.LightningModule):
         if t_bn_mode not in ['from_data', 'from_student']:
             raise RuntimeError(f'Teacher batchnorm update mode \'{t_bn_mode}\' not supported.')
         
-        if (t_bn_mode=='from_data' and t_eval==True) or (t_bn_mode=='from_student' and t_eval==False):
+        if (t_bn_mode=='from_student' and t_eval==False): # or (t_bn_mode=='from_data' and t_eval==True) :
             raise RuntimeError(f'Invalid configuration: t_bn_mode==\'{t_bn_mode}\' and t_eval=={t_eval}')
 
         if s_mode not in ['supervised', 'distillation']:
@@ -328,6 +334,7 @@ class DINO(pl.LightningModule):
         # [n_crops, n_batches, n_channels, height, width]
         # -> [n_crops, n_batches, out_dim]
 
+        assert(self.student.training)
         if self.t_eval: # set teacher in evaluation mode
             self.teacher.eval() 
             
@@ -380,8 +387,6 @@ class DINO(pl.LightningModule):
         opt.zero_grad(set_to_none=True)
 
     def on_before_optimizer_step(self, *args):
-        if hasattr(self.student.head.mlp, 'bottleneck'):
-            wn = self.student.head.mlp.bottleneck.weightnorm
-            if self.current_epoch < self.wn_freeze_epochs:
-                for p in wn.parameters():
-                    p.grad = None
+        if self.current_epoch < self.wn_freeze_epochs:
+            if getattr(self.student.head.last_layer, 'lin2') is not None:
+                self.student.head.last_layer.lin2.zero_grad(True)

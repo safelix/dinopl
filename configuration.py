@@ -15,8 +15,10 @@ import pprint
 import warnings
 
 import torch
-import torchvision.models
-from torchvision.datasets import MNIST, CIFAR10, VisionDataset
+import models
+from datasets import MNIST, CIFAR10
+import pyparsing
+import typing
 
 
 from dinopl.scheduling import *
@@ -126,8 +128,12 @@ class Configuration(object):
 
         # Model.
         model = parser.add_argument_group('Model')
-        model.add_argument('--enc', type=str, default='resnet18', 
+        model.add_argument('--enc', type=str, choices=models.__all__, default='resnet18', 
                             help='Defines the model to train on.')
+        model.add_argument('--enc_seed', type=int, default=None,
+                            help='The seed for model creation, use numbers with good balance of 0 and 1 bits.')
+        model.add_argument('--enc_norm_layer', type=str, choices=['BatchNorm', 'InstanceNorm', 'GroupNorm8', 'LayerNorm', 'Identity'], default=None,
+                            help='Overwrite the normalization layer of the model if supported.')
         model.add_argument('--tiny_input', action='store_true', 
                             help='Adjust encoder for tiny inputs, e.g. resnet for cifar 10.')
         model.add_argument('--mlp_act', type=str, choices={'GELU', 'ReLU'}, default='GELU',
@@ -138,6 +144,8 @@ class Configuration(object):
                             help='Hidden dimensions of DINOHead MLP.')
         model.add_argument('--l2bot_dim', type=int, default=256,
                             help='L2-Bottleneck dimension of DINOHead MLP.')
+        model.add_argument('--l2bot_cfg', type=str, default='-/lb/fn/wn/l/-',
+                            help='L2-Bottleneck configuration string: \'{wn,-}/{l,lb,-}/{fn,-}/{wn,-}/{l,lb,-}/{wn,-}\'.')
         model.add_argument('--out_dim', type=int, default=65536, 
                             help='Output dimension of the DINOHead MLP.')
 
@@ -158,7 +166,7 @@ class Configuration(object):
                             help='Teacher update frequency for prev_epoch mode.')
         dino.add_argument('--t_bn_mode', type=str, choices={'from_data', 'from_student'}, default='from_data',
                             help='Mode of teacher batchnorm updates: either from data stats or from student buffers.')
-        dino.add_argument('--t_eval', action='store_true',
+        dino.add_argument('--t_eval', type=U.bool_parser, default=False,
                             help='Run teacher in evaluation mode even on training data.')
         dino.add_argument('--t_cmom', type=str, default=str(ConstSched(0.9)), 
                             help='Teacher centering momentum of DINOHead (float or Schedule).')
@@ -197,6 +205,8 @@ class Configuration(object):
                             help='Probe every so many epochs during training.')
         addons.add_argument('--probing_epochs', type=int, default=10, 
                             help='Number of epochs to train for linear probing.')
+        addons.add_argument('--prober_seed', type=int, default=None,
+                            help='The seed for reproducible probing, use numbers with good balance of 0 and 1 bits.')
         addons.add_argument('--save_features', type=str, nargs='*', default=[],
                             choices=['embeddings', 'projections', 'logits', 'all'],   
                             help='Save features for embeddings, projections and/or logits.')
@@ -273,30 +283,45 @@ class Configuration(object):
             raise RuntimeError(f'Cannot update configuration with new keys {new_keys}.')
         self.__dict__.update(adict)
 
+def get_enc_norm_layer(config:Configuration) -> typing.Type[torch.nn.Module]:
 
-def create_encoder(config:Configuration):
+    if config.enc_norm_layer == 'BatchNorm':
+        return (lambda dim: torch.nn.BatchNorm2d(dim, affine=True, track_running_stats=True))
+
+    if config.enc_norm_layer == 'InstanceNorm':
+        return (lambda dim: torch.nn.GroupNorm(dim, dim, affine=True))
+
+    if config.enc_norm_layer == 'GroupNorm8':
+        return (lambda dim: torch.nn.GroupNorm(dim//8, dim, affine=True))
+
+    if config.enc_norm_layer == 'LayerNorm':
+        return (lambda dim: torch.nn.GroupNorm(1, dim, affine=True))
+
+    if config.enc_norm_layer == 'Identity':
+        return (lambda dim: torch.nn.Identity())
+
+    raise RuntimeError('Unkown normalization layer name.')
+
+
+def get_encoder(config:Configuration) -> typing.Type[models.Encoder]:
     '''
     This is a helper function that can be useful if you have several model definitions that you want to
     choose from via the command line.
     '''
 
-    if config.enc == 'flatten':
-        enc = torch.nn.Flatten(start_dim=1, end_dim=-1)
-        enc.embed_dim = 3 * config.ds_pixels
-        config.embed_dim = 3 * config.ds_pixels
-        return enc
+    if config.enc == 'Flatten':
+        return (lambda : models.Flatten(n_pixels=config.ds_pixels, n_channels=3))
 
-    if config.enc in torchvision.models.__dict__.keys():
-        enc = torchvision.models.__dict__[config.enc](weights=None)
-        enc.embed_dim = enc.fc.in_features
-        config.embed_dim = enc.fc.in_features
-        enc.fc = torch.nn.Identity()
+    if config.enc in models.__dict__.keys():
+        # prepare keyword arguments
+        kwargs = dict(num_classes=None)
+        if 'resnet' in config.enc.lower():
+            kwargs['tiny_input'] = getattr(config, 'tiny_input', False)
 
-        # adjust for tiny input, e.g. resnet for cifar10
-        if getattr(config, 'tiny_input', False) and isinstance(enc, torchvision.models.ResNet):
-            return U.modify_resnet_for_tiny_input(enc)
+        if getattr(config, 'enc_norm_layer', None) is not None:
+            kwargs['norm_layer'] = get_enc_norm_layer(config)
 
-        return enc
+        return (lambda : models.__dict__[config.enc](**kwargs))
 
     raise RuntimeError('Unkown model name.')
 
@@ -320,7 +345,7 @@ def create_optimizer(config:Configuration) -> torch.optim.Optimizer:
     raise RuntimeError('Unkown optimizer name.')
 
 
-def create_dataset(config:Configuration) -> VisionDataset:
+def get_dataset(config:Configuration) -> typing.Union[MNIST, CIFAR10]:
     '''
     This is a helper function that can be useful if you have several dataset definitions that you want to
     choose from via the command line.
@@ -328,14 +353,14 @@ def create_dataset(config:Configuration) -> VisionDataset:
     config.dataset = config.dataset.lower()
 
     if config.dataset == 'mnist':
-        config.ds_pixels = 784
-        config.ds_classes = 10
-        config.n_classes = config.ds_classes if config.n_classes is None else config.n_classes
+        config.ds_pixels = MNIST.ds_pixels
+        config.ds_classes = MNIST.ds_pixels
+        config.n_classes = MNIST.ds_classes if config.n_classes is None else config.n_classes
         return MNIST
 
     if config.dataset == 'cifar10':
-        config.ds_pixels = 1024
-        config.ds_classes = 10
+        config.ds_pixels = CIFAR10.ds_pixels
+        config.ds_classes = CIFAR10.ds_classes
         config.n_classes = config.ds_classes if config.n_classes is None else config.n_classes
         return CIFAR10
 
