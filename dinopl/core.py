@@ -308,7 +308,7 @@ class DINO(pl.LightningModule):
 
                 # case 'all': pair all views
 
-                MSEs.append(U.means_squared_error(pred, targ))         # list of [n_batches]
+                MSEs.append(U.mean_squared_error(pred, targ))         # list of [n_batches]
 
         if len(MSEs) == 0:
             raise RuntimeError('No pairwise losses where computed.')
