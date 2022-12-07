@@ -199,11 +199,16 @@ class DINO(pl.LightningModule):
         if s_mode not in ['supervised', 'distillation']:
             raise RuntimeError(f'Student update mode \'{s_mode}\' not supported.')
 
-        if loss not in ['CE', 'KL', 'H_pred']:
+        if loss not in ['CE', 'KL', 'H_pred', 'MSE']:
             raise RuntimeError(f'Loss \'{loss}\' not supported.')
 
         if loss_pairing not in ['all', 'same', 'opposite']:
             raise RuntimeError(f'Pairing strategy \'{loss_pairing}\' not supported.')
+
+        # chose loss function
+        self.multicrop_loss = self.multicrop_loss_clf
+        if loss == 'MSE':
+            self.multicrop_loss = self.multicrop_loss_reg
 
         # store 
         self.teacher.crops = {'name':[], 'idx':[]}
@@ -272,8 +277,49 @@ class DINO(pl.LightningModule):
         bs = self.trainer.train_dataloader.loaders.batch_size
         self.scheduler.get(self.optimizer.param_groups[0], 'lr').ys *=  bs / 256
     
+    def multicrop_loss_reg(self, pred_logits: torch.Tensor, targ_logits: torch.Tensor = None, targ_labels: torch.Tensor = None):
+        # [n_crops, n_batches, out_dim]
 
-    def multicrop_loss(self, pred_logits: torch.Tensor, targ_logits: torch.Tensor = None, targ_labels: torch.Tensor = None):
+        # take pred_logits as predictions
+        preds = pred_logits
+        
+        if targ_logits is not None and targ_labels is None:
+            # take targ_logits as target targets
+            targs = targ_logits
+ 
+        elif targ_labels is not None and targ_logits is None:
+            raise NotImplementedError('Regression losses are currently not supported for target labels, only logits.')
+        else:
+            raise RuntimeError('Please specify either targ_logits or targ_labels.')
+
+        # compute pairwise losses
+        MSEs = []
+        for i_stud, targ, in zip(self.teacher.crops['idx'], targs):  
+            for i_teach, pred in zip(self.student.crops['idx'], preds):
+                
+                # case 'oposite': don't pair same views
+                if self.loss_pairing == 'opposite' and i_stud == i_teach: 
+                    continue
+                
+                # case 'matching': don't pair oposite views
+                if self.loss_pairing == 'same' and i_stud != i_teach:
+                    continue
+
+                # case 'all': pair all views
+
+                MSEs.append(U.means_squared_error(pred, targ))         # list of [n_batches]
+
+        if len(MSEs) == 0:
+            raise RuntimeError('No pairwise losses where computed.')
+
+        MSEs = torch.stack(MSEs, dim=0) # [n_pairs, n_batches] 
+
+        # aggregate losses
+        out = {}
+        out['MSE'] = MSEs.mean(dim=-1).mean(dim=-1) # compute mean of batches, than of all matched crops
+        return out
+
+    def multicrop_loss_clf(self, pred_logits: torch.Tensor, targ_logits: torch.Tensor = None, targ_labels: torch.Tensor = None):
         # [n_crops, n_batches, out_dim]
 
         # compute (log) softmax and per-crop entropy for predictions

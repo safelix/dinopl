@@ -47,9 +47,14 @@ def cross_entropy(log_pred:torch.Tensor, targ:torch.Tensor):
     return torch.sum(targ * -log_pred, dim=-1)
 
 @torch.jit.script
-def kl_divergence(log_pred:torch.Tensor, targ:torch.Tensor, log_targ:torch.Tensor,):
+def kl_divergence(log_pred:torch.Tensor, targ:torch.Tensor, log_targ:torch.Tensor):
     #return cross_entropy(log_pred, targ) - entropy(targ, log_targ)
     return torch.sum(targ * -(log_pred - log_targ), dim=-1)
+
+@torch.jit.script
+def mean_squared_error(pred:torch.Tensor, targ:torch.Tensor):
+    #return cross_entropy(log_pred, targ) - entropy(targ, log_targ)
+    return torch.mean(torch.square(targ - pred), dim=-1)
 
 ## torch.nn utilities
 def is_bias(n:str, p:nn.Parameter): 
