@@ -253,6 +253,7 @@ class DINO(pl.LightningModule):
 
         print(f'Init optimizer: {len(self.optimizer.param_groups)} paramgroups of sizes', 
             [len(group['params']) for group in self.optimizer.param_groups])
+        print(f'=> {self.optimizer}')
     
     
     def configure_optimizers(self):
