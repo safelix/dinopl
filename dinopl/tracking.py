@@ -56,10 +56,14 @@ class SupervisedAccuracyTracker(pl.Callback):
 class MetricsTracker(pl.Callback):
     def step(self, prefix, out:Dict[str, torch.Tensor], dino:DINO):
         logs = {}
-        logs[f'{prefix}/CE'] = out['CE']
-        logs[f'{prefix}/KL'] = out['KL']
-        logs[f'{prefix}/H_preds'] = out['H_preds'].mean()
-        logs[f'{prefix}/H_targs'] = out['H_targs'].mean()
+        if dino.loss in ['CE', 'KL', 'H_preds']:
+            logs[f'{prefix}/CE'] = out['CE']
+            logs[f'{prefix}/KL'] = out['KL']
+            logs[f'{prefix}/H_preds'] = out['H_preds'].mean()
+            logs[f'{prefix}/H_targs'] = out['H_targs'].mean()
+        else:
+            logs[f'{prefix}/MSE'] = out['MSE']
+
         dino.log_dict(logs)
 
     def on_train_batch_end(self, _:pl.Trainer, dino:DINO, outputs:Dict[str, torch.Tensor], *args) -> None:
@@ -71,6 +75,9 @@ class MetricsTracker(pl.Callback):
 
 class PerCropEntropyTracker(pl.Callback):
     def step(self, prefix, out:Dict[str, torch.Tensor], dino:DINO):
+        if dino.loss not in ['CE', 'KL', 'H_preds']:
+            return
+            
         logs = {}
         for crop_name, H_pred in zip(dino.student.crops['name'], out['H_preds']):
             logs[f'{prefix}/H_preds/{crop_name}'] = H_pred.mean() # compute mean of batch for every crop
