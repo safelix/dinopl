@@ -6,7 +6,14 @@ from dinopl.modules import init
 
 __all__ = [
     "ConvNet",
-    "convnet_16_2"
+    "convnet_16_1",
+    "convnet_16_1e",
+    "convnet_16_2",
+    "convnet_16_2e",
+    "convnet_32_1",
+    "convnet_32_1e",
+    "convnet_32_2",
+    "convnet_32_2e",
 ]
 
 
@@ -68,9 +75,73 @@ class ConvNet(nn.Module):
         return x
 
 
+###################################################################################################
+# WIDTH 16
+###################################################################################################
+
+def convnet_16_1(**kwargs):
+    r"""Simple ConvNet with constant width 16 and depth 1.
+    Args:
+        **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
+    """
+    return ConvNet(width=16, depth=1, **kwargs)
+
+
+def convnet_16_1e(**kwargs):
+    r"""Simple ConvNet with constant width 16 and depth 1.5.
+    Args:
+        **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
+    """
+    return ConvNet(width=16, depth=1.5, **kwargs)
+
+
 def convnet_16_2(**kwargs):
     r"""Simple ConvNet with constant width 16 and depth 2.
     Args:
         **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
     """
     return ConvNet(width=16, depth=2, **kwargs)
+
+
+def convnet_16_2e(**kwargs):
+    r"""Simple ConvNet with constant width 16 and depth 2.
+    Args:
+        **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
+    """
+    return ConvNet(width=16, depth=2.5, **kwargs)
+
+
+###################################################################################################
+# WIDTH 32
+###################################################################################################
+
+def convnet_32_1(**kwargs):
+    r"""Simple ConvNet with constant width 16 and depth 1.
+    Args:
+        **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
+    """
+    return ConvNet(width=32, depth=1, **kwargs)
+
+
+def convnet_32_1e(**kwargs):
+    r"""Simple ConvNet with constant width 16 and depth 1.5.
+    Args:
+        **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
+    """
+    return ConvNet(width=32, depth=1.5, **kwargs)
+
+
+def convnet_32_2(**kwargs):
+    r"""Simple ConvNet with constant width 16 and depth 2.
+    Args:
+        **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
+    """
+    return ConvNet(width=32, depth=2, **kwargs)
+
+
+def convnet_32_2e(**kwargs):
+    r"""Simple ConvNet with constant width 16 and depth 2.
+    Args:
+        **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
+    """
+    return ConvNet(width=32, depth=2.5, **kwargs)
