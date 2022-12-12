@@ -134,9 +134,11 @@ def main(config:Configuration):
     elif config.s_init == 't_ckpt':
         teacher = copy.deepcopy(dino_ckpt.teacher)     # make teacher from teacher checkpoint
     elif config.t_init == 'random':     
-        teacher = copy.deepcopy(student).reset_parameters(generator=generator)  # initialize teacher with random parameters
+        teacher = copy.deepcopy(student)
+        teacher.reset_parameters(generator=generator)  # initialize teacher with random parameters
     elif config.t_init == 'interpolated_random':
-        teacher = copy.deepcopy(student).reset_parameters(generator=generator)  # initialize teacher with random parameters
+        teacher = copy.deepcopy(student)
+        teacher.reset_parameters(generator=generator)  # initialize teacher with random parameters
         s_vec = U.module_to_vector(student)
         t_vec = U.module_to_vector(teacher)
         t_vec = (1 - config.t_init_alpha) * s_vec +  config.t_init_alpha * t_vec # interpolate between random and student
