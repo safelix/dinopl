@@ -74,6 +74,22 @@ def module_to_vector(module:nn.Module, grad=False):
         return torch.empty(0)
     return torch.cat(vec)
 
+def vector_to_module(vec:torch.Tensor, module:nn.Module):
+    if vec.dim() != 1:
+        raise ValueError('Vector needs to be of dim==1')
+
+    idx_start, idx_end = 0,0
+    for param in module.parameters():
+        idx_end = idx_start + param.numel()
+        if idx_end > len(vec):
+            raise ValueError('Module contains more parameters than the vector. ')
+
+        param.data = vec[idx_start:idx_end].reshape_as(param)
+        idx_start = idx_end 
+    
+    if idx_end != len(vec):
+        raise ValueError('Module contains less parameters than the vector.')
+
 
 # Source: https://github.com/Spijkervet/SimCLR/blob/master/simclr/modules/resnet_hacks.py
 def modify_resnet_for_tiny_input(model:nn.Module, *, cifar_stem:bool=True, v1:bool=True) -> nn.Module:

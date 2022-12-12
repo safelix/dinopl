@@ -156,8 +156,10 @@ class Configuration(object):
                             help='Initialization of student, specify \'--ckpt_path\'.')
         dino.add_argument('--s_mode', type=str, choices={'supervised', 'distillation'}, default='distillation',
                             help='Mode of student update.')
-        dino.add_argument('--t_init', type=str, choices={'student', 's_ckpt', 't_ckpt', 'random'}, default='student',
+        dino.add_argument('--t_init', type=str, choices={'student', 's_ckpt', 't_ckpt', 'random', 'interpolated_random'}, default='student',
                             help='Initialization of teacher, specify \'--ckpt_path\'.')
+        dino.add_argument('--t_init_alpha', type=float, default=0,
+                            help='Alpha for interpolated random initialization of teacher.')
         dino.add_argument('--t_mode', type=str, choices={'ema', 'prev_epoch', 'no_update'}, default='ema',
                             help='Mode of teacher update.')
         dino.add_argument('--t_mom', type=str, default=str(CosSched(0.996, 1)),

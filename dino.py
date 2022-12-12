@@ -134,7 +134,14 @@ def main(config:Configuration):
     elif config.s_init == 't_ckpt':
         teacher = copy.deepcopy(dino_ckpt.teacher)     # make teacher from teacher checkpoint
     elif config.t_init == 'random':     
-        teacher = copy.deepcopy(student).reset_parameters()  # initialize teacher with random parameters
+        teacher = copy.deepcopy(student).reset_parameters(generator=generator)  # initialize teacher with random parameters
+    elif config.t_init == 'interpolated_random':
+        teacher = copy.deepcopy(student).reset_parameters(generator=generator)  # initialize teacher with random parameters
+        s_vec = U.module_to_vector(student)
+        t_vec = U.module_to_vector(teacher)
+        t_vec = (1 - config.t_init_alpha) * s_vec +  config.t_init_alpha * t_vec # interpolate between random and student
+        U.vector_to_module(t_vec, teacher)
+
     else:
         raise RuntimeError(f'Teacher initialization strategy \'{config.t_init}\' not supported.')
     del model #, dino_ckpt # let's hope for garbage collector
