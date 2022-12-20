@@ -1,6 +1,7 @@
 import copy
 import os
 import time
+import math
 
 import pytorch_lightning as pl
 import torch
@@ -135,14 +136,22 @@ def main(config:Configuration):
     elif config.t_init == 'random':     
         teacher = copy.deepcopy(student)
         teacher.reset_parameters(generator=generator)  # initialize teacher with random parameters
-    elif config.t_init == 'interpolated_random':
+    elif config.t_init == 'interpolated':
         teacher = copy.deepcopy(student)
         teacher.reset_parameters(generator=generator)  # initialize teacher with random parameters
-        s_vec = U.module_to_vector(student)
-        t_vec = U.module_to_vector(teacher)
-        t_vec = (1 - config.t_init_alpha) * s_vec +  config.t_init_alpha * t_vec # interpolate between random and student
-        U.vector_to_module(t_vec, teacher)
-
+        for p_s, p_t in zip(student.parameters(), teacher.parameters()):
+            alpha = config.t_init_alpha
+            p_t.data = (1 - alpha) * p_s + alpha * p_t # interpolate between random and student
+            if config.t_init_var_preserving:
+                p_t.data /= math.sqrt(2*alpha**2  - 2*alpha + 1)   # apply variance preserving correction
+    elif config.t_init == 'neighborhood':
+        teacher = copy.deepcopy(student)
+        teacher.reset_parameters(generator=generator)  # initialize teacher with random parameters
+        for p_s, p_t in zip(student.parameters(), teacher.parameters()):
+            eps = config.t_init_eps
+            p_t.data = p_s + eps * p_t # add eps neighborhood to student
+            if config.t_init_var_preserving:
+                p_t.data /= math.sqrt(eps**2 + 1)   # apply variance preserving correction
     else:
         raise RuntimeError(f'Teacher initialization strategy \'{config.t_init}\' not supported.')
     del model #, dino_ckpt # let's hope for garbage collector
