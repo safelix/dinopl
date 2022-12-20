@@ -21,7 +21,7 @@ from dinopl.probing import LinearProbe, LinearProber
 from dinopl.scheduling import Schedule
 from dinopl.tracking import (FeatureSaver, FeatureTracker, HParamTracker,
                              MetricsTracker, ParamTracker,
-                             PerCropEntropyTracker, SupervisedAccuracyTracker)
+                             PerCropEntropyTracker, AccuracyTracker)
 
 
 def main(config:Configuration):
@@ -185,8 +185,13 @@ def main(config:Configuration):
             ParamTracker(dino.student, dino.teacher, track_init=True),
             ParamTracker(dino.student.head, dino.teacher.head, 'head', True),
             ParamTracker(dino.student.enc, dino.teacher.enc, 'enc', True),
+            AccuracyTracker(supervised=(config.s_mode=='supervised'), 
+                            logit_targets=(config.logit_noise_temp > 0))
         ]
+    wandb_logger.experiment.define_metric('train/s_acc', summary='max')
+    wandb_logger.experiment.define_metric('valid/s_acc', summary='max')
     
+
     if len(config.save_features) > 0:
         config.save_features = ['embeddings', 'projections', 'logits'] if 'all' in config.save_features else config.save_features
         callbacks += [FeatureSaver(probe_valid_set, n_imgs=64, features=config.save_features, dir=config.logdir)]
@@ -209,10 +214,6 @@ def main(config:Configuration):
         wandb_logger.experiment.define_metric('probe/student', summary='max')
         wandb_logger.experiment.define_metric('probe/teacher', summary='max')
 
-    if config.s_mode == 'supervised' and config.ds_classes == config.n_classes:
-        callbacks += [SupervisedAccuracyTracker()]
-        wandb_logger.experiment.define_metric('train/s_acc', summary='max')
-        wandb_logger.experiment.define_metric('valid/s_acc', summary='max')
 
     ckpt_callback = ModelCheckpoint(dirpath=config.logdir, monitor='probe/student', mode='max',
                         filename='epoch={epoch}-step={step}-probe_student={probe/student:.3f}', auto_insert_metric_name=False)

@@ -15,6 +15,7 @@ from . import DINO
 from . import utils as U
 
 __all__ = [
+    'AccuracyTracker'
     'MetricsTracker',
     'PerCropEntropyTracker',
     'FeatureTracker',
@@ -23,30 +24,45 @@ __all__ = [
     'FeatureSaver',
 ]
 
-class SupervisedAccuracyTracker(pl.Callback):
-    def __init__(self) -> None:
+class AccuracyTracker(pl.Callback):
+    def __init__(self, supervised, logit_targets) -> None:
         self.s_train_acc = Accuracy()
         self.s_valid_acc = Accuracy()
+        self.supervised = supervised
+        self.logit_targets = logit_targets
+
     
     def on_train_batch_end(self, _: pl.Trainer, dino:DINO, out, batch, *args):
-        batch, batch_targets = batch
+        batch, targets = batch
         self.s_train_acc.to(dino.device)
+
+        if not self.supervised:
+            targets = F.softmax(out['student']['logits'], dim=-1).mean(dim=0).argmax(dim=-1)
+
+        if self.supervised and self.logit_targets:
+            targets = F.softmax(targets, dim=-1).argmax(dim=-1)
 
         # compute average probabilities over all crops
         probas = F.softmax(out['student']['logits'], dim=-1).mean(dim=0)
-        s_acc = self.s_train_acc(probas, batch_targets)
+        s_acc = self.s_train_acc(probas, targets)
         dino.log('train/s_acc', s_acc, on_step=True, on_epoch=False)
 
     def on_train_epoch_end(self, *args):
         self.s_train_acc.reset()
 
     def on_validation_batch_end(self, _: pl.Trainer, dino:DINO, out, batch, *args):
-        batch, batch_targets = batch
+        batch, targets = batch
         self.s_valid_acc.to(dino.device)
+
+        if not self.supervised:
+            targets = F.softmax(out['student']['logits'], dim=-1).mean(dim=0).argmax(dim=-1)
+
+        if self.supervised and self.logit_targets:
+            targets = F.softmax(targets, dim=-1).argmax(dim=-1)
         
         # compute average probabilities over all crops
         probas = F.softmax(out['student']['logits'], dim=-1).mean(dim=0)
-        self.s_valid_acc.update(probas, batch_targets)
+        self.s_valid_acc.update(probas, targets)
     
     def on_validation_epoch_end(self, _: pl.Trainer, dino:DINO, *args):
         dino.log('valid/s_acc', self.s_valid_acc.compute(), on_step=False, on_epoch=True)
