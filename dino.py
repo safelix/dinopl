@@ -25,7 +25,7 @@ from dinopl.tracking import (FeatureSaver, FeatureTracker, HParamTracker,
 
 
 def main(config:Configuration):
-    
+
     if config.float64:
         torch.set_default_dtype(torch.float64)
     
@@ -60,6 +60,10 @@ def main(config:Configuration):
                     transforms.Lambda(lambda img: img.convert('RGB')), transforms.ToTensor(),
                     transforms.Normalize(DSet.mean, DSet.std),
                 ])
+
+    if config.float64: # convert inputs to float64 if needed
+        self_trfm = transforms.Compose([self_trfm, transforms.ConvertImageDtype(torch.float64)])
+
     eval_trfm = transforms.Compose([ # evaluation
                     transforms.Resize(size=config.mc_spec[0]['out_size']),
                     self_trfm
