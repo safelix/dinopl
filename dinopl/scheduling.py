@@ -90,7 +90,7 @@ class Schedule():
             if literal is None:                     # NoneType
                 return torch.nan
             if isinstance(literal, (int, float)):   # numeric constants
-                return literal
+                return float(literal)
             if isinstance(literal, str) and literal in __named_const__.keys():
                 return __named_const__[literal]     # string as named constant 
             raise RuntimeError(f'Unknown constant \'{literal}\', needs to be numeric or one of {__named_const__}.')
