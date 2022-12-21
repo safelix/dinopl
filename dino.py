@@ -114,7 +114,7 @@ def main(config:Configuration):
     summary(model, depth=4, device='cpu', input_data=next(iter(dino_valid_dl))[0])
 
     # load checkpoint if required
-    if config.s_init in ['s_ckpt', 't_ckpt'] or config.t_init in ['s_ckpt', 't_ckpt']:
+    if config.t_init in ['s_ckpt', 't_ckpt'] or config.s_init in ['s_ckpt', 't_ckpt']:
         if getattr(config, 'ckpt_path', '') == '':
             raise RuntimeError('Student or teacher inititalization strategy requires \'--ckpt_path\' to be specified.')
         temp_student = copy.deepcopy(model) # required to load state dict into instanciated copy
@@ -122,44 +122,44 @@ def main(config:Configuration):
         dino_ckpt = DINO.load_from_checkpoint(config.ckpt_path,  mc_spec=config.mc_spec, student=temp_student, teacher=temp_teacher)
         del temp_student, temp_teacher
     
+    # Initialize teacher network
+    if config.t_init == 'random':
+        teacher = copy.deepcopy(model)  # make teacher with random params
+    elif config.t_init == 's_ckpt':
+        teacher = copy.deepcopy(dino_ckpt.student)     # make teacher from student checkpoint
+    elif config.t_init == 't_ckpt':
+        teacher = copy.deepcopy(dino_ckpt.teacher)     # make teacher from teacher checkpoint
+    else:
+        raise RuntimeError(f'Teacher initialization strategy \'{config.t_init}\' not supported.')
+
     # Initialize student network
-    if config.s_init == 'random':
-        student = copy.deepcopy(model)  # make student with random params
+    if config.s_init == 'teacher':
+        student = copy.deepcopy(teacher) # make student with same params as teacher
     elif config.s_init == 's_ckpt':
         student = copy.deepcopy(dino_ckpt.student)     # make student from student checkpoint
     elif config.s_init == 't_ckpt':
         student = copy.deepcopy(dino_ckpt.teacher)     # make student from teacher checkpoint
+    elif config.s_init == 'random':     
+        student = copy.deepcopy(model)
+        student.reset_parameters(generator=generator)  # initialize student with random parameters
+    elif config.s_init == 'interpolated':
+        student = copy.deepcopy(model)
+        student.reset_parameters(generator=generator)  # initialize student with random parameters
+        for p_t, p_s in zip(teacher.parameters(), student.parameters()):
+            alpha = config.s_init_alpha
+            p_s.data = (1 - alpha) * p_t + alpha * p_s # interpolate between teacher and random
+            if config.s_init_var_preserving:
+                p_s.data /= math.sqrt(2*alpha**2  - 2*alpha + 1)   # apply variance preserving correction
+    elif config.s_init == 'neighborhood':
+        student = copy.deepcopy(model)
+        student.reset_parameters(generator=generator)  # initialize student with random parameters
+        for p_t, p_s in zip(teacher.parameters(), student.parameters()):
+            eps = config.s_init_eps
+            p_s.data = p_t + eps * p_s # add eps neighborhood to teacher
+            if config.s_init_var_preserving:
+                p_s.data /= math.sqrt(eps**2 + 1)   # apply variance preserving correction
     else:
-        raise RuntimeError(f'Student initialization strategy \'{config.t_init}\' not supported.')
-
-    # Initialize teacher network
-    if config.t_init == 'student':
-        teacher = copy.deepcopy(student) # make teacher with same params as student
-    elif config.s_init == 's_ckpt':
-        teacher = copy.deepcopy(dino_ckpt.student)     # make teacher from student checkpoint
-    elif config.s_init == 't_ckpt':
-        teacher = copy.deepcopy(dino_ckpt.teacher)     # make teacher from teacher checkpoint
-    elif config.t_init == 'random':     
-        teacher = copy.deepcopy(student)
-        teacher.reset_parameters(generator=generator)  # initialize teacher with random parameters
-    elif config.t_init == 'interpolated':
-        teacher = copy.deepcopy(student)
-        teacher.reset_parameters(generator=generator)  # initialize teacher with random parameters
-        for p_s, p_t in zip(student.parameters(), teacher.parameters()):
-            alpha = config.t_init_alpha
-            p_t.data = (1 - alpha) * p_s + alpha * p_t # interpolate between random and student
-            if config.t_init_var_preserving:
-                p_t.data /= math.sqrt(2*alpha**2  - 2*alpha + 1)   # apply variance preserving correction
-    elif config.t_init == 'neighborhood':
-        teacher = copy.deepcopy(student)
-        teacher.reset_parameters(generator=generator)  # initialize teacher with random parameters
-        for p_s, p_t in zip(student.parameters(), teacher.parameters()):
-            eps = config.t_init_eps
-            p_t.data = p_s + eps * p_t # add eps neighborhood to student
-            if config.t_init_var_preserving:
-                p_t.data /= math.sqrt(eps**2 + 1)   # apply variance preserving correction
-    else:
-        raise RuntimeError(f'Teacher initialization strategy \'{config.t_init}\' not supported.')
+        raise RuntimeError(f'Student initialization strategy \'{config.s_init}\' not supported.')
     del model #, dino_ckpt # let's hope for garbage collector
 
 

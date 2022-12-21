@@ -154,18 +154,18 @@ class Configuration(object):
 
         # Teacher Update, Temperature, Centering
         dino = parser.add_argument_group('DINO')
-        dino.add_argument('--s_init', type=str, choices={'random', 's_ckpt', 't_ckpt'}, default='random',
+        dino.add_argument('--t_init', type=str, choices={'random', 's_ckpt', 't_ckpt'}, default='random',
+                            help='Initialization of teacher, specify \'--ckpt_path\'.')
+        dino.add_argument('--s_init', type=str, choices={'teacher', 's_ckpt', 't_ckpt', 'random', 'interpolated', 'neighborhood'}, default='teacher',
                             help='Initialization of student, specify \'--ckpt_path\'.')
+        dino.add_argument('--s_init_alpha', type=float, default=0,
+                            help='Alpha for interpolated random initialization of student.')
+        dino.add_argument('--s_init_eps', type=float, default=0,
+                            help='Epsilon for neighborhood random initialization of student.')
+        dino.add_argument('--s_init_var_preserving', type=U.bool_parser, default=False,
+                            help='Apply variance preserving correction for \'interpolated\' and \'neighborhood\' s_init')
         dino.add_argument('--s_mode', type=str, choices={'supervised', 'distillation'}, default='distillation',
                             help='Mode of student update.')
-        dino.add_argument('--t_init', type=str, choices={'student', 's_ckpt', 't_ckpt', 'random', 'interpolated', 'neighborhood'}, default='student',
-                            help='Initialization of teacher, specify \'--ckpt_path\'.')
-        dino.add_argument('--t_init_alpha', type=float, default=0,
-                            help='Alpha for interpolated random initialization of teacher.')
-        dino.add_argument('--t_init_eps', type=float, default=0,
-                            help='Epsolon for neighborhood random initialization of teacher.')
-        dino.add_argument('--t_init_var_preserving', type=U.bool_parser, default=False,
-                            help='Apply variance preserving correction for \'interpolated\' and \'neighborhood\' t_init')
         dino.add_argument('--t_mode', type=str, choices={'ema', 'prev_epoch', 'no_update'}, default='ema',
                             help='Mode of teacher update.')
         dino.add_argument('--t_mom', type=str, default=str(CosSched(0.996, 1)),
