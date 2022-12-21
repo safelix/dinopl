@@ -111,8 +111,7 @@ def main(config:Configuration):
     model.reset_parameters(generator=generator)
 
     print(f'Created encoder and head:')
-    summary(model, depth=4, device='cpu',
-            input_size=(config.bs_train, 3, config.mc_spec[0]['out_size'], config.mc_spec[0]['out_size']))
+    summary(model, depth=4, device='cpu', input_data=next(iter(dino_valid_dl))[0])
 
     # load checkpoint if required
     if config.s_init in ['s_ckpt', 't_ckpt'] or config.t_init in ['s_ckpt', 't_ckpt']:
