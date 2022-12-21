@@ -1,7 +1,7 @@
 import copy
+import math
 import os
 import time
-import math
 
 import pytorch_lightning as pl
 import torch
@@ -12,16 +12,16 @@ from torchinfo import summary
 from torchvision import transforms
 
 from configuration import CONSTANTS as C
-from configuration import (Configuration, get_dataset, create_mc_spec,
-                           create_optimizer, get_encoder)
+from configuration import (Configuration, create_mc_spec, create_optimizer,
+                           get_dataset, get_encoder, init_student_teacher)
 from dinopl import *
 from dinopl import utils as U
 from dinopl.augmentation import LabelNoiseWrapper, LogitNoiseWrapper, MultiCrop
 from dinopl.probing import LinearProbe, LinearProber
 from dinopl.scheduling import Schedule
-from dinopl.tracking import (FeatureSaver, FeatureTracker, HParamTracker,
-                             MetricsTracker, ParamTracker,
-                             PerCropEntropyTracker, AccuracyTracker)
+from dinopl.tracking import (AccuracyTracker, FeatureSaver, FeatureTracker,
+                             HParamTracker, MetricsTracker, ParamTracker,
+                             PerCropEntropyTracker)
 
 
 def main(config:Configuration):
@@ -113,54 +113,8 @@ def main(config:Configuration):
     print(f'Created encoder and head:')
     summary(model, depth=4, device='cpu', input_data=next(iter(dino_valid_dl))[0])
 
-    # load checkpoint if required
-    if config.t_init in ['s_ckpt', 't_ckpt'] or config.s_init in ['s_ckpt', 't_ckpt']:
-        if getattr(config, 'ckpt_path', '') == '':
-            raise RuntimeError('Student or teacher inititalization strategy requires \'--ckpt_path\' to be specified.')
-        temp_student = copy.deepcopy(model) # required to load state dict into instanciated copy
-        temp_teacher = copy.deepcopy(model) # required to load state dict into instanciated copy
-        dino_ckpt = DINO.load_from_checkpoint(config.ckpt_path,  mc_spec=config.mc_spec, student=temp_student, teacher=temp_teacher)
-        del temp_student, temp_teacher
-    
-    # Initialize teacher network
-    if config.t_init == 'random':
-        teacher = copy.deepcopy(model)  # make teacher with random params
-    elif config.t_init == 's_ckpt':
-        teacher = copy.deepcopy(dino_ckpt.student)     # make teacher from student checkpoint
-    elif config.t_init == 't_ckpt':
-        teacher = copy.deepcopy(dino_ckpt.teacher)     # make teacher from teacher checkpoint
-    else:
-        raise RuntimeError(f'Teacher initialization strategy \'{config.t_init}\' not supported.')
-
-    # Initialize student network
-    if config.s_init == 'teacher':
-        student = copy.deepcopy(teacher) # make student with same params as teacher
-    elif config.s_init == 's_ckpt':
-        student = copy.deepcopy(dino_ckpt.student)     # make student from student checkpoint
-    elif config.s_init == 't_ckpt':
-        student = copy.deepcopy(dino_ckpt.teacher)     # make student from teacher checkpoint
-    elif config.s_init == 'random':     
-        student = copy.deepcopy(model)
-        student.reset_parameters(generator=generator)  # initialize student with random parameters
-    elif config.s_init == 'interpolated':
-        student = copy.deepcopy(model)
-        student.reset_parameters(generator=generator)  # initialize student with random parameters
-        for p_t, p_s in zip(teacher.parameters(), student.parameters()):
-            alpha = config.s_init_alpha
-            p_s.data = (1 - alpha) * p_t + alpha * p_s # interpolate between teacher and random
-            if config.s_init_var_preserving:
-                p_s.data /= math.sqrt(2*alpha**2  - 2*alpha + 1)   # apply variance preserving correction
-    elif config.s_init == 'neighborhood':
-        student = copy.deepcopy(model)
-        student.reset_parameters(generator=generator)  # initialize student with random parameters
-        for p_t, p_s in zip(teacher.parameters(), student.parameters()):
-            eps = config.s_init_eps
-            p_s.data = p_t + eps * p_s # add eps neighborhood to teacher
-            if config.s_init_var_preserving:
-                p_s.data /= math.sqrt(eps**2 + 1)   # apply variance preserving correction
-    else:
-        raise RuntimeError(f'Student initialization strategy \'{config.s_init}\' not supported.')
-    del model #, dino_ckpt # let's hope for garbage collector
+    student, teacher = init_student_teacher(config=config, model=model, generator=generator)
+    del model # don't need this anymore
 
 
     # DINO Setup

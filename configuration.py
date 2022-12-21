@@ -9,20 +9,22 @@ Copyright ETH Zurich, Manuel Kaufmann & Felix Sarnthein
 
 '''
 import argparse
+import copy
 import json
+import math
 import os
 import pprint
+import typing
 import warnings
 
-import torch
-import models
-from datasets import MNIST, CIFAR10
 import pyparsing
-import typing
+import torch
 
-
-from dinopl.scheduling import *
 import dinopl.utils as U
+import models
+from datasets import CIFAR10, MNIST
+from dinopl import DINO, DINOModel
+from dinopl.scheduling import *
 
 
 class Constants(object):
@@ -125,7 +127,8 @@ class Configuration(object):
         data.add_argument('--logit_noise_temp', type=float, default=0,
                             help='Add logit noise (sharpened gaussian logits) for supervised training.')
         data.add_argument('--resample_noise', type=bool, default=False) # TODO: help
-        #data.add_argument('--aug', type=str, choices={'rot', 'blur', 'shift', 'crop'}, nargs='*',)
+        data.add_argument('--aug', type=str, choices={'iid_normal'}, nargs='*',
+                            help='Augmentation(s) to apply to Dataset.')
         #data.add_argument('--per_crop_aug', type=str, choices={'rot', 'blur', 'shift', 'simclr'})
 
         # Model.
@@ -246,7 +249,7 @@ class Configuration(object):
             json_config = json.load(f) 
 
         # Overwrite defaults
-        default_config.update(json_config)
+        default_config.update(json_config, allow_new_keys=True)
 
         return default_config
 
@@ -337,6 +340,56 @@ def get_encoder(config:Configuration) -> typing.Type[models.Encoder]:
 
     raise RuntimeError('Unkown model name.')
 
+
+def init_student_teacher( config:Configuration, model:DINOModel, generator:torch.Generator) -> typing.Tuple[DINOModel, DINOModel]:
+    # load checkpoint if required
+    if config.t_init in ['s_ckpt', 't_ckpt'] or config.s_init in ['s_ckpt', 't_ckpt']:
+        if getattr(config, 'ckpt_path', '') == '':
+            raise RuntimeError('Student or teacher inititalization strategy requires \'--ckpt_path\' to be specified.')
+        temp_student = copy.deepcopy(model) # required to load state dict into instanciated copy
+        temp_teacher = copy.deepcopy(model) # required to load state dict into instanciated copy
+        dino_ckpt = DINO.load_from_checkpoint(config.ckpt_path,  mc_spec=config.mc_spec, student=temp_student, teacher=temp_teacher)
+    
+    # Initialize teacher network
+    if config.t_init == 'random':
+        teacher = copy.deepcopy(model)  # make teacher with random params
+    elif config.t_init == 's_ckpt':
+        teacher = copy.deepcopy(dino_ckpt.student)     # make teacher from student checkpoint
+    elif config.t_init == 't_ckpt':
+        teacher = copy.deepcopy(dino_ckpt.teacher)     # make teacher from teacher checkpoint
+    else:
+        raise RuntimeError(f'Teacher initialization strategy \'{config.t_init}\' not supported.')
+
+    # Initialize student network
+    if config.s_init == 'teacher':
+        student = copy.deepcopy(teacher) # make student with same params as teacher
+    elif config.s_init == 's_ckpt':
+        student = copy.deepcopy(dino_ckpt.student)     # make student from student checkpoint
+    elif config.s_init == 't_ckpt':
+        student = copy.deepcopy(dino_ckpt.teacher)     # make student from teacher checkpoint
+    elif config.s_init == 'random':     
+        student = copy.deepcopy(model)
+        student.reset_parameters(generator=generator)  # initialize student with random parameters
+    elif config.s_init == 'interpolated':
+        student = copy.deepcopy(model)
+        student.reset_parameters(generator=generator)  # initialize student with random parameters
+        for p_t, p_s in zip(teacher.parameters(), student.parameters()):
+            alpha = config.s_init_alpha
+            p_s.data = (1 - alpha) * p_t + alpha * p_s # interpolate between teacher and random
+            if config.s_init_var_preserving:
+                p_s.data /= math.sqrt(2*alpha**2  - 2*alpha + 1)   # apply variance preserving correction
+    elif config.s_init == 'neighborhood':
+        student = copy.deepcopy(model)
+        student.reset_parameters(generator=generator)  # initialize student with random parameters
+        for p_t, p_s in zip(teacher.parameters(), student.parameters()):
+            eps = config.s_init_eps
+            p_s.data = p_t + eps * p_s # add eps neighborhood to teacher
+            if config.s_init_var_preserving:
+                p_s.data /= math.sqrt(eps**2 + 1)   # apply variance preserving correction
+    else:
+        raise RuntimeError(f'Student initialization strategy \'{config.s_init}\' not supported.')
+
+    return student, teacher
 
 def create_optimizer(config:Configuration) -> torch.optim.Optimizer:
     '''
