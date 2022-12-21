@@ -114,7 +114,7 @@ def np_histogram(tensor: torch.Tensor, bins=64):
         range = np.nanmin(ndarray), np.nanmax(ndarray)
         return np.histogram(ndarray, bins=bins, range=range)
     except Exception as e:
-        warn('Cannot create histogram, returning None', e)
+        warn('Cannot create histogram, returning None')
         return None
 
 class FeatureTracker(pl.Callback):       
