@@ -146,6 +146,10 @@ class FeatureTracker(pl.Callback):
             logs[f'{prefix}/{n}/l2(t_x,s_x).mean()'] = l2dist.mean()
             logs_wandb[f'{prefix}/{n}/l2(t_x,s_x).hist()'] = wandb.Histogram(np_histogram=np_histogram(l2dist, 64))
 
+            rmse = (t_x - s_gx).square().mean(dim=-1).sqrt()
+            logs[f'{prefix}/{n}/rmse(t_x,s_x).mean()'] = rmse.mean()
+            logs_wandb[f'{prefix}/{n}/rmse(t_x,s_x).hist()'] = wandb.Histogram(np_histogram=np_histogram(rmse, 64))
+
             dot = (t_x * s_gx).sum(-1)
             cossim = dot / (t_x.norm(dim=-1) * s_gx.norm(dim=-1))
             logs[f'{prefix}/{n}/cos(t_x,s_x).mean()'] = cossim.mean()
@@ -186,7 +190,7 @@ class ParamTracker(pl.Callback):
         self.student = student
         self.teacher = teacher
         self.track_init = track_init
-        self.name = '' if name is None else name + '/'
+        self.name = '' if name is None else name
         
     def on_fit_start(self, *_) -> None:
         if self.track_init:
@@ -203,6 +207,16 @@ class ParamTracker(pl.Callback):
         t_vec = U.module_to_vector(self.teacher)
         s_vec = U.module_to_vector(self.student)
 
+        # log position and angle relative to origin
+        t_norm = torch.norm(t_vec)
+        s_norm = torch.norm(s_vec)
+        logs[f'params/{self.name}/norm(teach)'] = t_norm
+        logs[f'params/{self.name}/norm(stud)'] = s_norm
+        logs[f'params/{self.name}/cos(teach, stud)'] = torch.dot(t_vec, s_vec) / (t_norm * s_norm)
+
+        logs[f'params/{self.name}/rms(teach)'] = t_vec.square().mean().sqrt()
+        logs[f'params/{self.name}/rms(stud)'] = s_vec.square().mean().sqrt()
+
         # get driving signals: gradient and difference
         g_vec = self.g_vec #U.module_to_vector(self.student, grad=True)
         d_vec = t_vec - s_vec
@@ -210,9 +224,12 @@ class ParamTracker(pl.Callback):
         # log driving signals
         g_norm = torch.norm(g_vec)
         d_norm = torch.norm(d_vec)
-        logs[f'params/{self.name}norm(grad)'] = g_norm
-        logs[f'params/{self.name}norm(diff)'] = d_norm
-        logs[f'params/{self.name}cos(grad, diff)'] = torch.dot(g_vec, d_vec) / (g_norm * d_norm)
+        logs[f'params/{self.name}/norm(grad)'] = g_norm
+        logs[f'params/{self.name}/norm(diff)'] = d_norm
+        logs[f'params/{self.name}/cos(grad, diff)'] = torch.dot(g_vec, d_vec) / (g_norm * d_norm)
+
+        logs[f'params/{self.name}/rms(grad)'] = g_vec.square().mean().sqrt()
+        logs[f'params/{self.name}/rms(diff)'] = d_vec.square().mean().sqrt()
 
         if self.track_init:           
             # get vector representations relative to init
@@ -222,10 +239,13 @@ class ParamTracker(pl.Callback):
             # log position and angle relative to init
             t_norm = torch.norm(t_vec)
             s_norm = torch.norm(s_vec)
-            logs[f'params/{self.name}norm(teach - init)'] = t_norm
-            logs[f'params/{self.name}norm(stud - init)'] = s_norm
-            logs[f'params/{self.name}cos(teach-init, stud-init)'] = torch.dot(t_vec, s_vec) / (t_norm * s_norm)
+            logs[f'params/{self.name}/norm(teach - init)'] = t_norm
+            logs[f'params/{self.name}/norm(stud - init)'] = s_norm
+            logs[f'params/{self.name}/cos(teach-init, stud-init)'] = torch.dot(t_vec, s_vec) / (t_norm * s_norm)
             
+            logs[f'params/{self.name}/rms(teach - init)'] = t_vec.square().mean().sqrt()
+            logs[f'params/{self.name}/rms(stud - init)'] = s_vec.square().mean().sqrt()
+
         dino.log_dict(logs)
 
 
