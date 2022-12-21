@@ -101,6 +101,8 @@ class Configuration(object):
         #                    help='Resume training from checkpoint specified by \'--ckpt_path\'.')
         general.add_argument('--force_cpu', action='store_true',
                             help='Force training on CPU instead of GPU.')
+        general.add_argument('--float64', type=U.bool_parser, default=False,
+                            help='Wether to set default to float64.')
 
         # Data.
         data = parser.add_argument_group('Data')

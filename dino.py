@@ -26,6 +26,9 @@ from dinopl.tracking import (FeatureSaver, FeatureTracker, HParamTracker,
 
 def main(config:Configuration):
     
+    if config.float64:
+        torch.set_default_dtype(torch.float64)
+    
     # Fix random seeds
     if config.seed is None:
         config.seed = int(time.time())
