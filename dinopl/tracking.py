@@ -108,11 +108,11 @@ class PerCropEntropyTracker(pl.Callback):
     def on_validation_batch_end(self, _: pl.Trainer, dino: DINO, outputs:Dict[str, torch.Tensor], *args) -> None:
         self.step('valid', outputs, dino)
 
-def np_histogram(tensor: torch.Tensor, bins=64):
+def wandb_histogram(tensor: torch.Tensor, bins=64):
     try:
         ndarray = tensor.detach().cpu().numpy()
         range = np.nanmin(ndarray), np.nanmax(ndarray)
-        return np.histogram(ndarray, bins=bins, range=range)
+        return wandb.Histogram(np_histogram=np.histogram(ndarray, bins=bins, range=range))
     except Exception as e:
         warn('Cannot create histogram, returning None')
         return None
@@ -132,28 +132,28 @@ class FeatureTracker(pl.Callback):
                 cossim = torch.corrcoef(x).nan_to_num() # similarity with anything of norm zero is zero
                 cossim_triu = cossim[torch.triu_indices(*cossim.shape, offset=1).unbind()] # upper triangular values
                 logs[f'{prefix}/{n}/{i}_x.corr().mean()'] = cossim_triu.mean()
-                logs_wandb[f'{prefix}/{n}/{i}_x.corr().hist()'] = wandb.Histogram(np_histogram=np_histogram(cossim_triu, 64))
+                logs_wandb[f'{prefix}/{n}/{i}_x.corr().hist()'] = wandb_histogram(cossim_triu, 64)
                 logs[f'{prefix}/{n}/{i}_x.corr().rank()'] = float(torch.linalg.matrix_rank(cossim, hermitian=True))
                 
                 # within batch l2 distance
                 l2dist = torch.cdist(x, x)
                 l2dist_triu = l2dist[torch.triu_indices(*l2dist.shape, offset=1).unbind()] # upper triangular values
                 logs[f'{prefix}/{n}/{i}_x.pdist().mean()'] = l2dist_triu.mean()
-                logs_wandb[f'{prefix}/{n}/{i}_x.pdist().hist()'] = wandb.Histogram(np_histogram=np_histogram(l2dist_triu, 64))
+                logs_wandb[f'{prefix}/{n}/{i}_x.pdist().hist()'] = wandb_histogram(l2dist_triu, 64)
 
             # between student and teacher
             l2dist = (t_x - s_gx).norm(dim=-1)
             logs[f'{prefix}/{n}/l2(t_x,s_x).mean()'] = l2dist.mean()
-            logs_wandb[f'{prefix}/{n}/l2(t_x,s_x).hist()'] = wandb.Histogram(np_histogram=np_histogram(l2dist, 64))
+            logs_wandb[f'{prefix}/{n}/l2(t_x,s_x).hist()'] = wandb_histogram(l2dist, 64)
 
             rmse = (t_x - s_gx).square().mean(dim=-1).sqrt()
             logs[f'{prefix}/{n}/rmse(t_x,s_x).mean()'] = rmse.mean()
-            logs_wandb[f'{prefix}/{n}/rmse(t_x,s_x).hist()'] = wandb.Histogram(np_histogram=np_histogram(rmse, 64))
+            logs_wandb[f'{prefix}/{n}/rmse(t_x,s_x).hist()'] = wandb_histogram(rmse, 64)
 
             dot = (t_x * s_gx).sum(-1)
             cossim = dot / (t_x.norm(dim=-1) * s_gx.norm(dim=-1))
             logs[f'{prefix}/{n}/cos(t_x,s_x).mean()'] = cossim.mean()
-            logs_wandb[f'{prefix}/{n}/cos(t_x,s_x).hist()'] = wandb.Histogram(np_histogram=np_histogram(cossim, 64))
+            logs_wandb[f'{prefix}/{n}/cos(t_x,s_x).hist()'] = wandb_histogram(cossim, 64)
 
         #logs['trainer/global_step'] = dino.global_step
         #dino.logger.experiment.log(logs)
@@ -178,7 +178,7 @@ class HParamTracker(pl.Callback):
         logs['hparams/s_temp'] = dino.student.head.temp
         logs['hparams/t_cent.norm()'] = dino.teacher.head.cent.norm()
         logs['hparams/t_cent.mean()'] = dino.teacher.head.cent.mean()
-        logs_wandb['hparams/t_cent'] = wandb.Histogram(np_histogram=np_histogram(dino.teacher.head.cent))
+        logs_wandb['hparams/t_cent'] = wandb_histogram(dino.teacher.head.cent)
         
         dino.log_dict(logs)
         dino.logger.log_metrics(logs_wandb , step=dino.global_step)
