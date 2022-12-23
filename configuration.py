@@ -135,8 +135,6 @@ class Configuration(object):
         model = parser.add_argument_group('Model')
         model.add_argument('--enc', type=str, choices=models.__all__, default='resnet18', 
                             help='Defines the model to train on.')
-        model.add_argument('--enc_seed', type=int, default=None,
-                            help='The seed for model creation, use numbers with good balance of 0 and 1 bits.')
         model.add_argument('--enc_norm_layer', type=str, choices=['BatchNorm', 'InstanceNorm', 'GroupNorm8', 'LayerNorm', 'Identity'], default=None,
                             help='Overwrite the normalization layer of the model if supported.')
         model.add_argument('--tiny_input', action='store_true', 
@@ -159,8 +157,12 @@ class Configuration(object):
         dino = parser.add_argument_group('DINO')
         dino.add_argument('--t_init', type=str, choices={'random', 's_ckpt', 't_ckpt'}, default='random',
                             help='Initialization of teacher, specify \'--ckpt_path\'.')
+        model.add_argument('--t_init_seed', type=int, default=None,
+                            help='The seed for teacher initialization, use numbers with good balance of 0 and 1 bits. None will set a new seed randomly.')
         dino.add_argument('--s_init', type=str, choices={'teacher', 's_ckpt', 't_ckpt', 'random', 'interpolated', 'neighborhood'}, default='teacher',
                             help='Initialization of student, specify \'--ckpt_path\'.')
+        model.add_argument('--s_init_seed', type=int, default=None,
+                            help='The seed for student initialization, use numbers with good balance of 0 and 1 bits. None will reuse teacher generator.')
         dino.add_argument('--s_init_alpha', type=float, default=0,
                             help='Alpha for interpolated random initialization of student.')
         dino.add_argument('--s_init_eps', type=float, default=0,
@@ -341,7 +343,21 @@ def get_encoder(config:Configuration) -> typing.Type[models.Encoder]:
     raise RuntimeError('Unkown model name.')
 
 
-def init_student_teacher( config:Configuration, model:DINOModel, generator:torch.Generator) -> typing.Tuple[DINOModel, DINOModel]:
+def init_student_teacher(config:Configuration, model:DINOModel) -> typing.Tuple[DINOModel, DINOModel]:
+    
+    t_generator = torch.Generator()
+    s_generator = torch.Generator()
+    if config.t_init_seed is None:
+        config.t_init_seed = t_generator.seed()
+    else:
+        t_generator.manual_seed(config.t_init_seed)
+
+    if config.s_init_seed is None:
+        s_generator = t_generator
+    else:
+        s_generator.manual_seed(config.s_init_seed)
+
+
     # load checkpoint if required
     if config.t_init in ['s_ckpt', 't_ckpt'] or config.s_init in ['s_ckpt', 't_ckpt']:
         if getattr(config, 'ckpt_path', '') == '':
@@ -351,12 +367,13 @@ def init_student_teacher( config:Configuration, model:DINOModel, generator:torch
         dino_ckpt = DINO.load_from_checkpoint(config.ckpt_path,  mc_spec=config.mc_spec, student=temp_student, teacher=temp_teacher)
     
     # Initialize teacher network
-    if config.t_init == 'random':
-        teacher = copy.deepcopy(model)  # make teacher with random params
-    elif config.t_init == 's_ckpt':
+    if config.t_init == 's_ckpt':
         teacher = copy.deepcopy(dino_ckpt.student)     # make teacher from student checkpoint
     elif config.t_init == 't_ckpt':
         teacher = copy.deepcopy(dino_ckpt.teacher)     # make teacher from teacher checkpoint
+    elif config.t_init == 'random':
+        teacher = copy.deepcopy(model)  # make teacher with random params
+        teacher.reset_parameters(generator=t_generator)
     else:
         raise RuntimeError(f'Teacher initialization strategy \'{config.t_init}\' not supported.')
 
@@ -369,10 +386,10 @@ def init_student_teacher( config:Configuration, model:DINOModel, generator:torch
         student = copy.deepcopy(dino_ckpt.teacher)     # make student from teacher checkpoint
     elif config.s_init == 'random':     
         student = copy.deepcopy(model)
-        student.reset_parameters(generator=generator)  # initialize student with random parameters
+        student.reset_parameters(generator=s_generator)  # initialize student with random parameters
     elif config.s_init == 'interpolated':
         student = copy.deepcopy(model)
-        student.reset_parameters(generator=generator)  # initialize student with random parameters
+        student.reset_parameters(generator=s_generator)  # initialize student with random parameters
         for p_t, p_s in zip(teacher.parameters(), student.parameters()):
             alpha = config.s_init_alpha
             p_s.data = (1 - alpha) * p_t + alpha * p_s # interpolate between teacher and random
@@ -380,7 +397,7 @@ def init_student_teacher( config:Configuration, model:DINOModel, generator:torch
                 p_s.data /= math.sqrt(2*alpha**2  - 2*alpha + 1)   # apply variance preserving correction
     elif config.s_init == 'neighborhood':
         student = copy.deepcopy(model)
-        student.reset_parameters(generator=generator)  # initialize student with random parameters
+        student.reset_parameters(generator=s_generator)  # initialize student with random parameters
         for p_t, p_s in zip(teacher.parameters(), student.parameters()):
             eps = config.s_init_eps
             p_s.data = p_t + eps * p_s # add eps neighborhood to teacher

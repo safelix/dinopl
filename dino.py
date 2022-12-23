@@ -33,10 +33,7 @@ def main(config:Configuration):
     if config.seed is None:
         config.seed = int(time.time())
     pl.seed_everything(config.seed)
-
-    if config.enc_seed is None:
-        config.enc_seed = int(time.time())
-    generator = torch.Generator().manual_seed(config.enc_seed)
+    generator = torch.Generator().manual_seed(config.seed)
 
     # Logger
     wandb_logger = WandbLogger(
@@ -108,12 +105,11 @@ def main(config:Configuration):
             use_bn=config.mlp_bn,
             act_fn=config.mlp_act)
     model = DINOModel(enc, head)
-    model.reset_parameters(generator=generator)
 
     print(f'Created encoder and head:')
     summary(model, depth=4, device='cpu', input_data=next(iter(dino_valid_dl))[0])
 
-    student, teacher = init_student_teacher(config=config, model=model, generator=generator)
+    student, teacher = init_student_teacher(config=config, model=model)
     del model # don't need this anymore
 
 

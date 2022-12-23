@@ -123,7 +123,11 @@ class LinearProber(pl.Callback):
   
             # prepare dataloader: everything is random if seed is None
             generator = torch.Generator(device=device)
-            if self.seed is not None:
+            if self.seed is None:
+                generator.seed()
+                if self.train_dl.generator is not None:
+                    self.train_dl.generator.seed()
+            else:
                 generator.manual_seed(self.seed)
                 if self.train_dl.generator is not None:
                     self.train_dl.generator.manual_seed(self.seed)
