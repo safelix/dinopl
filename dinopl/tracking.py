@@ -114,9 +114,17 @@ def wandb_histogram(tensor: torch.Tensor, bins=64):
         range = np.nanmin(ndarray), np.nanmax(ndarray)
         return wandb.Histogram(np_histogram=np.histogram(ndarray, bins=bins, range=range))
     except Exception as e:
-        warn('Cannot create histogram, returning None')
+        warn('Cannot create histogram, returning None: \n' + str(e))
         return None
 
+def matrix_rank(matrix, hermitian=False):
+    try:
+        rank = torch.linalg.matrix_rank(matrix, hermitian=hermitian)
+        return float(rank)
+    except Exception as e:
+        warn('Cannot compute rank, returning torch.nan: \n' + str(e))
+        return torch.nan
+        
 class FeatureTracker(pl.Callback):       
     def step(self, prefix, out:Dict[str, torch.Tensor], dino:DINO):
         logs, logs_wandb = {}, {}
