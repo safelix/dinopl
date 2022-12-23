@@ -141,7 +141,7 @@ class FeatureTracker(pl.Callback):
                 cossim_triu = cossim[torch.triu_indices(*cossim.shape, offset=1).unbind()] # upper triangular values
                 logs[f'{prefix}/{n}/{i}_x.corr().mean()'] = cossim_triu.mean()
                 logs_wandb[f'{prefix}/{n}/{i}_x.corr().hist()'] = wandb_histogram(cossim_triu, 64)
-                logs[f'{prefix}/{n}/{i}_x.corr().rank()'] = float(torch.linalg.matrix_rank(cossim, hermitian=True))
+                logs[f'{prefix}/{n}/{i}_x.corr().rank()'] = matrix_rank(cossim, hermitian=True)
                 
                 # within batch l2 distance
                 l2dist = torch.cdist(x, x)
