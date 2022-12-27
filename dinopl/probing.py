@@ -229,7 +229,8 @@ class Prober(pl.Callback):
             m, s = int(t//60), int(t%60)
             accs = [f'{acc:.3}' for acc in out[enc_id].values()]
             print(f' ..{enc_id} took {m:02d}:{s:02d}min \t=> accs = {accs}', end='')
-
+        
+        print('', end='\n')
         return out
     
     def probe_to_log(self, out):

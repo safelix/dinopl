@@ -17,7 +17,7 @@ from configuration import (Configuration, create_mc_spec, create_optimizer,
 from dinopl import *
 from dinopl import utils as U
 from dinopl.augmentation import LabelNoiseWrapper, LogitNoiseWrapper, MultiCrop
-from dinopl.probing import LinearProbe, Prober
+from dinopl.probing import LinearProbe, KNNProbe, Prober
 from dinopl.scheduling import Schedule
 from dinopl.tracking import (AccuracyTracker, FeatureSaver, FeatureTracker,
                              HParamTracker, MetricsTracker, ParamTracker,
