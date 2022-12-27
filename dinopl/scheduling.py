@@ -90,7 +90,7 @@ class Schedule():
             if literal is None:                     # NoneType
                 return torch.nan
             if isinstance(literal, (int, float)):   # numeric constants
-                return float(literal)
+                return literal
             if isinstance(literal, str) and literal in __named_const__.keys():
                 return __named_const__[literal]     # string as named constant 
             raise RuntimeError(f'Unknown constant \'{literal}\', needs to be numeric or one of {__named_const__}.')
@@ -131,7 +131,7 @@ class Schedule():
 
         # fall through case: argument was not a parseable string but an int
         if isinstance(expr, int):
-            return ConstSched(float(expr))
+            return ConstSched(expr)
 
         # fall through case: argument was not a parseable string but a Schedule
         if isinstance(expr, Schedule):
@@ -189,7 +189,7 @@ class Scheduler(pl.Callback):
 class ConstSched(Schedule):
     def __init__(self, val):
         super().__init__()
-        self.val = val
+        self.val = float(val)
 
     def set_ys(self) -> Self:
         self.ys = torch.full((self.n_steps,), self.val)
@@ -201,8 +201,8 @@ class ConstSched(Schedule):
 class LinSched(Schedule):
     def __init__(self, y_start, y_end):
         super().__init__()
-        self.y_start = y_start
-        self.y_end = y_end
+        self.y_start = float(y_start)
+        self.y_end = float(y_end)
 
     def set_ys(self) -> Self:
         self.ys = self.y_start + (self.y_end - self.y_start) * self.xs()
@@ -214,8 +214,8 @@ class LinSched(Schedule):
 class CosSched(Schedule):
     def __init__(self, y_start, y_end):
         super().__init__()
-        self.y_start = y_start
-        self.y_end = y_end
+        self.y_start = float(y_start)
+        self.y_end = float(y_end)
 
     def set_ys(self) -> Self:
         cos = 0.5 + torch.cos(self.xs(-torch.pi,0)) / 2
@@ -228,8 +228,8 @@ class CosSched(Schedule):
 class ExpSched(Schedule):
     def __init__(self, y_start, y_end):
         super().__init__()
-        self.y_start = y_start
-        self.y_end = y_end
+        self.y_start = float(y_start)
+        self.y_end = float(y_end)
 
     def set_ys(self):
         self.ys = torch.exp(self.xs(log(self.y_start), log(self.y_end)))
@@ -280,14 +280,25 @@ class CatSched(Schedule):
 
 
 class LinWarmup(CatSched, Schedule):
-    def __init__(self, y_start:float, y_end:float, epochs:int):
-        super().__init__(LinSched(y_start, y_end), y_end, epochs)
-        self.y_start = y_start
-        self.y_end = y_end
-        self.epochs = epochs
+    def __init__(self, y_start:float, y_end:float, where:int):
+        super().__init__(LinSched(y_start, y_end), y_end, where)
+        self.y_start = float(y_start)
+        self.y_end = float(y_end)
+        self.where = where
     
     def __repr__(self) -> str:
-        return Schedule.__repr__(self, [self.y_start, self.y_end, self.epochs])
+        return Schedule.__repr__(self, [self.y_start, self.y_end, self.where])
+
+
+class ExpWarmup(CatSched, Schedule):
+    def __init__(self, y_start:float, y_end:float, where:int):
+        super().__init__(ExpSched(y_start, y_end), y_end, where)
+        self.y_start = float(y_start)
+        self.y_end = float(y_end)
+        self.where = where
+    
+    def __repr__(self) -> str:
+        return Schedule.__repr__(self, [self.y_start, self.y_end, self.where])
 
 
 if __name__ == '__main__':
