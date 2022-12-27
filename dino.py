@@ -17,7 +17,7 @@ from configuration import (Configuration, create_mc_spec, create_optimizer,
 from dinopl import *
 from dinopl import utils as U
 from dinopl.augmentation import LabelNoiseWrapper, LogitNoiseWrapper, MultiCrop
-from dinopl.probing import LinearProbe, LinearProber
+from dinopl.probing import LinearProbe, Prober
 from dinopl.scheduling import Schedule
 from dinopl.tracking import (AccuracyTracker, FeatureSaver, FeatureTracker,
                              HParamTracker, MetricsTracker, ParamTracker,
@@ -152,23 +152,26 @@ def main(config:Configuration):
         config.save_features = ['embeddings', 'projections', 'logits'] if 'all' in config.save_features else config.save_features
         callbacks += [FeatureSaver(probe_valid_set, n_imgs=64, features=config.save_features, dir=config.logdir)]
 
-    if config.probe_every > 0 and config.probing_epochs > 0:
-        s_probe = LinearProbe(encoder=dino.student.enc,
-                                embed_dim=config.embed_dim,
-                                n_classes=config.ds_classes)
-        t_probe = LinearProbe(encoder=dino.teacher.enc,
-                                embed_dim=config.embed_dim,
-                                n_classes=config.ds_classes)
-        callbacks += [LinearProber(
-                        probe_every = config.probe_every,
-                        probing_epochs = config.probing_epochs,
-                        probes = dict(student=s_probe, teacher=t_probe),
-                        train_dl = probe_train_dl,
-                        valid_dl = probe_valid_dl,
-                        seed=config.prober_seed
-                    )]
-        wandb_logger.experiment.define_metric('probe/student', summary='max')
-        wandb_logger.experiment.define_metric('probe/teacher', summary='max')
+    if config.probe_every > 0:
+        probes = {}
+        if config.probing_epochs > 0:
+            probes[''] = LinearProbe(config.probing_epochs)
+            wandb_logger.experiment.define_metric('probe/student', summary='max')
+            wandb_logger.experiment.define_metric('probe/teacher', summary='max')
+
+        if config.probing_k > 0:
+            probes['knn'] = LinearProbe(config.probing_k)
+            wandb_logger.experiment.define_metric('probe/student/knn', summary='max')
+            wandb_logger.experiment.define_metric('probe/teacher/knn', summary='max')
+        
+        encoders = dict(student=dino.student.enc, teacher=dino.teacher.enc)
+        callbacks += [Prober(encoders=encoders, probes=probes, 
+                                train_dl = probe_train_dl,
+                                valid_dl = probe_valid_dl,
+                                n_classes=config.ds_classes,
+                                probe_every=config.probe_every,
+                                seed=config.prober_seed
+                            )]
 
 
     ckpt_callback = ModelCheckpoint(dirpath=config.logdir, monitor='probe/student', mode='max',
