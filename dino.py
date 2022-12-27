@@ -160,7 +160,7 @@ def main(config:Configuration):
             wandb_logger.experiment.define_metric('probe/teacher', summary='max')
 
         if config.probing_k > 0:
-            probes['knn'] = LinearProbe(config.probing_k)
+            probes['knn'] = KNNProbe(config.probing_k)
             wandb_logger.experiment.define_metric('probe/student/knn', summary='max')
             wandb_logger.experiment.define_metric('probe/teacher/knn', summary='max')
         
