@@ -55,7 +55,7 @@ class AccuracyTracker(pl.Callback):
         self.s_valid_acc.to(dino.device)
 
         if not self.supervised:
-            targets = F.softmax(out['student']['logits'], dim=-1).mean(dim=0).argmax(dim=-1)
+            targets = F.softmax(out['teacher']['logits'], dim=-1).mean(dim=0).argmax(dim=-1)
 
         if self.supervised and self.logit_targets:
             targets = F.softmax(targets, dim=-1).argmax(dim=-1)
