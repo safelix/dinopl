@@ -168,9 +168,10 @@ def main(config:Configuration):
         callbacks += [Prober(encoders=encoders, probes=probes, 
                                 train_dl = probe_train_dl,
                                 valid_dl = probe_valid_dl,
-                                n_classes=config.ds_classes,
-                                probe_every=config.probe_every,
-                                seed=config.prober_seed
+                                n_classes = config.ds_classes,
+                                normalize = config.normalize_probe,
+                                probe_every = config.probe_every,
+                                seed = config.prober_seed
                             )]
 
 

@@ -22,10 +22,10 @@ class Probe():
     def prepare(self, n_features:int, n_classes:int, device:torch.device=None, generator:torch.Generator=None) -> None:   
         raise NotImplementedError()
 
-    def train(self, train_data:List[Tuple[torch.Tensor]]) -> None:
+    def train(self, train_data:List[Tuple[torch.Tensor, torch.Tensor]]) -> None:
         raise NotImplementedError()
 
-    def valid(self, valid_data:List[Tuple[torch.Tensor]]) -> float:
+    def valid(self, valid_data:List[Tuple[torch.Tensor, torch.Tensor]]) -> float:
         raise NotImplementedError()
     
     def cleanup(self) -> None:
@@ -57,7 +57,7 @@ class LinearProbe(Probe):
         if self.clf.bias is not None:
             init.uniform_(self.clf.bias, -bound, bound, generator=generator)
 
-    def train(self, train_data:List[Tuple[torch.Tensor]]):
+    def train(self, train_data:List[Tuple[torch.Tensor, torch.Tensor]]):
         self.clf.train()
         train_pbar = tqdm(range(self.n_epochs), leave=False)
         train_pbar.set_description(f'Training')
@@ -73,7 +73,7 @@ class LinearProbe(Probe):
 
             train_pbar.set_postfix({'loss':float(loss)})
 
-    def valid(self, valid_data:List[Tuple[torch.Tensor]]):
+    def valid(self, valid_data:List[Tuple[torch.Tensor, torch.Tensor]]):
         self.clf.eval()
         valid_pbar = tqdm(valid_data, leave=False)
         valid_pbar.set_description('Validation')
@@ -112,7 +112,7 @@ class KNNProbe(Probe):
             self.index = faiss.index_cpu_to_gpu(res, device.index, self.index)
             self.acc = self.acc.to(device=device)
 
-    def train(self, train_data:List[Tuple[torch.Tensor]]):
+    def train(self, train_data:List[Tuple[torch.Tensor, torch.Tensor]]):
         train_pbar = tqdm(train_data, leave=False)
         train_pbar.set_description(f'Training')
 
@@ -122,7 +122,7 @@ class KNNProbe(Probe):
             labels.append(targets)
         self.labels = torch.cat(labels)
 
-    def valid(self, valid_data:List[Tuple[torch.Tensor]]):
+    def valid(self, valid_data:List[Tuple[torch.Tensor, torch.Tensor]]):
         valid_pbar = tqdm(valid_data, leave=False)
         valid_pbar.set_description('Validation')
 
@@ -142,51 +142,76 @@ class KNNProbe(Probe):
         self.acc = None
 
 
+def load_data(encoder:nn.Module, dl:DataLoader, device:torch.device=None):
+    loading_pbar = tqdm(dl, leave=False)
+    loading_pbar.set_description(f'Loading embeddings')
+
+    # store training mode and switch to eval
+    mode = encoder.training
+    encoder.eval()
+
+    data, mem = [], 0
+    with torch.no_grad():
+        for batch in loading_pbar:
+            inputs, targets = batch[0], batch[1]
+            if device:
+                inputs, targets = inputs.to(device), targets.to(device)
+            
+            embeddings:torch.Tensor = encoder(inputs)
+            data.append((embeddings, targets))
+            
+            mem += embeddings.element_size() * embeddings.nelement()
+            loading_pbar.set_postfix({'mem':f'{mem*1e-6:.1f}MB'})
+
+    # restore previous mode
+    encoder.train(mode)
+    return data
+
+def normalize_data(train_data:List[Tuple[torch.Tensor, torch.Tensor]], 
+                    valid_data:List[Tuple[torch.Tensor, torch.Tensor]]):
+
+    # easier but with memory overhead to store entire dataset
+    #embeddings = torch.cat(next(zip(*train_data)))
+    #torch_mean = embeddings.mean(dim=0)
+    #torch_std = embeddings.std(dim=0)
+
+    n_features = train_data[0][0].shape[-1]
+    n_samples = sum([emb.numel() for emb, _ in train_data]) / n_features
+    mean = torch.stack([emb.sum(0) for emb, _ in train_data]).sum(0) / n_samples
+    norm2 = torch.stack([(emb - mean).square().sum(0) for emb, _ in train_data]).sum(0) 
+    std = torch.sqrt(norm2 / (n_samples - 1))
+
+    # fill 0 like in sklearn.StandardScaler
+    # https://github.com/scikit-learn/scikit-learn/blob/98cf537f5/sklearn/preprocessing/_data.py#L114
+    std[std < 10 * torch.finfo(std.dtype).eps] = 1 
+
+    [emb.sub_(mean).div_(std) for emb, _ in train_data]
+    [emb.sub_(mean).div_(std) for emb, _ in valid_data]
+
+
 class Prober(pl.Callback):
     def __init__(self,
             encoders: Dict[str, nn.Module],
             probes: Dict[str, Probe],
-            n_classes: int,
             train_dl:DataLoader, 
             valid_dl:DataLoader,
+            n_classes: int,
+            normalize:bool = False,
             probe_every:int = 1,
             seed = None
             ):
         super().__init__()
 
-        self.probe_every = probe_every
         self.encoders = encoders
         self.probes = probes
 
         self.n_classes = n_classes
         self.train_dl = train_dl
         self.valid_dl = valid_dl
-        self.seed = seed
 
-    def load_data(self, encoder:nn.Module, dl:DataLoader, device:torch.device=None) -> List[torch.Tensor]:
-        loading_pbar = tqdm(dl, leave=False)
-        loading_pbar.set_description(f'Loading embeddings')
-
-        # store training mode and switch to eval
-        mode = encoder.training
-        encoder.eval()
-
-        train_data, mem = [], 0
-        with torch.no_grad():
-            for batch in loading_pbar:
-                inputs, targets = batch[0], batch[1]
-                if device:
-                    inputs, targets = inputs.to(device), targets.to(device)
-                
-                embeddings:torch.Tensor = encoder(inputs)
-                train_data.append((embeddings, targets))
-                
-                mem += embeddings.element_size() * embeddings.nelement()
-                loading_pbar.set_postfix({'mem':f'{mem*1e-6:.1f}MB'})
-
-        # restore previous mode
-        encoder.train(mode)
-        return train_data
+        self.normalize = normalize
+        self.probe_every = probe_every
+        self.seed = seed  
 
     @torch.no_grad()
     def probe(self, device=None):
@@ -204,9 +229,13 @@ class Prober(pl.Callback):
                     self.train_dl.generator.manual_seed(self.seed) 
 
             # load data
-            train_data = self.load_data(encoder, self.train_dl, device=device)
-            valid_data = self.load_data(encoder, self.valid_dl, device=device)
+            train_data = load_data(encoder, self.train_dl, device=device)
+            valid_data = load_data(encoder, self.valid_dl, device=device)
             n_features = train_data[0][0].shape[-1]
+
+            # evaluate normalized data
+            if self.normalize:
+                normalize_data(train_data, valid_data)
 
             out[enc_id] = {}
             for probe_id, probe in self.probes.items():
