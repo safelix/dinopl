@@ -153,9 +153,9 @@ class FeatureTracker(pl.Callback):
 
                 pc_sigma = matrix_pca(x)
                 if vars is not None:
-                    logs[f'{prefix}/{n}/{i}_x.nPC(var_explained=0.95)'] = pc_sigma.numel() - torch.sum(0.95 < torch.cumsum(pc_sigma, dim=0) / pc_sigma.sum())
-                    logs[f'{prefix}/{n}/{i}_x.nPC(var_explained=0.99)'] = pc_sigma.numel() - torch.sum(0.99 < torch.cumsum(pc_sigma, dim=0) / pc_sigma.sum())
-                    logs[f'{prefix}/{n}/{i}_x.nPC(var_explained=0.999)'] = pc_sigma.numel() - torch.sum(0.999 < torch.cumsum(pc_sigma, dim=0) / pc_sigma.sum())
+                    logs[f'{prefix}/{n}/{i}_x.nPC(var_explained=0.95)'] = float(pc_sigma.numel() - torch.sum(0.95 < torch.cumsum(pc_sigma, dim=0) / pc_sigma.sum()))
+                    logs[f'{prefix}/{n}/{i}_x.nPC(var_explained=0.99)'] = float(pc_sigma.numel() - torch.sum(0.99 < torch.cumsum(pc_sigma, dim=0) / pc_sigma.sum()))
+                    logs[f'{prefix}/{n}/{i}_x.nPC(var_explained=0.999)'] = float(pc_sigma.numel() - torch.sum(0.999 < torch.cumsum(pc_sigma, dim=0) / pc_sigma.sum()))
 
                 # within batch cosine similarity distance
                 cossim = torch.corrcoef(x).nan_to_num() # similarity with anything of norm zero is zero
