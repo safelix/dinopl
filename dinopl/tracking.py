@@ -145,10 +145,10 @@ class FeatureTracker(pl.Callback):
             for i, x in [('t', t_x), ('s', s_x)]:
                 logs[f'{prefix}/{n}/{i}_x.mean().mean()'] = x.mean(dim=0).mean()
                 logs[f'{prefix}/{n}/{i}_x.mean().std()'] = x.mean(dim=0).std()
-                logs[f'{prefix}/{n}/{i}_x.mean().hist()'] = wandb_histogram(x.mean(dim=0), 64)
+                logs_wandb[f'{prefix}/{n}/{i}_x.mean().hist()'] = wandb_histogram(x.mean(dim=0), 64)
                 logs[f'{prefix}/{n}/{i}_x.std().mean()'] = x.std(dim=0).mean()
                 logs[f'{prefix}/{n}/{i}_x.std().std()'] = x.std(dim=0).std()
-                logs[f'{prefix}/{n}/{i}_x.std().hist()'] = wandb_histogram(x.std(dim=0), 64)
+                logs_wandb[f'{prefix}/{n}/{i}_x.std().hist()'] = wandb_histogram(x.std(dim=0), 64)
                 logs[f'{prefix}/{n}/{i}_x.rank()'] = matrix_rank(x)
 
                 pc_sigma = matrix_pca(x)
