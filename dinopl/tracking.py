@@ -117,6 +117,13 @@ def wandb_histogram(tensor: torch.Tensor, bins=64):
         warn(f'Cannot create histogram ({str(e)}), returning None.')
         return None
 
+def matrix_pca(matrix:torch.Tensor):
+    try:
+        return torch.linalg.svdvals(matrix - matrix.mean(dim=0))
+    except Exception as e:
+        warn(f'Cannot compute svd ({str(e)}), returning None')
+        return None
+
 def matrix_rank(matrix, hermitian=False):
     try:
         rank = torch.linalg.matrix_rank(matrix, hermitian=hermitian)
@@ -136,6 +143,20 @@ class FeatureTracker(pl.Callback):
             n = n[:5]                       # shortname for plots
             
             for i, x in [('t', t_x), ('s', s_x)]:
+                logs[f'{prefix}/{n}/{i}_x.mean().mean()'] = x.mean(dim=0).mean()
+                logs[f'{prefix}/{n}/{i}_x.mean().std()'] = x.mean(dim=0).std()
+                logs[f'{prefix}/{n}/{i}_x.mean().hist()'] = wandb_histogram(x.mean(dim=0), 64)
+                logs[f'{prefix}/{n}/{i}_x.std().mean()'] = x.std(dim=0).mean()
+                logs[f'{prefix}/{n}/{i}_x.std().std()'] = x.std(dim=0).std()
+                logs[f'{prefix}/{n}/{i}_x.std().hist()'] = wandb_histogram(x.std(dim=0), 64)
+                logs[f'{prefix}/{n}/{i}_x.rank()'] = matrix_rank(x)
+
+                pc_sigma = matrix_pca(x)
+                if vars is not None:
+                    logs[f'{prefix}/{n}/{i}_x.nPC(var_explained=0.95)'] = pc_sigma.numel() - torch.sum(0.95 < torch.cumsum(pc_sigma, dim=0) / pc_sigma.sum())
+                    logs[f'{prefix}/{n}/{i}_x.nPC(var_explained=0.99)'] = pc_sigma.numel() - torch.sum(0.99 < torch.cumsum(pc_sigma, dim=0) / pc_sigma.sum())
+                    logs[f'{prefix}/{n}/{i}_x.nPC(var_explained=0.999)'] = pc_sigma.numel() - torch.sum(0.999 < torch.cumsum(pc_sigma, dim=0) / pc_sigma.sum())
+
                 # within batch cosine similarity distance
                 cossim = torch.corrcoef(x).nan_to_num() # similarity with anything of norm zero is zero
                 cossim_triu = cossim[torch.triu_indices(*cossim.shape, offset=1).unbind()] # upper triangular values
