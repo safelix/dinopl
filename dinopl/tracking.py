@@ -368,3 +368,28 @@ class FeatureSaver(pl.Callback):
         indices = torch.arange(*slice(start, stop, step).indices(len(fnames)))
 
         return data, list(columns), indices
+
+class ParamStatSaver(pl.Callback):
+    def __init__(self, model:torch.nn.Module, name:str, dir:str) -> None:
+        super().__init__()
+        self.model = model
+        self.dir = dir
+        os.makedirs(self.dir, exist_ok=True)
+
+        self.grad_fname = os.path.join(self.dir, f'{name}_grad_stats.pckl')
+        self.param_fname = os.path.join(self.dir, f'{name}_param_stats.pckl')
+        
+        self.grad_stats = [] 
+        self.param_stats = []
+
+    def on_after_backward(self, trainer: pl.Trainer, dino: DINO) -> None:
+        stats = dict((n, p.grad.square().mean().sqrt().item()) for n, p in self.model.named_parameters())
+        self.grad_stats.append(stats)
+
+    def on_train_batch_end(self, trainer:pl.Trainer, dino: DINO, *args) -> None:
+        stats = dict((n, p.square().mean().sqrt().item()) for n, p in self.model.named_parameters())
+        self.param_stats.append(stats)
+
+    def on_train_epoch_end(self, *args) -> None:
+        pd.to_pickle(pd.DataFrame(self.grad_stats), self.grad_fname)
+        pd.to_pickle(pd.DataFrame(self.param_stats), self.param_fname)
