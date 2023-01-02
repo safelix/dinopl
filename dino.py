@@ -21,7 +21,7 @@ from dinopl.probing import LinearProbe, KNNProbe, Prober
 from dinopl.scheduling import Schedule
 from dinopl.tracking import (AccuracyTracker, FeatureSaver, FeatureTracker,
                              HParamTracker, MetricsTracker, ParamTracker,
-                             PerCropEntropyTracker)
+                             PerCropEntropyTracker, ParamStatSaver)
 
 
 def main(config:Configuration):
@@ -148,10 +148,6 @@ def main(config:Configuration):
     wandb_logger.experiment.define_metric('valid/s_acc', summary='max')
     
 
-    if len(config.save_features) > 0:
-        config.save_features = ['embeddings', 'projections', 'logits'] if 'all' in config.save_features else config.save_features
-        callbacks += [FeatureSaver(probe_valid_set, n_imgs=64, features=config.save_features, dir=config.logdir)]
-
     if config.probe_every > 0:
         probes = {}
         if config.probing_epochs > 0:
@@ -175,7 +171,19 @@ def main(config:Configuration):
                             )]
 
 
-    ckpt_callback = ModelCheckpoint(dirpath=config.logdir, monitor='probe/student', mode='max',
+    if len(config.save_features) > 0:
+        config.save_features = ['embeddings', 'projections', 'logits'] if 'all' in config.save_features else config.save_features
+        callbacks += [FeatureSaver(probe_valid_set, n_imgs=64, features=config.save_features, dir=config.logdir)]
+
+    if len(config.save_paramstats) > 0:
+        config.save_paramstats = ['teacher', 'student'] if 'all' in config.save_paramstats else config.save_paramstats
+        if 'teacher' in config.save_paramstats:
+            callbacks += [ParamStatSaver(dino.teacher, 'teacher', dir=config.logdir)]
+        if 'student' in config.save_paramstats:
+            callbacks += [ParamStatSaver(dino.student, 'student', dir=config.logdir)]
+        
+
+    ckpt_callback = ModelCheckpoint(dirpath=config.logdir, monitor='probe/student', mode='max', save_last=True,
                         filename='epoch={epoch}-step={step}-probe_student={probe/student:.3f}', auto_insert_metric_name=False)
 
     # Training

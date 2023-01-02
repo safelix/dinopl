@@ -231,6 +231,9 @@ class Configuration(object):
         addons.add_argument('--save_features', type=str, nargs='*', default=[],
                             choices=['embeddings', 'projections', 'logits', 'all'],   
                             help='Save features for embeddings, projections and/or logits.')
+        addons.add_argument('--save_paramstats', type=str, nargs='*', default=[],
+                            choices=['student', 'teacher', 'logits', 'all'],   
+                            help='Save layerwise parameter and gradient statistics for teacher and/or student.')
         
         return parser
     
