@@ -152,7 +152,7 @@ class FeatureTracker(pl.Callback):
                 logs[f'{prefix}/{n}/{i}_x.rank()'] = matrix_rank(x)
 
                 pc_sigma = matrix_pca(x)
-                if vars is not None:
+                if pc_sigma is not None:
                     logs[f'{prefix}/{n}/{i}_x.nPC(var_explained=0.95)'] = float(pc_sigma.numel() - torch.sum(0.95 < torch.cumsum(pc_sigma, dim=0) / pc_sigma.sum()))
                     logs[f'{prefix}/{n}/{i}_x.nPC(var_explained=0.99)'] = float(pc_sigma.numel() - torch.sum(0.99 < torch.cumsum(pc_sigma, dim=0) / pc_sigma.sum()))
                     logs[f'{prefix}/{n}/{i}_x.nPC(var_explained=0.999)'] = float(pc_sigma.numel() - torch.sum(0.999 < torch.cumsum(pc_sigma, dim=0) / pc_sigma.sum()))
