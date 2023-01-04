@@ -12,12 +12,12 @@ from torchmetrics import Accuracy
 from tqdm import tqdm
 
 __all__ = [
-    'LinearProbe',
-    'KNNProbe'
+    'LinearAnylsis',
+    'KNNAnalysis'
     'Prober'
 ]
 
-class Probe():
+class Analysis():
     id = ''
     def prepare(self, n_features:int, n_classes:int, device:torch.device=None, generator:torch.Generator=None) -> None:   
         raise NotImplementedError()
@@ -32,7 +32,7 @@ class Probe():
         raise NotImplementedError()
 
 
-class LinearProbe(Probe):
+class LinearAnalysis(Analysis):
     id = 'lin'
     def __init__(self, n_epochs:int):
         super().__init__()
@@ -92,7 +92,7 @@ class LinearProbe(Probe):
         self.acc = None
 
         
-class KNNProbe(Probe):
+class KNNAnalysis(Analysis):
     id = 'knn'
     def __init__(self, k:int):
         super().__init__()
@@ -192,7 +192,7 @@ def normalize_data(train_data:List[Tuple[torch.Tensor, torch.Tensor]],
 class Prober(pl.Callback):
     def __init__(self,
             encoders: Dict[str, nn.Module],
-            probes: Dict[str, Probe],
+            analyses: Dict[str, Analysis],
             train_dl:DataLoader, 
             valid_dl:DataLoader,
             n_classes: int,
@@ -203,7 +203,7 @@ class Prober(pl.Callback):
         super().__init__()
 
         self.encoders = encoders
-        self.probes = probes
+        self.analyses = analyses
 
         self.n_classes = n_classes
         self.train_dl = train_dl
@@ -214,11 +214,11 @@ class Prober(pl.Callback):
         self.seed = seed  
 
     @torch.no_grad()
-    def probe(self, device=None):
+    def probe(self, device=None, flatten_out=True):
 
         out = {}
         for enc_id, encoder in self.encoders.items():
-            print(f'\nStarting probes {list(self.probes.keys())} of {enc_id}..', end='')
+            print(f'\nStarting analyses {list(self.analyses.keys())} of {enc_id}..', end='')
             t = time() 
 
             # prepare data: training data is random if seed is None and shuffle=True
@@ -238,7 +238,7 @@ class Prober(pl.Callback):
                 normalize_data(train_data, valid_data)
 
             out[enc_id] = {}
-            for probe_id, probe in self.probes.items():
+            for analysis_id, analysis in self.analyses.items():
   
                 # prepare probe: everything is random if seed is None
                 generator = torch.Generator(device=device)
@@ -247,12 +247,12 @@ class Prober(pl.Callback):
                 else:
                     generator.manual_seed(self.seed)
 
-                probe.prepare(n_features, self.n_classes, device, generator)
+                analysis.prepare(n_features, self.n_classes, device, generator)
                 
-                probe.train(train_data)
-                out[enc_id][probe_id] = probe.valid(valid_data)            
+                analysis.train(train_data)
+                out[enc_id][analysis_id] = analysis.valid(valid_data)            
 
-                probe.cleanup() # free space
+                analysis.cleanup() # free space
 
             t = time() - t
             m, s = int(t//60), int(t%60)
@@ -260,25 +260,25 @@ class Prober(pl.Callback):
             print(f' ..{enc_id} took {m:02d}:{s:02d}min \t=> accs = {accs}', end='')
         
         print('', end='\n')
-        return out
-    
-    def probe_to_log(self, out):
-        log = {}
-        for enc_id, probes in out.items():
-            for probe_id, acc in probes.items():
-                id = f'probe/{enc_id}'
-                if probe_id != '':
-                    id += f'/{probe_id}'
-                log[id] = acc
-        return log
+
+        if flatten_out: # flatten out 
+            new_out = {}
+            for enc_id, probes in out.items():
+                for probe_id, acc in probes.items():
+                    id = f'probe/{enc_id}'
+                    if probe_id != '':
+                        id += f'/{probe_id}'
+                    new_out[id] = acc
+            out = new_out
+        return out 
 
     # trainer.validate() needs to be called before trainer.fit() for per-training probe
     def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         if trainer.current_epoch % self.probe_every == 0: # only probe every so many epochs
-            pl_module.log_dict(self.probe_to_log(self.probe(pl_module.device)))
+            pl_module.log_dict(self.probe(pl_module.device, flatten_out=True))
         
         elif trainer.current_epoch == trainer.max_epochs - 1: # probe after last epoch
-            pl_module.log_dict(self.probe_to_log(self.probe(pl_module.device)))
+            pl_module.log_dict(self.probe(pl_module.device, flatten_out=True))
 
 
 if __name__ == '__main__':
@@ -307,8 +307,8 @@ if __name__ == '__main__':
     
     # prepare prober
     prober = Prober(encoders = {'':nn.Identity()}, 
-                    probes = {'lin': LinearProbe(n_epochs=100),
-                                'knn': KNNProbe(k=20)},
+                    analyses = {'lin': LinearAnalysis(n_epochs=100),
+                                'knn': KNNAnalysis(k=20)},
                     train_dl=train_dl,
                     valid_dl=valid_dl,
                     n_classes=2)

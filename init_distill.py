@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 import dinopl.utils as U
 from dinopl.modules import init
-from dinopl.probing import LinearProbe, LinearProber
+from dinopl.probing import LinearAnalysis, Prober
 from models import convnet, resnet, vgg
 
 generator = torch.Generator().manual_seed(570880439925033212)
@@ -116,11 +116,10 @@ opt = AdamW(student.parameters(), lr=1e-3, weight_decay=0, betas=(0, 0))    # no
 #    teacher.enc(x.to(device))
 
 
-# Create LinearProber
-probes = {}
-#probes['teacher'] = LinearProbe(teacher.enc, embed_dim, 10)
-probes['student'] = LinearProbe(student.enc, embed_dim, 10)
-prober = LinearProber(-1, 10, probes, probe_train_loader, probe_eval_loader, seed=1234567890)
+# Create Prober
+encoders = {'student':student.enc}#, 'teacher':teacher.enc} 
+analyses = {'':LinearAnalysis(n_epochs=10)}
+prober = Prober(encoders, analyses, probe_train_loader, probe_eval_loader, 10, normalize=False, seed=1234567890)
 
 
 # Training.

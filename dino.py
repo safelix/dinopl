@@ -17,7 +17,7 @@ from configuration import (Configuration, create_mc_spec, create_optimizer,
 from dinopl import *
 from dinopl import utils as U
 from dinopl.augmentation import LabelNoiseWrapper, LogitNoiseWrapper, MultiCrop
-from dinopl.probing import LinearProbe, KNNProbe, Prober
+from dinopl.probing import LinearAnalysis, KNNAnalysis, Prober
 from dinopl.scheduling import Schedule
 from dinopl.tracking import (AccuracyTracker, FeatureSaver, FeatureTracker,
                              HParamTracker, MetricsTracker, ParamTracker,
@@ -149,19 +149,19 @@ def main(config:Configuration):
     
 
     if config.probe_every > 0:
-        probes = {}
+        analyses = {}
         if config.probing_epochs > 0:
-            probes[''] = LinearProbe(config.probing_epochs)
+            analyses[''] = LinearAnalysis(config.probing_epochs)
             wandb_logger.experiment.define_metric('probe/student', summary='max')
             wandb_logger.experiment.define_metric('probe/teacher', summary='max')
 
         if config.probing_k > 0:
-            probes['knn'] = KNNProbe(config.probing_k)
+            analyses['knn'] = KNNAnalysis(config.probing_k)
             wandb_logger.experiment.define_metric('probe/student/knn', summary='max')
             wandb_logger.experiment.define_metric('probe/teacher/knn', summary='max')
         
         encoders = dict(student=dino.student.enc, teacher=dino.teacher.enc)
-        callbacks += [Prober(encoders=encoders, probes=probes, 
+        callbacks += [Prober(encoders=encoders, analyses=analyses, 
                                 train_dl = probe_train_dl,
                                 valid_dl = probe_valid_dl,
                                 n_classes = config.ds_classes,
