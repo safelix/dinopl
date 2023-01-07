@@ -199,11 +199,12 @@ def main(args):
         return
 
     # start executor
-    executor = submitit.AutoExecutor(folder=dir,
-        slurm_ntasks=4,
+    executor = submitit.AutoExecutor(folder=dir)
+    executor.update_parameters(
+        slurm_cpus_per_task=4,
         slurm_time=4,
         slurm_mem_per_cpu=4096,
-        slurm_gpus=1)
+        slurm_gpus_per_node=1)
 
     jobs = executor.map_array(eval_coord, coords, len(coords) * [args])
 
