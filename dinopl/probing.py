@@ -18,7 +18,6 @@ __all__ = [
 ]
 
 class Analysis():
-    id = ''
     def prepare(self, n_features:int, n_classes:int, device:torch.device=None, generator:torch.Generator=None) -> None:   
         raise NotImplementedError()
 
@@ -33,7 +32,6 @@ class Analysis():
 
 
 class LinearAnalysis(Analysis):
-    id = 'lin'
     def __init__(self, n_epochs:int):
         super().__init__()
         self.n_epochs = n_epochs
@@ -214,12 +212,13 @@ class Prober(pl.Callback):
         self.seed = seed  
 
     @torch.no_grad()
-    def probe(self, device=None, flatten_out=True):
+    def probe(self, device=None, flatten_out=True, verbose=True):
 
         out = {}
         for enc_id, encoder in self.encoders.items():
-            print(f'\nStarting analyses {list(self.analyses.keys())} of {enc_id}..', end='')
-            t = time() 
+            if verbose:
+                print(f'\nStarting analyses {list(self.analyses.keys())} of {enc_id}..', end='')
+                t = time() 
 
             # prepare data: training data is random if seed is None and shuffle=True
             if self.train_dl.generator is not None:
@@ -254,12 +253,15 @@ class Prober(pl.Callback):
 
                 analysis.cleanup() # free space
 
-            t = time() - t
-            m, s = int(t//60), int(t%60)
             accs = [f'{acc:.3}' for acc in out[enc_id].values()]
-            print(f' ..{enc_id} took {m:02d}:{s:02d}min \t=> accs = {accs}', end='')
+    
+            if verbose:
+                t = time() - t
+                m, s = int(t//60), int(t%60)
+                print(f' ..{enc_id} took {m:02d}:{s:02d}min \t=> accs = {accs}', end='')
         
-        print('', end='\n')
+        if verbose:
+            print('', end='\n')
 
         if flatten_out: # flatten out 
             new_out = {}
