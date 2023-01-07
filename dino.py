@@ -131,6 +131,9 @@ def main(config:Configuration):
                 opt_lr = Schedule.parse(config.opt_lr),
                 opt_wd = Schedule.parse(config.opt_wd),
                 wn_freeze_epochs=config.wn_freeze_epochs)
+    print(f'Init optimizer: {len(dino.optimizer.param_groups)} paramgroups of sizes', 
+        [len(group['params']) for group in dino.optimizer.param_groups])
+    print(f'=> {dino.optimizer}')
 
     # Tracking Logic    
     callbacks = [
