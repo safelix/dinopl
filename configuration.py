@@ -41,10 +41,10 @@ class Constants(object):
             if torch.cuda.is_available():
                 self.DEVICE = torch.device('cuda')
                 GPU = torch.cuda.get_device_name(torch.cuda.current_device())
-                print(f'Torch running on {GPU}...' , flush=True)
+                print(f'Torch ({torch.__version__}) running on {GPU}...' , flush=True)
             else:
                 self.DEVICE = torch.device('cpu')
-                print(f'Torch running on CPU...', flush=True)
+                print(f'Torch ({torch.__version__}) running on CPU...', flush=True)
 
 
             # Get directories from os.environ
