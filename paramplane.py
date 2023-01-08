@@ -185,7 +185,8 @@ def eval_coord(coord:torch.Tensor, args):
     out['coord'] = coord
     out['l2norm'] = vec.norm(p=2)
 
-    return out
+    return {k: v.cpu() for k,v in out.items()}
+
 
 def main(args):
     dir = os.path.join(os.environ['DINO_RESULTS'], 'paramplane')
