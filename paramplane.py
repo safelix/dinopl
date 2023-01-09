@@ -270,7 +270,7 @@ def main(args):
     # gather results into tensors of shape (len(X)*len(Y), -1)
     out:Dict[str, torch.Tensor] = {}
     for idx, job in enumerate(tqdm(jobs)):
-        for sub_idx, res in job.results()[0]:
+        for sub_idx, res in enumerate(job.results()[0]):
             for key, val in res.items():
                 if key not in out.keys():
                     out[key] = torch.zeros((len(X)*len(Y), *val.shape))
