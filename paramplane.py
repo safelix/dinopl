@@ -231,7 +231,7 @@ def eval_coords(coords:torch.Tensor, args):
 
     out_list = []
     student = copy.deepcopy(teacher)
-    for coord in tqdm(coords):
+    for coord in tqdm(coords, postfix='unique postfix'): # add postfix to make unique for parsing
         # get vector and model from coordinate
         vec = P(coord)
         U.vector_to_module(vec, student)
@@ -250,7 +250,7 @@ def parse_tqdm_state(fname):
     try:
         with open(fname) as f:
             lastline = deque(f, 1).pop()
-        return int(re.findall(r'(?<=\|\s)(\d+)(?=/\d+\s\[)', lastline)[-1])
+        return int(re.findall(r'(?<=\|\s)(\d+)(?=/\d+\s\[.*unique\spostfix)', lastline)[-1])
     except:
         return 0
 
@@ -281,7 +281,7 @@ def main(args):
     # track progress as printed in stderr
     with tqdm(total=len(X)*len(Y)) as pbar:
         while any([not job.done() for job in jobs]):
-            pbar.n = max(pbar.n, sum([parse_tqdm_state(job.paths.stderr) for job in jobs]))
+            pbar.n = sum([parse_tqdm_state(job.paths.stderr) for job in jobs])
             pbar.set_postfix({'#jobs':sum([job.state=='RUNNING' for job in jobs])})
             pbar.update(0)
             sleep(1)
