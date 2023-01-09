@@ -1,29 +1,47 @@
 
 import argparse
 import copy
+import json
 import os
+import sys
 from math import sqrt
-from typing import Dict
+from time import strftime
+from typing import Dict, Tuple
 
-import torch
 import submitit
+import torch
 from tqdm import tqdm
 
-from configuration import (Configuration, create_mc_spec, get_encoder,
-                           init_student_teacher)
-from dinopl import DINO, DINOHead, DINOModel
 import dinopl.utils as U
+from configuration import (Configuration, create_mc_spec, get_encoder,
+                           init_student_teacher, get_dataset)
+from dinopl import DINO, DINOHead, DINOModel
+from dinopl.augmentation import MultiCrop
 
-from dinopl.probing import Prober, LinearAnalysis, KNNAnalysis
+from dinopl.probing import KNNAnalysis, LinearAnalysis, Prober, normalize_data
+from torch.utils.data import DataLoader
+from torchvision import transforms
+from torch.nn import functional as F
+
+def load_data(config, batchsize, num_workers, pin_memory) -> Tuple[DataLoader, DataLoader]:
+    DSet = get_dataset(config)
+    trfm = transforms.Compose([ # self-training
+                    transforms.Lambda(lambda img: img.convert('RGB')), transforms.ToTensor(),
+                    transforms.Normalize(DSet.mean, DSet.std),
+                ])
+    #trfm = MultiCrop(config.mc_spec, per_crop_transform=trfm)
+
+    train_ds = DSet(root=os.environ['DINO_DATA'], train=True, transform=trfm, download=False)
+    valid_ds = DSet(root=os.environ['DINO_DATA'], train=False, transform=trfm, download=False)
+    train_dl = DataLoader(dataset=train_ds, batch_size=batchsize, num_workers=num_workers, pin_memory=pin_memory)
+    valid_dl = DataLoader(dataset=valid_ds, batch_size=batchsize, num_workers=num_workers, pin_memory=pin_memory)
+    return train_dl, valid_dl
 
 
-def load_model(identifier:str) -> DINOModel:
+def load_dino(identifier:str, config:Configuration) -> DINO:
     ckpt_path, name = identifier.split(':')
-    run_path = os.path.dirname(ckpt_path)
 
     # get configuration and prepare model
-    config = Configuration.from_json(os.path.join(run_path, 'config.json'))
-    config.mc_spec = create_mc_spec(config)
     enc = get_encoder(config)()
     config.embed_dim = enc.embed_dim
     head = DINOHead(config.embed_dim, config.out_dim, 
@@ -37,12 +55,18 @@ def load_model(identifier:str) -> DINOModel:
 
     # load DINO checkpoint
     dino = DINO.load_from_checkpoint(ckpt_path, map_location='cpu', mc_spec=config.mc_spec, student=student, teacher=teacher)
-
+    
     # init if required by .init() suffix
     if name.endswith('.init()'):
         student, teacher = init_student_teacher(config, student)
         dino.student = student
         dino.teacher = teacher
+
+    return dino
+
+def load_model(identifier:str, config:Configuration) -> DINOModel:
+    dino = load_dino(identifier, config)
+    ckpt_path, name = identifier.split(':')
 
     if name.startswith('teacher'):
         return dino.teacher
@@ -118,132 +142,186 @@ class ParamProjector():
         raise ValueError('Cannot infer whether to project or map input.')
 
 
-def get_limits(data:torch.Tensor, aspectlim=(3/4, 1/1), margin=0.05, round_to_multiple=None):
-    xmin, ymin = data.min(dim=0).values
-    xmax, ymax = data.max(dim=0).values
+def eval_student(student:DINOModel, teacher:DINOModel, criterion, prober:Prober, train_dl:DataLoader, valid_dl:DataLoader, device=None):
+    out = {}
 
-    # enforce aspect ratio limits
-    xrange = xmax - xmin
-    yrange = ymax - ymin
-    xcenter = xmin + xrange / 2
-    ycenter = ymin + yrange / 2
-    
-    if yrange / xrange < aspectlim[0]:
-        newrange = aspectlim[0] * xrange
-        ymin = ycenter - newrange * (ycenter - ymin)/yrange
-        ymax = ycenter + newrange * (ymax - ycenter)/yrange
-        yrange = newrange
+    # process training set
+    train_data = []
+    loss, numel = 0, 0
+    for batch in train_dl:
+        batch = batch[0].to(device), batch[1].to(device) if device else batch
+        model_out = student(batch[0])
+        teacher_out = teacher(batch[0])
+        
+        # gather loss
+        numel += batch[1].shape[0]
+        loss += criterion(model_out['logits'], teacher_out['logits']).sum()
+        train_data.append((model_out['embeddings'].squeeze(), batch[1]))
+    out['train/loss'] = loss / numel # full dataset loss
 
-    if yrange / xrange > aspectlim[1]:
-        newrange = aspectlim[1] * yrange
-        xmin = ycenter - newrange * (ycenter - xmin)/xrange
-        xmax = ycenter + newrange * (xmax - ycenter)/xrange
-        yrange = newrange
+    # process validation set
+    valid_data = []
+    loss, numel = 0, 0
+    for batch in valid_dl:
+        batch = batch[0].to(device), batch[1].to(device) if device else batch
+        
+        # run an isolated validation 
+        model_out = student(batch[0])
+        teacher_out = teacher(batch[0])
+        
+        # gather loss
+        numel += batch[1].shape[0]
+        loss += criterion(model_out['logits'], teacher_out['logits']).sum()
+        valid_data.append((model_out['embeddings'].squeeze(), batch[1]))
+    out['valid/loss'] = loss / numel
 
-    # add margins
-    xmin = xcenter - (1+2*margin) * (xcenter - xmin)
-    ymin = ycenter - (1+2*margin) * (ycenter - ymin)
-    xmax = xcenter + (1+2*margin) * (xmax - xcenter)
-    ymax = ycenter + (1+2*margin) * (ymax - ycenter)
+    # analyze probes
+    probe = prober.eval_probe(train_data, valid_data, device=device)
+    for key, val in probe.items():
+        out[f'probe/{key}'] = val
 
-    # round
-    if round_to_multiple is None:
-        round_to_multiple = 10**(data.std().log10().floor() - 1)
-    if round_to_multiple > 0:
-        xmin = (xmin / round_to_multiple).floor() * round_to_multiple
-        xmax = (xmax / round_to_multiple).ceil() * round_to_multiple
-        ymin = (ymin / round_to_multiple).floor() * round_to_multiple
-        ymax = (ymax / round_to_multiple).ceil() * round_to_multiple
+    normalize_data(train_data, valid_data)
+    probe = prober.eval_probe(train_data, valid_data, device=device)
+    for key, val in probe.items():
+        out[f'probe/norm/{key}'] = val
 
-    return (float(xmin), float(xmax)), (float(ymin), float(ymax))
+    return out
+
+def mse_criterion(pred, targ):
+    return U.mean_squared_error(pred, targ)
+
+def ce_criterion(pred, targ):
+    return U.cross_entropy(F.log_softmax(pred, dim=1), F.softmax(targ, dim=-1))
 
 
-def eval_coord(coord:torch.Tensor, args):
+def eval_coords(coords:torch.Tensor, args):
+    device = torch.device('cpu' if args['force_cpu'] else U.pick_single_gpu())
+    coords = coords.to(device)
 
-    device = torch.device('cpu') if args['force_cpu'] else U.pick_single_gpu()    
+    config =  Configuration.from_json(os.path.join(os.path.dirname(args['vec0']), 'config.json'))
+    config.mc_spec = create_mc_spec(config)
 
-    # make ParamProjector from and plane descriptor
-    model0 = load_model(args['vec0']).to(device=device)
-    model1 = load_model(args['vec1']).to(device=device)
-    model2 = load_model(args['vec2']).to(device=device)
+    # Setup ParamProjector.
+    teacher = load_model(args['vec0'], config).to(device=device)
+    model1 = load_model(args['vec1'], config).to(device=device)
+    model2 = load_model(args['vec2'], config).to(device=device)
     
     P = ParamProjector(
-        vec0=U.module_to_vector(model0),
+        vec0=U.module_to_vector(teacher),
         vec1=U.module_to_vector(model1),
         vec2=U.module_to_vector(model2),
         center=args['projector_center'],
         scale=args['projector_scale']
     )
 
-    # get vector and model from coordinate
-    vec = P(coord.to(device))
-    model = copy.deepcopy(model0)
-    U.vector_to_module(vec, model)
+    # DINO and Data Setup.
+    train_dl, valid_dl = load_data(config, args['batchsize'], args['num_workers'], not args['force_cpu'])
+    criterion = mse_criterion if args['loss']=='MSE' else ce_criterion
 
-    # make experiments and store results
-    out = {}
-    out['coord'] = coord
-    out['l2norm'] = vec.norm(p=2)
+    # Probing Setup
+    analyses = {}
+    if args['probing_epochs'] > 0:
+        analyses['lin'] = LinearAnalysis(args['probing_epochs'])
+    if args['probing_k'] > 0:
+        analyses['knn'] = KNNAnalysis(args['probing_k'])
+    prober = Prober(encoders={}, analyses=analyses, train_dl=None, valid_dl=None, n_classes=train_dl.dataset.ds_classes)
 
-    return {k: v.cpu() for k,v in out.items()}
+    out_list = []
+    student = copy.deepcopy(teacher)
+    for coord in coords:
+        # get vector and model from coordinate
+        vec = P(coord)
+        U.vector_to_module(vec, student)
+
+        # make experiments and store results
+        out = eval_student(student, teacher, criterion, prober, train_dl, valid_dl, device)
+        out['coord'] = coord
+        out['l2norm'] = vec.norm(p=2)
+
+        # return on cpu
+        out_list.append({k: v.cpu() if isinstance(v, torch.Tensor) else v for k,v in out.items()})
+
+    return out_list 
 
 
 def main(args):
-    dir = os.path.join(os.environ['DINO_RESULTS'], 'paramplane')
-
+    # Make grid/coords with matrix indexing -> grid[y,x] = (p_x,p_y)
     X = torch.arange(args['xmin'], args['xmax'] + args['stepsize'], args['stepsize'])
     Y = torch.arange(args['ymin'], args['ymax'] + args['stepsize'], args['stepsize'])
-    coords = torch.cartesian_prod(X, Y)
-    print(f'Do you want to evaluate {coords.shape[0]} coordinates?')
-    response = input()
-    if response.lower() not in {'y', 'yes'}:
-        return
+    grid = torch.stack(torch.meshgrid(X, Y, indexing='ij'), dim=-1) # shape = (len(X), len(Y), 2)
+    coords = grid.reshape((-1, 2)) # list of coordinates of shape 2
+    coords = torch.tensor_split(coords, args['num_jobs']) # split into njobs chunks
 
-    # start executor
-    executor = submitit.AutoExecutor(folder=dir)
+    print(f'Evaluating {len(X)*len(Y)} coordinates in {len(coords)} jobs of size ~{len(coords[0])}..')
+    #if input().lower() not in {'y', 'yes'}:
+    #    sys.exit()
+
+    # Start executor
+    executor = submitit.AutoExecutor(folder=logdir, cluster=args['cluster'])
     executor.update_parameters(
-        slurm_cpus_per_task=4,
-        slurm_time=4,
-        slurm_mem_per_cpu=4096,
-        slurm_gpus_per_node=1)
+            slurm_cpus_per_task=args['num_workers'],
+            slurm_mem_per_cpu=4096,
+            slurm_gpus_per_node=1,
+            #slurm_time=4,
+        )
 
-    jobs = executor.map_array(eval_coord, coords, len(coords) * [args])
+    jobs = executor.map_array(eval_coords, coords, len(coords) * [args])
 
+    # gather results into tensors of shape (len(coords), -1)
     out:Dict[str, torch.Tensor] = {}
     for idx, job in enumerate(tqdm(jobs)):
         res:Dict[str, torch.Tensor] = job.results()[0]
-
         for key, val in res.items():
             if key not in out.keys():
-                out[key] = torch.zeros((coords.shape[0], *val.shape))
+                out[key] = torch.zeros((len(coords), *val.shape))
             out[key][idx] = val
 
+    # Reshape results for matrix indexing (len(X), len(Y), -1) and save
     for key, val in out.items():
-        fname = os.path.join(dir, f'{key}.pt')
+        fname = os.path.join(dir, f"{key.replace('/', '_')}).pt")
         print(f'Saving {fname}')
         torch.save(val, fname)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--force_cpu', action='store_true')
+
+    # Projector arguments
     parser.add_argument('vec0', type=str) # results/DINO/22abl14o/last.ckpt:teacher   # alpha=0
     parser.add_argument('vec1', type=str) # results/DINO/22abl14o/last.ckpt:student   # alpha=0
     parser.add_argument('vec2', type=str) # results/DINO/3mtlpc13/last.ckpt:student   # alpha=1
-
     parser.add_argument('--projector_center', choices={'', 'mean', 'minnorm'}, default='minnorm')
     parser.add_argument('--projector_scale', choices={'', 'l2_ortho', 'rms_ortho'}, default='l2_ortho')
 
-    parser.add_argument('--xmin', type=float, default=None)
-    parser.add_argument('--xmax', type=float, default=None)
-    parser.add_argument('--ymin', type=float, default=None)
-    parser.add_argument('--ymax', type=float, default=None)
-
+    # Image properties
+    parser.add_argument('--loss', choices={'MSE', 'CE'})
+    parser.add_argument('--xmin', type=float)
+    parser.add_argument('--xmax', type=float)
+    parser.add_argument('--ymin', type=float)
+    parser.add_argument('--ymax', type=float)
     parser.add_argument('--stepsize', type=float)
+
+    # Probing arguments
+    parser.add_argument('--probing_epochs', type=int, default=10)
+    parser.add_argument('--probing_k', type=int, default=20)
+
+    # General arguments
+    parser.add_argument('--runname', type=str, default=strftime('%Y-%m-%d--%H-%M'))
+    parser.add_argument('--num_jobs', type=int, default=1)
+    parser.add_argument('--num_workers', type=int, default=4)
+    parser.add_argument('--batchsize', type=int, default=512)
+    parser.add_argument('--cluster', choices={None, 'local', 'debug'}, default=None)
+    parser.add_argument('--force_cpu', action='store_true')
     args = vars(parser.parse_args())
+
+    # Prepare directories and store 
+    dir = os.path.join(os.environ['DINO_RESULTS'], 'paramplane', args['runname'])
+    logdir = os.path.join(dir, 'logs')
+    os.makedirs(logdir, exist_ok=True)
+
+    # Store args to directory
+    with open(os.path.join(dir, 'args.json'), 'w') as f:
+            s = json.dumps(args, indent=2)
+            f.write(s)
+
     main(args)
-
-    
-       
-
-    

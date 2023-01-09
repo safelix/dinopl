@@ -55,7 +55,7 @@ class LinearAnalysis(Analysis):
         if self.clf.bias is not None:
             init.uniform_(self.clf.bias, -bound, bound, generator=generator)
 
-    def train(self, train_data:List[Tuple[torch.Tensor, torch.Tensor]]):
+    def train(self, train_data:List[Tuple[torch.Tensor, torch.Tensor]], verbose=True):
         self.clf.train()
         train_pbar = tqdm(range(self.n_epochs), leave=False)
         train_pbar.set_description(f'Training')
@@ -209,7 +209,30 @@ class Prober(pl.Callback):
 
         self.normalize = normalize
         self.probe_every = probe_every
-        self.seed = seed  
+        self.seed = seed 
+    
+    def eval_probe(self, train_data:List[Tuple[torch.Tensor, torch.Tensor]], 
+                            valid_data:List[Tuple[torch.Tensor, torch.Tensor]], device=None):
+
+        accs = {}
+        n_features = train_data[0][0].shape[-1]
+        for analysis_id, analysis in self.analyses.items():
+  
+            # prepare probe: everything is random if seed is None
+            generator = torch.Generator(device=device)
+            if self.seed is None:
+                generator.seed()
+            else:
+                generator.manual_seed(self.seed)
+
+            analysis.prepare(n_features, self.n_classes, device, generator)
+            
+            analysis.train(train_data)
+            accs[analysis_id] = analysis.valid(valid_data)            
+
+            analysis.cleanup() # free space
+
+        return accs
 
     @torch.no_grad()
     def probe(self, device=None, flatten_out=True, verbose=True):
@@ -230,34 +253,17 @@ class Prober(pl.Callback):
             # load data
             train_data = load_data(encoder, self.train_dl, device=device)
             valid_data = load_data(encoder, self.valid_dl, device=device)
-            n_features = train_data[0][0].shape[-1]
 
             # evaluate normalized data
             if self.normalize:
                 normalize_data(train_data, valid_data)
 
-            out[enc_id] = {}
-            for analysis_id, analysis in self.analyses.items():
-  
-                # prepare probe: everything is random if seed is None
-                generator = torch.Generator(device=device)
-                if self.seed is None:
-                    generator.seed()
-                else:
-                    generator.manual_seed(self.seed)
-
-                analysis.prepare(n_features, self.n_classes, device, generator)
-                
-                analysis.train(train_data)
-                out[enc_id][analysis_id] = analysis.valid(valid_data)            
-
-                analysis.cleanup() # free space
-
-            accs = [f'{acc:.3}' for acc in out[enc_id].values()]
+            out[enc_id] = self.eval_probe(train_data, valid_data, device=device)
     
             if verbose:
                 t = time() - t
                 m, s = int(t//60), int(t%60)
+                accs = [f'{acc:.3}' for acc in out[enc_id].values()]
                 print(f' ..{enc_id} took {m:02d}:{s:02d}min \t=> accs = {accs}', end='')
         
         if verbose:
