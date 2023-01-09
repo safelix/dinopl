@@ -58,8 +58,8 @@ def load_dino(identifier:str, config:Configuration) -> DINO:
     # load DINO checkpoint
     dino = DINO.load_from_checkpoint(ckpt_path, map_location='cpu', mc_spec=config.mc_spec, student=student, teacher=teacher)
     
-    # init if required by .init() suffix
-    if name.endswith('.init()'):
+    # init if required by .init suffix
+    if name.endswith('.init'):
         student, teacher = init_student_teacher(config, student)
         dino.student = student
         dino.teacher = teacher
