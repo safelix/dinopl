@@ -283,6 +283,9 @@ def main(args):
             pbar.n = sum([parse_tqdm_state(job.paths.stderr) for job in jobs])
             pbar.update(0)
             sleep(1)
+            
+        pbar.n = sum([parse_tqdm_state(job.paths.stderr) for job in jobs])
+        pbar.update(0) # set to done
 
     # gather results into tensors of shape (len(X)*len(Y), -1)
     out:Dict[str, torch.Tensor] = {}
