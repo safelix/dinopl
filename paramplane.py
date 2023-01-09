@@ -336,7 +336,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_jobs', type=int, default=1)
     parser.add_argument('--num_workers', type=int, default=4)
     parser.add_argument('--mem_per_cpu', type=int, default=4096)
-    parser.add_argument('--time', type=int, default='04:00:00')
+    parser.add_argument('--time', type=str, default='04:00:00')
     parser.add_argument('--force_cpu', action='store_true')
     args = vars(parser.parse_args())
 
