@@ -7,6 +7,8 @@ import sys
 from math import sqrt
 from time import strftime, sleep
 from typing import Dict, Tuple
+import re
+from collections import deque
 
 import submitit
 import torch
@@ -178,12 +180,12 @@ def eval_student(student:DINOModel, teacher:DINOModel, criterion, prober:Prober,
     # analyze probes
     probe = prober.eval_probe(train_data, valid_data, device=device)
     for key, val in probe.items():
-        out[f'probe/{key}'] = val
+        out[f'probe/{key}'] = torch.tensor(val)
 
     normalize_data(train_data, valid_data)
     probe = prober.eval_probe(train_data, valid_data, device=device)
     for key, val in probe.items():
-        out[f'probe/norm/{key}'] = val
+        out[f'probe/norm/{key}'] = torch.tensor(val)
 
     return out
 
@@ -228,7 +230,7 @@ def eval_coords(coords:torch.Tensor, args):
 
     out_list = []
     student = copy.deepcopy(teacher)
-    for idx, coord in enumerate(tqdm(coords)):
+    for coord in tqdm(coords):
         # get vector and model from coordinate
         vec = P(coord)
         U.vector_to_module(vec, student)
@@ -239,11 +241,17 @@ def eval_coords(coords:torch.Tensor, args):
         out['l2norm'] = vec.norm(p=2)
 
         # return tensor on cpu
-        out_list.append({k: torch.tensor(v).cpu() for k,v in out.items()})
-        print(idx, file=sys.stderr, end='\r', flush=True)
+        out_list.append({k: v.cpu() for k,v in out.items()})
 
     return out_list 
 
+def parse_tqdm_state(fname):
+    try:
+        with open(fname) as f:
+            lastline = deque(f, 1).pop()
+        return int(re.findall(r'(?<=\|\s)(\d+)(?=/\d+\s\[)', lastline)[-1])
+    except:
+        return 0
 
 def main(args):
     # Make grid/coords with matrix indexing -> grid[y,x] = (p_x,p_y)
@@ -252,6 +260,7 @@ def main(args):
     grid = torch.stack(torch.meshgrid(X, Y, indexing='ij'), dim=-1) # shape = (len(X), len(Y), 2)
     coords = grid.reshape((-1, 2)) # list of coordinates of shape 2
     coords = torch.tensor_split(coords, args['num_jobs']) # split into njobs chunks
+    coords = [c for c in coords if c.nelement() > 0] # discard empty tensors
 
     print(f'Evaluating {len(X)*len(Y)} coordinates in {len(coords)} jobs of size ~{len(coords[0])}..')
     #if input().lower() not in {'y', 'yes'}:
@@ -270,8 +279,9 @@ def main(args):
 
     # track progress as printed in stderr
     with tqdm(total=len(X)*len(Y)) as pbar:
-        while any([int(job.state == 'RUNNING') for job in jobs]):
-            pbar.update(sum([int(job.paths.stderr) for job in jobs]))
+        while any([job.state == 'RUNNING' for job in jobs]):
+            pbar.n = sum([parse_tqdm_state(job.paths.stderr) for job in jobs])
+            pbar.update(0)
             sleep(1)
 
     # gather results into tensors of shape (len(X)*len(Y), -1)
@@ -326,6 +336,7 @@ if __name__ == '__main__':
     dir = os.path.join(os.environ['DINO_RESULTS'], 'paramplane', args['runname'])
     logdir = os.path.join(dir, 'logs')
     os.makedirs(logdir, exist_ok=True)
+    print(f'Logging to {logdir}')
 
     # Store args to directory
     with open(os.path.join(dir, 'args.json'), 'w') as f:
