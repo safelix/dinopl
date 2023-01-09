@@ -226,7 +226,8 @@ def eval_coords(coords:torch.Tensor, args):
         analyses['lin'] = LinearAnalysis(args['probing_epochs'])
     if args['probing_k'] > 0:
         analyses['knn'] = KNNAnalysis(args['probing_k'])
-    prober = Prober(encoders={}, analyses=analyses, train_dl=None, valid_dl=None, n_classes=train_dl.dataset.ds_classes)
+    prober = Prober(encoders={}, analyses=analyses, train_dl=None, valid_dl=None, 
+                    n_classes=train_dl.dataset.ds_classes, seed=args['prober_seed'])
 
     out_list = []
     student = copy.deepcopy(teacher)
@@ -270,17 +271,18 @@ def main(args):
     executor = submitit.AutoExecutor(folder=logdir, cluster=args['cluster'])
     executor.update_parameters(
             slurm_cpus_per_task=args['num_workers'],
-            slurm_mem_per_cpu=4096,
+            slurm_mem_per_cpu=args['mem_per_cpu'],
+            slurm_time=args['time'],
             slurm_gpus_per_node=1,
-            #slurm_time=4,
         )
 
     jobs = executor.map_array(eval_coords, coords, len(coords) * [args])
 
     # track progress as printed in stderr
     with tqdm(total=len(X)*len(Y)) as pbar:
-        while any([job.state == 'RUNNING' for job in jobs]):
+        while any([not job.done() for job in jobs]):
             pbar.n = sum([parse_tqdm_state(job.paths.stderr) for job in jobs])
+            pbar.set_postfix({'#jobs':sum([job.state=='RUNNING' for job in jobs])})
             pbar.update(0)
             sleep(1)
             
@@ -323,15 +325,18 @@ if __name__ == '__main__':
     parser.add_argument('--stepsize', type=float)
 
     # Probing arguments
+    parser.add_argument('--batchsize', type=int, default=512)
     parser.add_argument('--probing_epochs', type=int, default=10)
     parser.add_argument('--probing_k', type=int, default=20)
+    parser.add_argument('--prober_seed', type=int, default=1234567890)
 
     # General arguments
     parser.add_argument('--runname', type=str, default=strftime('%Y-%m-%d--%H-%M'))
+    parser.add_argument('--cluster', choices={None, 'local', 'debug'}, default=None)
     parser.add_argument('--num_jobs', type=int, default=1)
     parser.add_argument('--num_workers', type=int, default=4)
-    parser.add_argument('--batchsize', type=int, default=512)
-    parser.add_argument('--cluster', choices={None, 'local', 'debug'}, default=None)
+    parser.add_argument('--mem_per_cpu', type=int, default=4096)
+    parser.add_argument('--time', type=int, default='04:00:00')
     parser.add_argument('--force_cpu', action='store_true')
     args = vars(parser.parse_args())
 
