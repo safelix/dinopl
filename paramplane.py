@@ -267,19 +267,20 @@ def main(args):
 
     jobs = executor.map_array(eval_coords, coords, len(coords) * [args])
 
-    # gather results into tensors of shape (len(coords), -1)
+    # gather results into tensors of shape (len(X)*len(Y), -1)
     out:Dict[str, torch.Tensor] = {}
     for idx, job in enumerate(tqdm(jobs)):
-        res:Dict[str, torch.Tensor] = job.results()[0]
-        for key, val in res.items():
-            if key not in out.keys():
-                out[key] = torch.zeros((len(coords), *val.shape))
-            out[key][idx] = val
+        for sub_idx, res in job.results()[0]:
+            for key, val in res.items():
+                if key not in out.keys():
+                    out[key] = torch.zeros((len(X)*len(Y), *val.shape))
+                out[key][idx+sub_idx] = val
 
     # Reshape results for matrix indexing (len(X), len(Y), -1) and save
     for key, val in out.items():
+        val = val.reshape((len(X), len(Y), -1))
         fname = os.path.join(dir, f"{key.replace('/', '_')}).pt")
-        print(f'Saving {fname}')
+        print(f'Saving {fname} of shape {val.shape}')
         torch.save(val, fname)
 
 
