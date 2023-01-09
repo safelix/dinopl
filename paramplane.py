@@ -238,8 +238,8 @@ def eval_coords(coords:torch.Tensor, args):
         out['coord'] = coord
         out['l2norm'] = vec.norm(p=2)
 
-        # return on cpu
-        out_list.append({k: v.cpu() if isinstance(v, torch.Tensor) else v for k,v in out.items()})
+        # return tensor on cpu
+        out_list.append({k: torch.tensor(v).cpu() for k,v in out.items()})
 
     return out_list 
 
