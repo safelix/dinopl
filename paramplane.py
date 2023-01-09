@@ -279,7 +279,7 @@ def main(args):
     # Reshape results for matrix indexing (len(X), len(Y), -1) and save
     for key, val in out.items():
         val = val.reshape((len(X), len(Y), -1))
-        fname = os.path.join(dir, f"{key.replace('/', '_')}).pt")
+        fname = os.path.join(dir, f"{key.replace('/', '_')}.pt")
         print(f'Saving {fname} of shape {val.shape}')
         torch.save(val, fname)
 
