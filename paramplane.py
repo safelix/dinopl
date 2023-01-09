@@ -281,7 +281,7 @@ def main(args):
     # track progress as printed in stderr
     with tqdm(total=len(X)*len(Y)) as pbar:
         while any([not job.done() for job in jobs]):
-            pbar.n = sum([parse_tqdm_state(job.paths.stderr) for job in jobs])
+            pbar.n = max(pbar.n, sum([parse_tqdm_state(job.paths.stderr) for job in jobs]))
             pbar.set_postfix({'#jobs':sum([job.state=='RUNNING' for job in jobs])})
             pbar.update(0)
             sleep(1)
