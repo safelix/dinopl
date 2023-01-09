@@ -5,7 +5,7 @@ import json
 import os
 import sys
 from math import sqrt
-from time import strftime
+from time import strftime, sleep
 from typing import Dict, Tuple
 
 import submitit
@@ -228,7 +228,7 @@ def eval_coords(coords:torch.Tensor, args):
 
     out_list = []
     student = copy.deepcopy(teacher)
-    for coord in coords:
+    for idx, coord in enumerate(tqdm(coords)):
         # get vector and model from coordinate
         vec = P(coord)
         U.vector_to_module(vec, student)
@@ -240,6 +240,7 @@ def eval_coords(coords:torch.Tensor, args):
 
         # return tensor on cpu
         out_list.append({k: torch.tensor(v).cpu() for k,v in out.items()})
+        print(idx, file=sys.stderr, end='\r', flush=True)
 
     return out_list 
 
@@ -267,9 +268,15 @@ def main(args):
 
     jobs = executor.map_array(eval_coords, coords, len(coords) * [args])
 
+    # track progress as printed in stderr
+    with tqdm(total=len(X)*len(Y)) as pbar:
+        while any([int(job.state == 'RUNNING') for job in jobs]):
+            pbar.update(sum([int(job.paths.stderr) for job in jobs]))
+            sleep(1)
+
     # gather results into tensors of shape (len(X)*len(Y), -1)
     out:Dict[str, torch.Tensor] = {}
-    for idx, job in enumerate(tqdm(jobs)):
+    for idx, job in enumerate(jobs):
         for sub_idx, res in enumerate(job.results()[0]):
             for key, val in res.items():
                 if key not in out.keys():
