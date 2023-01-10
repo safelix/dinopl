@@ -225,9 +225,10 @@ def eval_coords(coords:torch.Tensor, args):
         scale=args['projector_scale']
     )
 
-    print(f'Norm of {args["vec0"]} is {P(U.module_to_vector(teacher)).norm():.3f}')
-    print(f'Norm of {args["vec1"]} is {P(U.module_to_vector(model1)).norm():.3f}')
-    print(f'Norm of {args["vec2"]} is {P(U.module_to_vector(model2)).norm():.3f}')
+    print(f'Norm of origin is {P(P(torch.zeros_like(coords[0]))).norm():.3f}')
+    print(f'Norm of {args["vec0"]} is {U.module_to_vector(teacher).norm():.3f}')
+    print(f'Norm of {args["vec1"]} is {U.module_to_vector(model1).norm():.3f}')
+    print(f'Norm of {args["vec2"]} is {U.module_to_vector(model2).norm():.3f}')
 
     # DINO and Data Setup.
     train_dl, valid_dl = load_data(config, args['batchsize'], args['num_workers'], not args['force_cpu'])
@@ -277,8 +278,6 @@ def main(args):
     coords = [c for c in coords if c.nelement() > 0] # discard empty tensors
 
     print(f'Evaluating {len(X)*len(Y)} coordinates in {len(coords)} jobs of size ~{len(coords[0])}..')
-    #if input().lower() not in {'y', 'yes'}:
-    #    sys.exit()
 
     # Start executor
     executor = submitit.AutoExecutor(folder=args['logdir'], cluster=args['cluster'])
@@ -314,7 +313,7 @@ def main(args):
     # Gather lists into matrix-indexed tensors of shape (len(X), len(Y), -1) and save
     for key, val in out.items():
         val = torch.stack(val, dim=0).reshape((len(X), len(Y), -1)).squeeze()
-        fname = os.path.join(dir, f"{key.replace('/', '_')}.pt")
+        fname = os.path.join(args['dir'], f"{key.replace('/', '_')}.pt")
         print(f'Saving {fname} of shape {val.shape}')
         torch.save(val, fname)
 
