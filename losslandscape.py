@@ -139,11 +139,11 @@ class ParamProjector():
         p = float(p) if p=='inf' else p
         return diff.square().mean().sqrt() if p=='rms' else diff.norm(p=p)
         
-    def __call__(self, inp:torch.Tensor, is_direction=False) -> torch.Tensor:
+    def __call__(self, inp:torch.Tensor, is_position=True) -> torch.Tensor:
         if inp.shape[0] == self.dim:
-            return self.project(inp, is_direction)
+            return self.project(inp, is_position)
         if inp.shape[0] == 2:
-            return self.map(inp, is_direction)
+            return self.map(inp, is_position)
         raise ValueError('Cannot infer whether to project or map input.')
 
 
