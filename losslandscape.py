@@ -291,7 +291,7 @@ def main(args):
     jobs = executor.map_array(eval_coords, coords, len(coords) * [args])
 
     # Track progress as printed in stderr
-    with tqdm(total=len(X)*len(Y)) as pbar:
+    with tqdm(total=len(X)*len(Y), smoothing=0) as pbar:
         while any([not job.done() for job in jobs]):
             pbar.n = max(pbar.n, sum([parse_tqdm_state(job.paths.stderr) for job in jobs]))
             pbar.set_postfix({'#jobs':sum([job.state=='RUNNING' for job in jobs])})
