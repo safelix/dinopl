@@ -25,62 +25,6 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 from torch.nn import functional as F
 
-def load_data(config, batchsize, num_workers, pin_memory) -> Tuple[DataLoader, DataLoader]:
-    DSet = get_dataset(config)
-    trfm = transforms.Compose([ # self-training
-                    transforms.Lambda(lambda img: img.convert('RGB')), transforms.ToTensor(),
-                    transforms.Normalize(DSet.mean, DSet.std),
-                ])
-    #trfm = MultiCrop(config.mc_spec, per_crop_transform=trfm)
-
-    train_ds = DSet(root=os.environ['DINO_DATA'], train=True, transform=trfm, download=False)
-    valid_ds = DSet(root=os.environ['DINO_DATA'], train=False, transform=trfm, download=False)
-    train_dl = DataLoader(dataset=train_ds, batch_size=batchsize, num_workers=num_workers, pin_memory=pin_memory)
-    valid_dl = DataLoader(dataset=valid_ds, batch_size=batchsize, num_workers=num_workers, pin_memory=pin_memory)
-    return train_dl, valid_dl
-
-
-def load_dino(identifier:str, config:Configuration=None) -> DINO:
-    ckpt_path, name = identifier.split(':')
-    if config is None:
-        config =  Configuration.from_json(os.path.join(os.path.dirname(ckpt_path), 'config.json'))
-        config.mc_spec = create_mc_spec(config)
-
-    # get configuration and prepare model
-    enc = get_encoder(config)()
-    config.embed_dim = enc.embed_dim
-    head = DINOHead(config.embed_dim, config.out_dim, 
-        hidden_dims=config.hid_dims, 
-        l2bot_dim=config.l2bot_dim, 
-        l2bot_cfg=config.l2bot_cfg,
-        use_bn=config.mlp_bn,
-        act_fn=config.mlp_act)
-    student = DINOModel(enc, head)
-    teacher = copy.deepcopy(student)
-
-    # load DINO checkpoint
-    dino = DINO.load_from_checkpoint(ckpt_path, map_location='cpu', mc_spec=config.mc_spec, student=student, teacher=teacher)
-    
-    # init if required by .init suffix
-    if name.endswith('.init'):
-        student, teacher = init_student_teacher(config, student)
-        dino.student = student
-        dino.teacher = teacher
-
-    return dino
-
-def load_model(identifier:str, config:Configuration=None) -> DINOModel:
-    dino = load_dino(identifier, config)
-    ckpt_path, name = identifier.split(':')
-
-    if name.startswith('teacher'):
-        return dino.teacher
-    
-    if name.startswith('student'):
-        return dino.student
-
-    raise ValueError(f'Unkown name \'{name}\', should be either \'teacher\' or \'student\'.')
-
 
 class ParamProjector():
     def __init__(self, vec0:torch.Tensor, vec1:torch.Tensor, vec2:torch.Tensor, center=None, scale=None) -> None:
@@ -108,8 +52,6 @@ class ParamProjector():
 
         if self.scale in {'l2_ortho', 'rms_ortho'}:
             self.basis:torch.Tensor = torch.linalg.svd(self.basis, full_matrices=False).U
-            self.affine_inv = self.basis.T @ self.affine
-
 
     def project(self, vec:torch.Tensor, is_position=True) -> torch.Tensor:
         if is_position:
@@ -145,6 +87,57 @@ class ParamProjector():
         if inp.shape[0] == 2:
             return self.map(inp, is_position)
         raise ValueError('Cannot infer whether to project or map input.')
+
+
+def load_data(config, batchsize, num_workers, pin_memory) -> Tuple[DataLoader, DataLoader]:
+    DSet = get_dataset(config)
+    trfm = transforms.Compose([ # self-training
+                    transforms.Lambda(lambda img: img.convert('RGB')), transforms.ToTensor(),
+                    transforms.Normalize(DSet.mean, DSet.std),
+                ])
+    #trfm = MultiCrop(config.mc_spec, per_crop_transform=trfm)
+
+    train_ds = DSet(root=os.environ['DINO_DATA'], train=True, transform=trfm, download=False)
+    valid_ds = DSet(root=os.environ['DINO_DATA'], train=False, transform=trfm, download=False)
+    train_dl = DataLoader(dataset=train_ds, batch_size=batchsize, num_workers=num_workers, pin_memory=pin_memory)
+    valid_dl = DataLoader(dataset=valid_ds, batch_size=batchsize, num_workers=num_workers, pin_memory=pin_memory)
+    return train_dl, valid_dl
+
+def load_model(identifier:str, config:Configuration=None) -> DINOModel:
+
+    ckpt_path, name = identifier.split(':')
+    if config is None:
+        config =  Configuration.from_json(os.path.join(os.path.dirname(ckpt_path), 'config.json'))
+        config.mc_spec = create_mc_spec(config)
+
+    # get configuration and prepare model
+    enc = get_encoder(config)()
+    config.embed_dim = enc.embed_dim
+    head = DINOHead(config.embed_dim, config.out_dim, 
+        hidden_dims=config.hid_dims, 
+        l2bot_dim=config.l2bot_dim, 
+        l2bot_cfg=config.l2bot_cfg,
+        use_bn=config.mlp_bn,
+        act_fn=config.mlp_act)
+    student = DINOModel(enc, head)
+    teacher = copy.deepcopy(student)
+
+    # load DINO checkpoint
+    dino = DINO.load_from_checkpoint(ckpt_path, map_location='cpu', mc_spec=config.mc_spec, student=student, teacher=teacher)
+    
+    # init if required by .init suffix
+    if name.endswith('.init'):
+        student, teacher = init_student_teacher(config, student)
+        dino.student = student
+        dino.teacher = teacher
+
+    if name.startswith('teacher'):
+        return dino.teacher
+    
+    if name.startswith('student'):
+        return dino.student
+
+    raise ValueError(f'Unkown name \'{name}\', should be either \'teacher\' or \'student\'.')
 
 
 def eval_student(student:DINOModel, teacher:DINOModel, criterion, prober:Prober, train_dl:DataLoader, valid_dl:DataLoader, device=None):
@@ -271,12 +264,12 @@ def main(args):
     #    sys.exit()
 
     # Start executor
-    executor = submitit.AutoExecutor(folder=logdir, cluster=args['cluster'])
+    executor = submitit.AutoExecutor(folder=args['logdir'], cluster=args['cluster'])
     executor.update_parameters(
             slurm_cpus_per_task=args['num_workers'],
             slurm_mem_per_cpu=args['mem_per_cpu'],
             slurm_time=args['time'],
-            slurm_gpus_per_node=1,
+            slurm_gpus_per_node=args['gpus'],
         )
 
     jobs = executor.map_array(eval_coords, coords, len(coords) * [args])
@@ -337,21 +330,28 @@ if __name__ == '__main__':
     parser.add_argument('--runname', type=str, default=strftime('%Y-%m-%d--%H-%M'))
     parser.add_argument('--cluster', choices={None, 'local', 'debug'}, default=None)
     parser.add_argument('--num_jobs', type=int, default=1)
+    parser.add_argument('--gpus', type=str, default='1')
     parser.add_argument('--num_workers', type=int, default=4)
     parser.add_argument('--mem_per_cpu', type=int, default=4096)
     parser.add_argument('--time', type=str, default='04:00:00')
     parser.add_argument('--force_cpu', action='store_true')
     args = vars(parser.parse_args())
 
-    # Prepare directories and store 
-    dir = os.path.join(os.environ['DINO_RESULTS'], 'losslandscape', args['runname'])
-    logdir = os.path.join(dir, 'logs')
-    os.makedirs(logdir, exist_ok=True)
-    print(f'Logging to {logdir}')
+    # Prepare directories for logging and storing
+    args['dir'] = os.path.join(os.environ['DINO_RESULTS'], 'losslandscape', args['runname'])
+    args['logdir'] = os.path.join(args['dir'], 'logs')
+    os.makedirs(args['dir'], exist_ok=True)
+    print(f'Logging to {args["logdir"]}')
+
+    # Make paths relative and machine independent for saving
+    args_for_saving = copy.deepcopy(args)
+    args_for_saving['vec0'] = os.path.relpath(args['vec0'], os.environ['DINO_RESULTS'])
+    args_for_saving['vec2'] = os.path.relpath(args['vec1'], os.environ['DINO_RESULTS'])
+    args_for_saving['vec3'] = os.path.relpath(args['vec3'], os.environ['DINO_RESULTS'])
 
     # Store args to directory
-    with open(os.path.join(dir, 'args.json'), 'w') as f:
-            s = json.dumps(args, indent=2)
+    with open(os.path.join(args['dir'], 'args.json'), 'w') as f:
+            s = json.dumps(args_for_saving, indent=2)
             f.write(s)
 
     main(args)
