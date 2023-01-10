@@ -144,7 +144,7 @@ def update_losses(student_out, teacher_out, losses):
     preds, targs = student_out['logits'], teacher_out['logits']
     losses['MSE'] += U.mean_squared_error(preds, targs).sum()
 
-    log_preds, targs = F.log_softmax(student_out['logits']), F.softmax(teacher_out['logits'])
+    log_preds, targs = F.log_softmax(student_out['logits'], dim=-1), F.softmax(teacher_out['logits'], dim=-1)
     losses['CE'] += U.cross_entropy(log_preds, targs).sum()
     losses['KL'] += U.cross_entropy(log_preds, targs).sum()
     losses['H'] += U.entropy(log_preds.exp(), log_preds).sum()
@@ -225,7 +225,7 @@ def eval_coords(coords:torch.Tensor, args):
         scale=args['projector_scale']
     )
 
-    print(f'Norm of origin is {P(P(torch.zeros_like(coords[0]))).norm():.3f}')
+    print(f'Norm of origin is {P(torch.zeros_like(coords[0])).norm():.3f}')
     print(f'Norm of {args["vec0"]} is {U.module_to_vector(teacher).norm():.3f}')
     print(f'Norm of {args["vec1"]} is {U.module_to_vector(model1).norm():.3f}')
     print(f'Norm of {args["vec2"]} is {U.module_to_vector(model2).norm():.3f}')
