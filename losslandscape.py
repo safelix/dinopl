@@ -40,8 +40,11 @@ def load_data(config, batchsize, num_workers, pin_memory) -> Tuple[DataLoader, D
     return train_dl, valid_dl
 
 
-def load_dino(identifier:str, config:Configuration) -> DINO:
+def load_dino(identifier:str, config:Configuration=None) -> DINO:
     ckpt_path, name = identifier.split(':')
+    if config is None:
+        config =  Configuration.from_json(os.path.join(os.path.dirname(ckpt_path), 'config.json'))
+        config.mc_spec = create_mc_spec(config)
 
     # get configuration and prepare model
     enc = get_encoder(config)()
@@ -66,7 +69,7 @@ def load_dino(identifier:str, config:Configuration) -> DINO:
 
     return dino
 
-def load_model(identifier:str, config:Configuration) -> DINOModel:
+def load_model(identifier:str, config:Configuration=None) -> DINOModel:
     dino = load_dino(identifier, config)
     ckpt_path, name = identifier.split(':')
 
@@ -81,6 +84,8 @@ def load_model(identifier:str, config:Configuration) -> DINOModel:
 
 class ParamProjector():
     def __init__(self, vec0:torch.Tensor, vec1:torch.Tensor, vec2:torch.Tensor, center=None, scale=None) -> None:
+        if vec0.dim()>1 or vec1.dim()>1 or vec2.dim()>1:
+            raise ValueError(f'Vectors need to be 1D, but are of dims {vec0.dim()}, {vec0.dim()}, {vec0.dim()}.')
         if center not in {None, '', 'mean', 'minnorm'}:
             raise ValueError(f'Unkown option \'{center}\' for argument \'center\'.')
         if scale not in {None, '', 'l2_ortho', 'rms_ortho'}:
@@ -101,12 +106,10 @@ class ParamProjector():
             self.affine = self.affine + offset
             self.basis = self.basis - offset.unsqueeze(1)
 
-        self.affine_inv = torch.linalg.lstsq(self.basis, self.affine).solution
         if self.scale in {'l2_ortho', 'rms_ortho'}:
             self.basis:torch.Tensor = torch.linalg.svd(self.basis, full_matrices=False).U
             self.affine_inv = self.basis.T @ self.affine
 
-        #self.affine_inv = torch.zeros_like(self.affine_inv)
 
     def project(self, vec:torch.Tensor, is_position=True) -> torch.Tensor:
         if is_position:
@@ -278,7 +281,7 @@ def main(args):
 
     jobs = executor.map_array(eval_coords, coords, len(coords) * [args])
 
-    # track progress as printed in stderr
+    # Track progress as printed in stderr
     with tqdm(total=len(X)*len(Y)) as pbar:
         while any([not job.done() for job in jobs]):
             pbar.n = max(pbar.n, sum([parse_tqdm_state(job.paths.stderr) for job in jobs]))
@@ -289,18 +292,18 @@ def main(args):
         pbar.n = sum([parse_tqdm_state(job.paths.stderr) for job in jobs])
         pbar.update(0) # set to done
 
-    # gather results into tensors of shape (len(X)*len(Y), -1)
+    # Gather results into lists of len len(X)*len(Y)
     out:Dict[str, torch.Tensor] = {}
-    for idx, job in enumerate(jobs):
-        for sub_idx, res in enumerate(job.results()[0]):
+    for job in jobs:
+        for res in job.results()[0]: # no subtasks
             for key, val in res.items():
                 if key not in out.keys():
-                    out[key] = torch.zeros((len(X)*len(Y), *val.shape))
-                out[key][idx+sub_idx] = val
+                    out[key] = []
+                out[key].append(val)
 
-    # Reshape results for matrix indexing (len(X), len(Y), -1) and save
+    # Gather lists into matrix-indexed tensors of shape (len(X), len(Y), -1) and save
     for key, val in out.items():
-        val = val.reshape((len(X), len(Y), -1))
+        val = torch.stack(val, dim=0).reshape((len(X), len(Y), -1)).squeeze()
         fname = os.path.join(dir, f"{key.replace('/', '_')}.pt")
         print(f'Saving {fname} of shape {val.shape}')
         torch.save(val, fname)
@@ -341,7 +344,7 @@ if __name__ == '__main__':
     args = vars(parser.parse_args())
 
     # Prepare directories and store 
-    dir = os.path.join(os.environ['DINO_RESULTS'], 'paramplane', args['runname'])
+    dir = os.path.join(os.environ['DINO_RESULTS'], 'losslandscape', args['runname'])
     logdir = os.path.join(dir, 'logs')
     os.makedirs(logdir, exist_ok=True)
     print(f'Logging to {logdir}')
