@@ -362,8 +362,8 @@ if __name__ == '__main__':
     # Make paths relative and machine independent for saving
     args_for_saving = copy.deepcopy(args)
     args_for_saving['vec0'] = os.path.relpath(args['vec0'], os.environ['DINO_RESULTS'])
-    args_for_saving['vec2'] = os.path.relpath(args['vec1'], os.environ['DINO_RESULTS'])
-    args_for_saving['vec3'] = os.path.relpath(args['vec3'], os.environ['DINO_RESULTS'])
+    args_for_saving['vec1'] = os.path.relpath(args['vec1'], os.environ['DINO_RESULTS'])
+    args_for_saving['vec2'] = os.path.relpath(args['vec2'], os.environ['DINO_RESULTS'])
 
     # Store args to directory
     with open(os.path.join(args['dir'], 'args.json'), 'w') as f:
