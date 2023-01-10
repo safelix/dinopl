@@ -140,40 +140,59 @@ def load_model(identifier:str, config:Configuration=None) -> DINOModel:
     raise ValueError(f'Unkown name \'{name}\', should be either \'teacher\' or \'student\'.')
 
 
-def eval_student(student:DINOModel, teacher:DINOModel, criterion, prober:Prober, train_dl:DataLoader, valid_dl:DataLoader, device=None):
+def update_losses(student_out, teacher_out, losses):
+    preds, targs = student_out['logits'], teacher_out['logits']
+    losses['MSE'] += U.mean_squared_error(preds, targs).sum()
+
+    log_preds, targs = F.log_softmax(student_out['logits']), F.softmax(teacher_out['logits'])
+    losses['CE'] += U.cross_entropy(log_preds, targs).sum()
+    losses['KL'] += U.cross_entropy(log_preds, targs).sum()
+    losses['H'] += U.entropy(log_preds.exp(), log_preds).sum()
+
+
+def eval_student(student:DINOModel, teacher:DINOModel, prober:Prober, train_dl:DataLoader, valid_dl:DataLoader, device=None):
     out = {}
 
-    # process training set
+    # Process training set
+    numel = 0
     train_data = []
-    loss, numel = 0, 0
+    losses = {'MSE':0, 'CE':0, 'KL':0, 'H':0}
     for batch in train_dl:
         batch = batch[0].to(device), batch[1].to(device) if device else batch
-        model_out = student(batch[0])
-        teacher_out = teacher(batch[0])
         
-        # gather loss
-        numel += batch[1].shape[0]
-        loss += criterion(model_out['logits'], teacher_out['logits']).sum()
-        train_data.append((model_out['embeddings'].squeeze(), batch[1]))
-    out['train/loss'] = loss / numel # full dataset loss
+        # compute and update losses
+        teacher_out = teacher(batch[0])
+        student_out = student(batch[0])
+        update_losses(student_out, teacher_out, losses)
 
-    # process validation set
+        numel += batch[1].shape[0]
+        train_data.append((student_out['embeddings'].squeeze(), batch[1]))
+
+    for loss_name, loss_value in losses.items():
+        out[f'train/{loss_name}'] = loss_value / numel # average
+
+
+    # Process validation set
+    numel = 0
     valid_data = []
-    loss, numel = 0, 0
+    losses = {'MSE':0, 'CE':0, 'KL':0, 'H':0}
     for batch in valid_dl:
         batch = batch[0].to(device), batch[1].to(device) if device else batch
         
-        # run an isolated validation 
-        model_out = student(batch[0])
+        # compute and update losses
         teacher_out = teacher(batch[0])
+        student_out = student(batch[0])
+        update_losses(student_out, teacher_out, losses)
         
         # gather loss
         numel += batch[1].shape[0]
-        loss += criterion(model_out['logits'], teacher_out['logits']).sum()
-        valid_data.append((model_out['embeddings'].squeeze(), batch[1]))
-    out['valid/loss'] = loss / numel
+        valid_data.append((student_out['embeddings'].squeeze(), batch[1]))
 
-    # analyze probes
+    for loss_name, loss_value in losses.items():
+        out[f'valid/{loss_name}'] = loss_value / numel # average
+
+
+    # Analyze probes
     probe = prober.eval_probe(train_data, valid_data, device=device)
     for key, val in probe.items():
         out[f'probe/{key}'] = torch.tensor(val)
@@ -184,12 +203,6 @@ def eval_student(student:DINOModel, teacher:DINOModel, criterion, prober:Prober,
         out[f'probe/norm/{key}'] = torch.tensor(val)
 
     return out
-
-def mse_criterion(pred, targ):
-    return U.mean_squared_error(pred, targ)
-
-def ce_criterion(pred, targ):
-    return U.cross_entropy(F.log_softmax(pred, dim=1), F.softmax(targ, dim=-1))
 
 
 def eval_coords(coords:torch.Tensor, args):
@@ -212,9 +225,12 @@ def eval_coords(coords:torch.Tensor, args):
         scale=args['projector_scale']
     )
 
+    print(f'Norm of {args["vec0"]} is {P(U.module_to_vector(teacher)).norm():.3f}')
+    print(f'Norm of {args["vec1"]} is {P(U.module_to_vector(model1)).norm():.3f}')
+    print(f'Norm of {args["vec2"]} is {P(U.module_to_vector(model2)).norm():.3f}')
+
     # DINO and Data Setup.
     train_dl, valid_dl = load_data(config, args['batchsize'], args['num_workers'], not args['force_cpu'])
-    criterion = mse_criterion if args['loss']=='MSE' else ce_criterion
 
     # Probing Setup
     analyses = {}
@@ -233,7 +249,7 @@ def eval_coords(coords:torch.Tensor, args):
         U.vector_to_module(vec, student)
 
         # make experiments and store results
-        out = eval_student(student, teacher, criterion, prober, train_dl, valid_dl, device)
+        out = eval_student(student, teacher, prober, train_dl, valid_dl, device)
         out['coord'] = coord
         out['l2norm'] = vec.norm(p=2)
 
@@ -241,6 +257,7 @@ def eval_coords(coords:torch.Tensor, args):
         out_list.append({k: v.cpu() for k,v in out.items()})
 
     return out_list 
+
 
 def parse_tqdm_state(fname):
     try:
@@ -313,7 +330,6 @@ if __name__ == '__main__':
     parser.add_argument('--projector_scale', choices={'', 'l2_ortho', 'rms_ortho'}, default='l2_ortho')
 
     # Image properties
-    parser.add_argument('--loss', choices={'MSE', 'CE'})
     parser.add_argument('--xmin', type=float)
     parser.add_argument('--xmax', type=float)
     parser.add_argument('--ymin', type=float)
