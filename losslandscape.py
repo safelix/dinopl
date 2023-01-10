@@ -146,7 +146,7 @@ def update_losses(student_out, teacher_out, losses):
 
     log_preds, targs = F.log_softmax(student_out['logits'], dim=-1), F.softmax(teacher_out['logits'], dim=-1)
     losses['CE'] += U.cross_entropy(log_preds, targs).sum()
-    losses['KL'] += U.cross_entropy(log_preds, targs).sum()
+    losses['KL'] += U.kl_divergence(log_preds, targs).sum()
     losses['H'] += U.entropy(log_preds.exp(), log_preds).sum()
 
 
@@ -213,22 +213,20 @@ def eval_coords(coords:torch.Tensor, args):
     config.mc_spec = create_mc_spec(config)
 
     # Setup ParamProjector.
-    teacher = load_model(args['vec0'], config).to(device=device)
-    model1 = load_model(args['vec1'], config).to(device=device)
-    model2 = load_model(args['vec2'], config).to(device=device)
-    
-    P = ParamProjector(
-        vec0=U.module_to_vector(teacher),
-        vec1=U.module_to_vector(model1),
-        vec2=U.module_to_vector(model2),
-        center=args['projector_center'],
-        scale=args['projector_scale']
-    )
+    fnames = [args['vec0'], args['vec1'], args['vec2']]
+    models = [load_model(fname, config).to(device=device) for fname in fnames]
+    vecs = [U.module_to_vector(model) for model in models]
 
-    print(f'Norm of origin is {P(torch.zeros_like(coords[0])).norm():.3f}')
-    print(f'Norm of {args["vec0"]} is {U.module_to_vector(teacher).norm():.3f}')
-    print(f'Norm of {args["vec1"]} is {U.module_to_vector(model1).norm():.3f}')
-    print(f'Norm of {args["vec2"]} is {U.module_to_vector(model2).norm():.3f}')
+    P = ParamProjector(vec0=vecs[0], vec1=vecs[1], vec2=vecs[1],
+                            center=args['projector_center'],
+                            scale=args['projector_scale']
+                        )
+
+    origin = torch.zeros_like(vec[0])
+    print(f'Origin is at {P(origin)}, of norm{P(P(origin)).norm():.3f} with error {P.error(origin)}')
+    print(f'{fnames[0]} is at {P(vecs[0])}, of norm {P(P(vecs[0])).norm():.3f} with error {P.error(vecs[0])}')
+    print(f'{fnames[1]} is at {P(vecs[1])}, of norm {P(P(vecs[1])).norm():.3f} with error {P.error(vecs[1])}')
+    print(f'{fnames[2]} is at {P(vecs[2])}, of norm {P(P(vecs[2])).norm():.3f} with error {P.error(vecs[2])}')
 
     # DINO and Data Setup.
     train_dl, valid_dl = load_data(config, args['batchsize'], args['num_workers'], not args['force_cpu'])
@@ -243,6 +241,7 @@ def eval_coords(coords:torch.Tensor, args):
                     n_classes=train_dl.dataset.ds_classes, seed=args['prober_seed'])
 
     out_list = []
+    teacher = models[0]
     student = copy.deepcopy(teacher)
     for coord in tqdm(coords, postfix='unique postfix'): # add postfix to make unique for parsing
         # get vector and model from coordinate
@@ -253,6 +252,8 @@ def eval_coords(coords:torch.Tensor, args):
         out = eval_student(student, teacher, prober, train_dl, valid_dl, device)
         out['coord'] = coord
         out['l2norm'] = vec.norm(p=2)
+        out['enc/l2norm'] = U.module_to_vector(student.enc).norm(p=2)
+        out['head/l2norm'] = U.module_to_vector(student.head).norm(p=2)
 
         # return tensor on cpu
         out_list.append({k: v.cpu() for k,v in out.items()})
@@ -342,7 +343,7 @@ if __name__ == '__main__':
     parser.add_argument('--prober_seed', type=int, default=1234567890)
 
     # General arguments
-    parser.add_argument('--runname', type=str, default=strftime('%Y-%m-%d--%H-%M'))
+    parser.add_argument('--runname', type=str, default=strftime('%Y-%m-%d--%H-%M-%S'))
     parser.add_argument('--cluster', choices={None, 'local', 'debug'}, default=None)
     parser.add_argument('--num_jobs', type=int, default=1)
     parser.add_argument('--gpus', type=str, default='1')
