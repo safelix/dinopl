@@ -47,7 +47,8 @@ class ParamProjector():
         self.basis = self.basis - self.affine.unsqueeze(1)
 
         if self.center == 'minnorm':
-            offset = self.basis @ torch.linalg.lstsq(self.basis, -self.affine).solution # origin projected to plane relative to affine
+            offset = self.basis @ torch.linalg.lstsq(self.basis, -self.affine, driver='gels').solution # origin projected to plane relative to affine
+            # assume full rank since rank() fails for very tall matrices => use gels
             self.affine = self.affine + offset
             self.basis = self.basis - offset.unsqueeze(1)
 
@@ -62,8 +63,9 @@ class ParamProjector():
 
         if self.scale in {'l2_ortho', 'rms_ortho'}:
             coord = self.basis.T @ vec
-        else:
-            coord = torch.linalg.lstsq(self.basis, vec).solution
+        else:  
+            coord = torch.linalg.lstsq(self.basis, vec, driver='gels').solution
+            # assume full rank since rank() fails for very tall matrices => use gels
 
         if self.scale == 'rms_ortho': # rescale to preserve rms instead of norm
             coord = coord / sqrt(self.dim) * sqrt(2)
@@ -220,13 +222,13 @@ def eval_coords(coords:torch.Tensor, args):
     models = [load_model(fname, config).to(device=device) for fname in fnames]
     vecs = [U.module_to_vector(model) for model in models]
 
-    P = ParamProjector(vec0=vecs[0], vec1=vecs[1], vec2=vecs[1],
+    P = ParamProjector(vec0=vecs[0], vec1=vecs[1], vec2=vecs[2],
                             center=args['projector_center'],
                             scale=args['projector_scale']
                         )
 
     origin = torch.zeros_like(vecs[0])
-    print(f'Origin is at {P(origin)}, of norm{P(P(origin)).norm():.3f} with error {P.error(origin)}')
+    print(f'Origin is at {P(origin)}, of norm {P(P(origin)).norm():.3f} with error {P.error(origin)}')
     print(f'{fnames[0]} is at {P(vecs[0])}, of norm {P(P(vecs[0])).norm():.3f} with error {P.error(vecs[0])}')
     print(f'{fnames[1]} is at {P(vecs[1])}, of norm {P(P(vecs[1])).norm():.3f} with error {P.error(vecs[1])}')
     print(f'{fnames[2]} is at {P(vecs[2])}, of norm {P(P(vecs[2])).norm():.3f} with error {P.error(vecs[2])}')
