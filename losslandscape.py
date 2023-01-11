@@ -54,7 +54,7 @@ class ParamProjector():
         if self.scale in {'l2_ortho', 'rms_ortho'}:
             self.basis:torch.Tensor = torch.linalg.svd(self.basis, full_matrices=False).U
             if self.center in {'mean', 'minnorm'}: # make unique! (vec0 to lower left quadrant)
-                self.basis = self.basis * self.project(vec0).sign()
+                self.basis = self.basis * -self.project(vec0).sign()
 
     def project(self, vec:torch.Tensor, is_position=True) -> torch.Tensor:
         if is_position:
