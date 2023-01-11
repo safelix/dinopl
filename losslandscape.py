@@ -3,27 +3,28 @@ import argparse
 import copy
 import json
 import os
-import sys
-from math import sqrt
-from time import strftime, sleep
-from typing import Dict, Tuple
+import pickle
 import re
+import sys
 from collections import deque
+from glob import glob
+from math import sqrt
+from time import sleep, strftime
+from typing import Dict, Tuple
 
 import submitit
 import torch
+from torch.nn import functional as F
+from torch.utils.data import DataLoader
+from torchvision import transforms
 from tqdm import tqdm
 
 import dinopl.utils as U
-from configuration import (Configuration, create_mc_spec, get_encoder,
-                           init_student_teacher, get_dataset)
+from configuration import (Configuration, create_mc_spec, get_dataset,
+                           get_encoder, init_student_teacher)
 from dinopl import DINO, DINOHead, DINOModel
 from dinopl.augmentation import MultiCrop
-
 from dinopl.probing import KNNAnalysis, LinearAnalysis, Prober, normalize_data
-from torch.utils.data import DataLoader
-from torchvision import transforms
-from torch.nn import functional as F
 
 
 class ParamProjector():
@@ -148,7 +149,7 @@ def update_losses(student_out, teacher_out, losses):
 
     log_preds, targs = F.log_softmax(student_out['logits'], dim=-1), F.softmax(teacher_out['logits'], dim=-1)
     losses['CE'] += U.cross_entropy(log_preds, targs).sum()
-    losses['KL'] += U.kl_divergence(log_preds, targs).sum()
+    losses['KL'] += U.kl_divergence(log_preds, targs, targs.log()).sum()
     losses['H'] += U.entropy(log_preds.exp(), log_preds).sum()
 
 
@@ -224,7 +225,7 @@ def eval_coords(coords:torch.Tensor, args):
                             scale=args['projector_scale']
                         )
 
-    origin = torch.zeros_like(vec[0])
+    origin = torch.zeros_like(vecs[0])
     print(f'Origin is at {P(origin)}, of norm{P(P(origin)).norm():.3f} with error {P.error(origin)}')
     print(f'{fnames[0]} is at {P(vecs[0])}, of norm {P(P(vecs[0])).norm():.3f} with error {P.error(vecs[0])}')
     print(f'{fnames[1]} is at {P(vecs[1])}, of norm {P(P(vecs[1])).norm():.3f} with error {P.error(vecs[1])}')
@@ -290,36 +291,82 @@ def main(args):
             slurm_mem_per_cpu=args['mem_per_cpu'],
             slurm_time=args['time'],
             slurm_gpus_per_node=args['gpus'],
+            #slurm_max_num_timeout# TODO
         )
 
     jobs = executor.map_array(eval_coords, coords, len(coords) * [args])
 
     # Track progress as printed in stderr
-    with tqdm(total=len(X)*len(Y), smoothing=0) as pbar:
-        while any([not job.done() for job in jobs]):
-            pbar.n = max(pbar.n, sum([parse_tqdm_state(job.paths.stderr) for job in jobs]))
-            pbar.set_postfix({'#jobs':sum([job.state=='RUNNING' for job in jobs])})
-            pbar.update(0)
-            sleep(1)
-            
-        pbar.n = sum([parse_tqdm_state(job.paths.stderr) for job in jobs])
-        pbar.update(0) # set to done
+    pbar = tqdm(total=len(X)*len(Y), smoothing=0)
+    while not sleep(1):
+        all_jobs_done = all([job.done() for job in jobs])
+        # update distributed progress bar
+        pbar.n = max(pbar.n, sum([parse_tqdm_state(job.paths.stderr) for job in jobs]))
+        pbar.set_postfix({'#jobs':sum([job.state=='RUNNING' for job in jobs])})
+        pbar.update(0)
+
+        if all_jobs_done:
+            break
+    pbar.close()
 
     # Gather results into lists of len len(X)*len(Y)
+    results = [res for job in jobs for res in job.results()[0]]
+    
+    accumulate_save_results(X, Y, results, args['dir'])
+
+
+def accumulate_save_results(X, Y, results, path):
+    # Gather results into lists of len len(X)*len(Y)
     out:Dict[str, torch.Tensor] = {}
-    for job in jobs:
-        for res in job.results()[0]: # no subtasks
-            for key, val in res.items():
-                if key not in out.keys():
-                    out[key] = []
-                out[key].append(val)
+    for res in results:
+        for key, val in res.items():
+            if key not in out.keys():
+                out[key] = []
+            out[key].append(val)
 
     # Gather lists into matrix-indexed tensors of shape (len(X), len(Y), -1) and save
     for key, val in out.items():
         val = torch.stack(val, dim=0).reshape((len(X), len(Y), -1)).squeeze()
-        fname = os.path.join(args['dir'], f"{key.replace('/', '_')}.pt")
+        fname = os.path.join(path, f"{key.replace('/', '_')}.pt")
         print(f'Saving {fname} of shape {val.shape}')
         torch.save(val, fname)
+
+
+def recover_crashed_run(path):
+    # load json to recover X, Y
+    with open(os.path.join(path, 'args.json')) as f:
+        args = json.load(f)
+    X = torch.arange(args['xmin'], args['xmax'] + args['stepsize'], args['stepsize'])
+    Y = torch.arange(args['ymin'], args['ymax'] + args['stepsize'], args['stepsize'])
+    grid = torch.stack(torch.meshgrid(X, Y, indexing='ij'), dim=-1) # shape = (len(X), len(Y), 2)
+    coords = grid.reshape((-1, 2)) # list of coordinates of shape 2
+    coords = torch.tensor_split(coords, args['num_jobs']) # split into njobs chunks
+    coords = [c for c in coords if c.nelement() > 0] # discard empty tensors
+
+    # load results
+    slurmid = os.path.basename(glob(os.path.join(path, 'logs', '*result.pkl'))[0]).split('_')[0]
+
+    results = []
+    template_out = None
+    initial_missing_templates = 0
+    for id, coord_batch in enumerate(coords):
+        fname = os.path.join(path, 'logs', f'{slurmid}_{id}_0_result.pkl')
+        print(fname)
+        
+        try:
+            with open(fname, 'rb') as f:
+                results += pickle.load(f)[-1]
+            if template_out is None: # store a template output record with nans
+                template_out = {k: torch.full_like(v, torch.nan) for k, v in results[-1].items()}            
+        except:
+            if template_out is not None: # fill with template output record
+                results += len(coord_batch) * [template_out]
+            else: # no template yet available => need to prepend this after the loop
+                initial_missing_templates += len(coord_batch)
+    
+    print(results[0])
+    results = initial_missing_templates * [template_out] + results
+    accumulate_save_results(X, Y, results, path)
 
 
 if __name__ == '__main__':
