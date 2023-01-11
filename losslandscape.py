@@ -52,6 +52,8 @@ class ParamProjector():
 
         if self.scale in {'l2_ortho', 'rms_ortho'}:
             self.basis:torch.Tensor = torch.linalg.svd(self.basis, full_matrices=False).U
+            if self.center in {'mean', 'minnorm'}: # make unique! (vec0 to lower left quadrant)
+                self.basis = self.basis * self.project(vec0).sign()
 
     def project(self, vec:torch.Tensor, is_position=True) -> torch.Tensor:
         if is_position:
@@ -240,9 +242,10 @@ def eval_coords(coords:torch.Tensor, args):
     prober = Prober(encoders={}, analyses=analyses, train_dl=None, valid_dl=None, 
                     n_classes=train_dl.dataset.ds_classes, seed=args['prober_seed'])
 
-    out_list = []
     teacher = models[0]
     student = copy.deepcopy(teacher)
+    out_list = [] # [{'vec0':P(vecs[0]), 'vec1':P(vecs[1]), 'vec2':P(vecs[2])}] 
+    # TODO make sure that all three vectors map to equal coordinates across runs
     for coord in tqdm(coords, postfix='unique postfix'): # add postfix to make unique for parsing
         # get vector and model from coordinate
         vec = P(coord)
