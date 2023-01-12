@@ -5,3 +5,4 @@ torchmetrics
 wandb
 pandas
 torchinfo
+faiss-gpu

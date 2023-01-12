@@ -7,5 +7,5 @@ setup(name='dinopl',
       description='Pytorch Lightning implementation of DINO',
       author='Felix Sarnthein',
       packages=find_packages(),
-      install_requires=['torch', 'pytorch-lightning', 'torchmetrics']
+      install_requires=['torch', 'pytorch-lightning==1.6.3', 'torchmetrics==0.10.0']
      )
