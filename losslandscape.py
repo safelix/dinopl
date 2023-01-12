@@ -218,9 +218,11 @@ def eval_coords(coords:torch.Tensor, args):
     config.mc_spec = create_mc_spec(config)
 
     # Setup ParamProjector.
+    print('Loading models...')
     fnames = [args['vec0'], args['vec1'], args['vec2']]
     models = [load_model(fname, config).to(device=device) for fname in fnames]
     vecs = [U.module_to_vector(model) for model in models]
+    [print(f'vec{idx}: {fname}') for idx, fname in enumerate(fnames)]
 
     P = ParamProjector(vec0=vecs[0], vec1=vecs[1], vec2=vecs[2],
                             center=args['projector_center'],
@@ -228,11 +230,12 @@ def eval_coords(coords:torch.Tensor, args):
                         )
 
     origin = torch.zeros_like(vecs[0])
-    print(f'Origin is at {P(origin)}, of norm {P(P(origin)).norm():.3f} with error {P.error(origin)}')
-    print(f'{fnames[0]} is at {P(vecs[0])}, of norm {P(P(vecs[0])).norm():.3f} with error {P.error(vecs[0])}')
-    print(f'{fnames[1]} is at {P(vecs[1])}, of norm {P(P(vecs[1])).norm():.3f} with error {P.error(vecs[1])}')
-    print(f'{fnames[2]} is at {P(vecs[2])}, of norm {P(P(vecs[2])).norm():.3f} with error {P.error(vecs[2])}')
-
+    print(f'Origin is at {P(origin)}, of norm {P(P(origin)).norm():.3f} with error {P.error(origin):.3f}')
+    print(f'vec0 is at {P(vecs[0])}, of norm {vecs[0].norm():.3f} with error {P.error(vecs[0])}:.3f')
+    print(f'vec1 is at {P(vecs[1])}, of norm {vecs[1].norm():.3f} with error {P.error(vecs[1])}:.3f')
+    print(f'vec2 is at {P(vecs[2])}, of norm {vecs[2].norm():.3f} with error {P.error(vecs[2])}:.3f')
+    #torch.save(torch.stack([P(vec) for vec in vecs]), 'vecs.pt')
+    
     # DINO and Data Setup.
     train_dl, valid_dl = load_data(config, args['batchsize'], args['num_workers'], not args['force_cpu'])
 
