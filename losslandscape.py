@@ -53,7 +53,7 @@ class ParamProjector():
             self.basis = self.basis - offset.unsqueeze(1)
 
         if self.scale in {'l2_ortho', 'rms_ortho'}:
-            self.basis:torch.Tensor = torch.linalg.svd(self.basis, full_matrices=False).U
+            self.basis:torch.Tensor = torch.linalg.svd(self.basis, full_matrices=False, driver='gesvdj').U
             if self.center in {'mean', 'minnorm'}: # make unique! (vec0 to lower left quadrant)
                 self.basis = self.basis * -self.project(vec0).sign()
 
@@ -108,12 +108,11 @@ def load_data(config, batchsize, num_workers, pin_memory) -> Tuple[DataLoader, D
     valid_dl = DataLoader(dataset=valid_ds, batch_size=batchsize, num_workers=num_workers, pin_memory=pin_memory)
     return train_dl, valid_dl
 
-def load_model(identifier:str, config:Configuration=None) -> DINOModel:
+def load_model(identifier:str) -> DINOModel:
 
     ckpt_path, name = identifier.split(':')
-    if config is None:
-        config =  Configuration.from_json(os.path.join(os.path.dirname(ckpt_path), 'config.json'))
-        config.mc_spec = create_mc_spec(config)
+    config =  Configuration.from_json(os.path.join(os.path.dirname(ckpt_path), 'config.json'))
+    config.mc_spec = create_mc_spec(config)
 
     # get configuration and prepare model
     enc = get_encoder(config)()
@@ -211,16 +210,19 @@ def eval_student(student:DINOModel, teacher:DINOModel, prober:Prober, train_dl:D
 
 
 def eval_coords(coords:torch.Tensor, args):
+    from submitit import JobEnvironment
+    env = JobEnvironment() if 'SUBMITIT_EXECUTOR' in os.environ else None
+
     device = torch.device('cpu' if args['force_cpu'] else U.pick_single_gpu())
     coords = coords.to(device)
 
-    config =  Configuration.from_json(os.path.join(os.path.dirname(args['vec0']), 'config.json'))
-    config.mc_spec = create_mc_spec(config)
+    t_config =  Configuration.from_json(os.path.join(os.path.dirname(args['vec0']), 'config.json'))
+    t_config.mc_spec = create_mc_spec(t_config)
 
     # Setup ParamProjector.
     print('Loading models...')
     fnames = [args['vec0'], args['vec1'], args['vec2']]
-    models = [load_model(fname, config).to(device=device) for fname in fnames]
+    models = [load_model(fname).to(device=device) for fname in fnames]
     vecs = [U.module_to_vector(model) for model in models]
     [print(f'vec{idx}: {fname}') for idx, fname in enumerate(fnames)]
 
@@ -231,13 +233,14 @@ def eval_coords(coords:torch.Tensor, args):
 
     origin = torch.zeros_like(vecs[0])
     print(f'Origin is at {P(origin)}, of norm {P(P(origin)).norm():.3f} with error {P.error(origin):.3f}')
-    print(f'vec0 is at {P(vecs[0])}, of norm {vecs[0].norm():.3f} with error {P.error(vecs[0])}:.3f')
-    print(f'vec1 is at {P(vecs[1])}, of norm {vecs[1].norm():.3f} with error {P.error(vecs[1])}:.3f')
-    print(f'vec2 is at {P(vecs[2])}, of norm {vecs[2].norm():.3f} with error {P.error(vecs[2])}:.3f')
-    #torch.save(torch.stack([P(vec) for vec in vecs]), 'vecs.pt')
-    
+    print(f'vec0 is at {P(vecs[0])}, of norm {vecs[0].norm():.3f} with error {P.error(vecs[0]):.3e}')
+    print(f'vec1 is at {P(vecs[1])}, of norm {vecs[1].norm():.3f} with error {P.error(vecs[1]):.3e}')
+    print(f'vec2 is at {P(vecs[2])}, of norm {vecs[2].norm():.3f} with error {P.error(vecs[2]):.3e}')
+    if env is not None:
+        torch.save(torch.stack([P(vec) for vec in vecs]), os.path.join(env.paths.folder, f'vecs.pt'))
+
     # DINO and Data Setup.
-    train_dl, valid_dl = load_data(config, args['batchsize'], args['num_workers'], not args['force_cpu'])
+    train_dl, valid_dl = load_data(t_config, args['batchsize'], args['num_workers'], not args['force_cpu'])
 
     # Probing Setup
     analyses = {}
