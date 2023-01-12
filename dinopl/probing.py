@@ -139,7 +139,7 @@ class KNNAnalysis(Analysis):
         self.labels = None
         self.acc = None
 
-
+@torch.no_grad()
 def load_data(encoder:nn.Module, dl:DataLoader, device:torch.device=None):
     loading_pbar = tqdm(dl, leave=False)
     loading_pbar.set_description(f'Loading embeddings')
@@ -149,22 +149,22 @@ def load_data(encoder:nn.Module, dl:DataLoader, device:torch.device=None):
     encoder.eval()
 
     data, mem = [], 0
-    with torch.no_grad():
-        for batch in loading_pbar:
-            inputs, targets = batch[0], batch[1]
-            if device:
-                inputs, targets = inputs.to(device), targets.to(device)
-            
-            embeddings:torch.Tensor = encoder(inputs)
-            data.append((embeddings, targets))
-            
-            mem += embeddings.element_size() * embeddings.nelement()
-            loading_pbar.set_postfix({'mem':f'{mem*1e-6:.1f}MB'})
+    for batch in loading_pbar:
+        inputs, targets = batch[0], batch[1]
+        if device:
+            inputs, targets = inputs.to(device), targets.to(device)
+        
+        embeddings:torch.Tensor = encoder(inputs)
+        data.append((embeddings, targets))
+        
+        mem += embeddings.element_size() * embeddings.nelement()
+        loading_pbar.set_postfix({'mem':f'{mem*1e-6:.1f}MB'})
 
     # restore previous mode
     encoder.train(mode)
     return data
 
+@torch.no_grad()
 def normalize_data(train_data:List[Tuple[torch.Tensor, torch.Tensor]], 
                     valid_data:List[Tuple[torch.Tensor, torch.Tensor]]):
 
@@ -211,6 +211,7 @@ class Prober(pl.Callback):
         self.probe_every = probe_every
         self.seed = seed 
     
+    @torch.no_grad()
     def eval_probe(self, train_data:List[Tuple[torch.Tensor, torch.Tensor]], 
                             valid_data:List[Tuple[torch.Tensor, torch.Tensor]], device=None):
 
