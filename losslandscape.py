@@ -321,6 +321,8 @@ def accumulate_save_results(X, Y, results, path):
     # Gather results into lists of len len(X)*len(Y)
     out:Dict[str, torch.Tensor] = {}
     for res in results:
+        if type(res) != dict:
+            print(res)
         for key, val in res.items():
             if key not in out.keys():
                 out[key] = []
@@ -349,25 +351,29 @@ def recover_crashed_run(path):
     slurmid = os.path.basename(glob(os.path.join(path, 'logs', '*result.pkl'))[0]).split('_')[0]
 
     results = []
-    template_out = None
-    initial_missing_templates = 0
+    template = None
     for id, coord_batch in enumerate(coords):
         fname = os.path.join(path, 'logs', f'{slurmid}_{id}_0_result.pkl')
         print(fname)
         
-        try:
+        try: # try loading the result
             with open(fname, 'rb') as f:
-                results += pickle.load(f)[-1]
-            if template_out is None: # store a template output record with nans
-                template_out = {k: torch.full_like(v, torch.nan) for k, v in results[-1].items()}            
+                msg, out = pickle.load(f)
         except:
-            if template_out is not None: # fill with template output record
-                results += len(coord_batch) * [template_out]
-            else: # no template yet available => need to prepend this after the loop
-                initial_missing_templates += len(coord_batch)
-    
-    print(results[0])
-    results = initial_missing_templates * [template_out] + results
+            msg = 'error'
+
+        # append to results
+        if msg == 'success':
+            results += out
+            if template is None: # store a template output record with nans
+                template = {k: torch.full_like(v, torch.nan) for k, v in out[0].items()}            
+        elif msg == 'error':
+            results += len(coord_batch) * [None]
+        else:
+            raise ValueError(f'Unkown message {msg}')    
+            
+    # fill None values with templates
+    results = [template if res is None else res for res in results]
     accumulate_save_results(X, Y, results, path)
 
 
