@@ -320,8 +320,7 @@ class Prober(pl.Callback):
         ):  # only probe every so many epochs
             pl_module.log_dict(self.probe(pl_module.device, flatten_out=True))
 
-    def on_train_batch_end(self, trainer, pl_module):
-        print(trainer.global_step)
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
         if trainer.global_step % self.probe_every_n_steps == 0:
             pl_module.log_dict(self.probe(pl_module.device, flatten_out=True))
 
