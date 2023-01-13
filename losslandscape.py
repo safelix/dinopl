@@ -210,8 +210,6 @@ def eval_student(student:DINOModel, teacher:DINOModel, prober:Prober, train_dl:D
 
 
 def eval_coords(coords:torch.Tensor, args):
-    from submitit import JobEnvironment
-    env = JobEnvironment() if 'SUBMITIT_EXECUTOR' in os.environ else None
 
     device = torch.device('cpu' if args['force_cpu'] else U.pick_single_gpu())
     coords = coords.to(device)
@@ -236,8 +234,7 @@ def eval_coords(coords:torch.Tensor, args):
     print(f'vec0 is at {P(vecs[0])}, of norm {vecs[0].norm():.3f} with error {P.error(vecs[0]):.3e}')
     print(f'vec1 is at {P(vecs[1])}, of norm {vecs[1].norm():.3f} with error {P.error(vecs[1]):.3e}')
     print(f'vec2 is at {P(vecs[2])}, of norm {vecs[2].norm():.3f} with error {P.error(vecs[2]):.3e}')
-    if env is not None:
-        torch.save(torch.stack([P(vec) for vec in vecs]), os.path.join(env.paths.folder, f'vecs.pt'))
+    torch.save(torch.stack([P(vec) for vec in vecs]), os.path.join(args['dir'], f'vecs.pt'))
 
     # DINO and Data Setup.
     train_dl, valid_dl = load_data(t_config, args['batchsize'], args['num_workers'], not args['force_cpu'])
@@ -418,9 +415,17 @@ if __name__ == '__main__':
     args = vars(parser.parse_args())
 
     # Prepare directories for logging and storing
-    args['dir'] = os.path.join(os.environ['DINO_RESULTS'], 'losslandscape', args['runname'])
-    args['logdir'] = os.path.join(args['dir'], 'logs')
-    os.makedirs(args['dir'], exist_ok=True)
+    while True:
+        args['dir'] = os.path.join(os.environ['DINO_RESULTS'], 'losslandscape', args['runname'])
+        args['logdir'] = os.path.join(args['dir'], 'logs')
+        try:
+            os.makedirs(args['dir'], exist_ok=False)
+        except OSError:
+            sleep(1)
+            args['runname'] = strftime('%Y-%m-%d--%H-%M-%S')
+            continue
+        break
+
     print(f'Logging to {args["logdir"]}')
 
     # Make paths relative and machine independent for saving
