@@ -50,7 +50,7 @@ def main(config: Configuration):
 
     # Logger
     wandb_logger = WandbLogger(
-        project="DINO",
+        project="DINO_NEW",
         save_dir=C.RESULTS_DIR,
         config=config,
     )
@@ -237,6 +237,7 @@ def main(config: Configuration):
                 n_classes=config.ds_classes,
                 normalize=config.normalize_probe,
                 probe_every=config.probe_every,
+                probe_every_n_steps=config.probe_every_n_steps,
                 seed=config.prober_seed,
             )
         ]
@@ -297,6 +298,7 @@ def main(config: Configuration):
         # debugging
         # limit_train_batches=2,
         # limit_val_batches=2,
+        check_val_every_n_epoch=config.check_val_every_n_epoch,
     )
 
     # log updated config to wandb before training

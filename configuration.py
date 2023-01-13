@@ -482,6 +482,20 @@ class Configuration(object):
             default=None,
             help="Dataset size for Probing.",
         )
+        addons.add_argument(
+            "--probe_every_n_steps",
+            type=int,
+            default=200,
+            help="Evaluate every this many steps.",
+        )
+        addons.add_argument(
+            "--check_val_every_n_epoch",
+            type=int,
+            default=1,
+            help="Evaluate every this many epochs.",
+        )
+
+        
 
         return parser
 
