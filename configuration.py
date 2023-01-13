@@ -224,7 +224,7 @@ class Configuration(object):
                             help='Number of epochs to train for linear probing.')
         addons.add_argument('--probing_k', type=int, default=20, 
                             help='Amount of neighbors for k-nearest neighbor probing.')
-        addons.add_argument('--normalize_probe', type=U.bool_parser, default=False, 
+        addons.add_argument('--normalize_probe', type=U.bool_parser, default=True, 
                             help='Apply feature normalization (standardization) for probing.')
         addons.add_argument('--prober_seed', type=int, default=None,
                             help='The seed for reproducible probing, use numbers with good balance of 0 and 1 bits.')

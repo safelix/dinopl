@@ -236,12 +236,12 @@ class Prober(pl.Callback):
         return accs
 
     @torch.no_grad()
-    def probe(self, device=None, flatten_out=True, verbose=True):
+    def probe(self, device=None, verbose=True):
 
         out = {}
         for enc_id, encoder in self.encoders.items():
             if verbose:
-                print(f'\nStarting analyses {list(self.analyses.keys())} of {enc_id}..', end='')
+                tqdm.write(f'\nStarting analyses {list(self.analyses.keys())} of {enc_id}..', end='')
                 t = time() 
 
             # prepare data: training data is random if seed is None and shuffle=True
@@ -255,30 +255,29 @@ class Prober(pl.Callback):
             train_data = load_data(encoder, self.train_dl, device=device)
             valid_data = load_data(encoder, self.valid_dl, device=device)
 
+            # evaluate data
+            accs = self.eval_probe(train_data, valid_data, device=device)
+            for key, val in accs.items():
+                key = f'probe/{enc_id}' if key=='' else f'probe/{enc_id}/{key}'
+                out[key] = val
+            
             # evaluate normalized data
             if self.normalize:
                 normalize_data(train_data, valid_data)
-
-            out[enc_id] = self.eval_probe(train_data, valid_data, device=device)
+                accs = self.eval_probe(train_data, valid_data, device=device)
+                for key, val in accs.items():
+                    key = f'probe/norm/{enc_id}' if key=='' else f'probe/norm/{enc_id}/{key}'
+                    out[key] = val
     
             if verbose:
                 t = time() - t
                 m, s = int(t//60), int(t%60)
                 accs = [f'{acc:.3}' for acc in out[enc_id].values()]
-                print(f' ..{enc_id} took {m:02d}:{s:02d}min \t=> accs = {accs}', end='')
+                tqdm.write(f' ..{enc_id} took {m:02d}:{s:02d}min \t=> accs = {accs}', end='')
         
         if verbose:
-            print('', end='\n')
+            tqdm.write('', end='\n')
 
-        if flatten_out: # flatten out 
-            new_out = {}
-            for enc_id, probes in out.items():
-                for probe_id, acc in probes.items():
-                    id = f'probe/{enc_id}'
-                    if probe_id != '':
-                        id += f'/{probe_id}'
-                    new_out[id] = acc
-            out = new_out
         return out 
 
     # trainer.validate() needs to be called before trainer.fit() for per-training probe
