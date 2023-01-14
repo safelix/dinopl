@@ -271,12 +271,10 @@ class Prober(pl.Callback):
     
             if verbose:
                 t = time() - t
-                m, s = int(t//60), int(t%60)
-                accs = [f'{acc:.3}' for acc in out[enc_id].values()]
-                tqdm.write(f' ..{enc_id} took {m:02d}:{s:02d}min \t=> accs = {accs}', end='')
+                tqdm.write(f' ..{enc_id} took {int(t//60):02d}:{int(t%60):02d}min', end='')
         
         if verbose:
-            tqdm.write('', end='\n')
+            tqdm.write(str({key: f'{val:.3}' for key, val in out.items()}))
 
         return out 
 
