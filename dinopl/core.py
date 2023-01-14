@@ -63,7 +63,7 @@ class DINOHead(nn.Module):
                 init.uniform_(self.last_layer.bias, -bound, bound, generator=generator)
 
 
-    def forward(self, x:torch.Tensor, update_cent:bool=False):
+    def forward(self, x:torch.Tensor, update_cent:bool=False) -> Dict[str, torch.Tensor]:
         # [n_crops, n_batches, embed_dim]
         # -> [n_crops, n_batches, out_dim]
 
@@ -95,7 +95,7 @@ class DINOModel(nn.Module):
         self.enc.reset_parameters(generator=generator)
         self.head.reset_parameters(generator=generator)
 
-    def forward(self, crop_batches, **kwargs):
+    def forward(self, crop_batches, **kwargs) -> Dict[str, torch.Tensor]:
         # [n_crops, n_batches, n_channels, height, width]
         if not isinstance(crop_batches, list):
             crop_batches = [crop_batches]
