@@ -8,8 +8,6 @@
         2048,
         2048
     ],
-    "dino_dataset_size": 50000,
-    "probe_dataset_size": 50000,
     "probe_every_n_steps": 200,
     "check_val_every_n_epoch": 1,
     "probe_every": 1000000000000000,

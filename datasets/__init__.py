@@ -2,7 +2,7 @@
 
 from .mnist import *
 from .cifar import *
-__all__ = ( 
-    mnist.__all__ +
-    cifar.__all__
-)
+from .stl import *
+from .tinyimagenet import *
+
+__all__ = mnist.__all__ + cifar.__all__ + stl.__all__ + tinyimagenet.__all__

@@ -22,7 +22,7 @@ import torch
 
 import dinopl.utils as U
 import models
-from datasets import CIFAR10, MNIST
+from datasets import CIFAR10, CIFAR100, MNIST, STL10, TinyImageNet
 from dinopl import DINO, DINOModel
 from dinopl.scheduling import *
 
@@ -495,7 +495,16 @@ class Configuration(object):
             help="Evaluate every this many epochs.",
         )
 
-        
+        addons.add_argument(
+            "--dino_dataset",
+            type=str,
+            default="cifar10",
+        )
+        addons.add_argument(
+            "--probing_dataset",
+            type=str,
+            default="cifar10",
+        )
 
         return parser
 
@@ -738,30 +747,35 @@ def create_optimizer(config: Configuration) -> torch.optim.Optimizer:
     raise RuntimeError("Unkown optimizer name.")
 
 
-def get_dataset(config: Configuration) -> typing.Union[MNIST, CIFAR10]:
+def get_dataset(name):
+    if name == "mnist":
+        return MNIST
+    if name == "cifar10":
+        return CIFAR10
+    if name == "cifar100":
+        return CIFAR100
+    if name == "tinyimagenet":
+        return TinyImageNet
+    if name == "stl10":
+        return STL10
+    raise RuntimeError("Unknown dataset name.")
+
+
+def get_datasets(config: Configuration) -> typing.Union[MNIST, CIFAR10]:
     """
     This is a helper function that can be useful if you have several dataset definitions that you want to
     choose from via the command line.
     """
-    config.dataset = config.dataset.lower()
+    dino_dataset = get_dataset(config.dino_dataset.lower())
+    probing_dataset = get_dataset(config.probing_dataset.lower())
 
-    if config.dataset == "mnist":
-        config.ds_pixels = MNIST.ds_pixels
-        config.ds_classes = MNIST.ds_pixels
-        config.n_classes = (
-            MNIST.ds_classes if config.n_classes is None else config.n_classes
-        )
-        return MNIST
+    config.ds_pixels = dino_dataset.ds_pixels
+    config.ds_classes = probing_dataset.ds_classes
+    config.n_classes = (
+        dino_dataset.ds_classes if config.n_classes is None else config.n_classes
+    )
 
-    if config.dataset == "cifar10":
-        config.ds_pixels = CIFAR10.ds_pixels
-        config.ds_classes = CIFAR10.ds_classes
-        config.n_classes = (
-            config.ds_classes if config.n_classes is None else config.n_classes
-        )
-        return CIFAR10
-
-    raise RuntimeError("Unkown dataset name.")
+    return dino_dataset, probing_dataset
 
 
 def create_mc_spec(config: Configuration):

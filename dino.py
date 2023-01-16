@@ -16,7 +16,7 @@ from configuration import (
     Configuration,
     create_mc_spec,
     create_optimizer,
-    get_dataset,
+    get_datasets,
     get_encoder,
     init_student_teacher,
 )
@@ -50,7 +50,7 @@ def main(config: Configuration):
 
     # Logger
     wandb_logger = WandbLogger(
-        project="DINO_NEW",
+        project="DINO",
         save_dir=C.RESULTS_DIR,
         config=config,
     )
@@ -65,12 +65,12 @@ def main(config: Configuration):
     config.mc_spec = create_mc_spec(config)
 
     # Standard Augmentations, always work on RGB
-    DSet = get_dataset(config)
+    DSet_dino, DSet_probing = get_datasets(config)
     self_trfm = transforms.Compose(
         [  # self-training
             transforms.Lambda(lambda img: img.convert("RGB")),
             transforms.ToTensor(),
-            transforms.Normalize(DSet.mean, DSet.std),
+            transforms.Normalize(DSet_dino.mean, DSet_dino.std),
         ]
     )
 
@@ -85,17 +85,17 @@ def main(config: Configuration):
     mc = MultiCrop(config.mc_spec, per_crop_transform=self_trfm)
 
     # Data Setup.
-    dino_train_set = DSet(
+    dino_train_set = DSet_dino(
         root=C.DATA_DIR, train=True, transform=mc, dataset_size=config.dino_dataset_size
     )
-    dino_valid_set = DSet(root=C.DATA_DIR, train=False, transform=mc)
-    probe_train_set = DSet(
+    dino_valid_set = DSet_dino(root=C.DATA_DIR, train=False, transform=mc)
+    probe_train_set = DSet_probing(
         root=C.DATA_DIR,
         train=True,
         transform=eval_trfm,
         dataset_size=config.probe_dataset_size,
     )
-    probe_valid_set = DSet(root=C.DATA_DIR, train=False, transform=eval_trfm)
+    probe_valid_set = DSet_probing(root=C.DATA_DIR, train=False, transform=eval_trfm)
 
     if config.label_noise_ratio > 0 and config.logit_noise_temp > 0:
         raise RuntimeError("Only either label noise or logit noise can be applied.")

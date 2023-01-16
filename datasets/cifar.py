@@ -25,6 +25,7 @@ class CIFAR10(datasets.CIFAR10):
         dataset_size: int = None,
         **kwargs,
     ) -> None:
+        print("Initializing CIFAR10 dataset...")
         defaults = dict(root=os.environ["DINO_DATA"], download=True)
         defaults.update(kwargs)
 
@@ -91,7 +92,7 @@ class CIFAR10(datasets.CIFAR10):
 class CIFAR100(datasets.CIFAR100):
     ds_pixels = 1024
     ds_channels = 3
-    ds_classes = 10
+    ds_classes = 100
     mean = (
         0.4914,
         0.4822,
@@ -104,8 +105,10 @@ class CIFAR100(datasets.CIFAR100):
         train: bool = True,
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None,
+        dataset_size: int = None,
         **kwargs,
     ) -> None:
+        print("Initializing CIFAR100 dataset...")
         defaults = dict(root=os.environ["DINO_DATA"], download=True)
         defaults.update(kwargs)
         super().__init__(

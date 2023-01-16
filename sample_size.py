@@ -28,15 +28,9 @@ print("Starting")
 
 i = -1
 for dataset_size in [
-    50,
-    100,
-    200,
-    500,
-    1000,
     7500,
     15000,
-    750000,
-    2000000,
+    20000,
 ]:
     epochs = int(100 * 50000 / dataset_size)
     check_val_every_n_epoch = max(int(1 * 50000 / dataset_size), 1)
@@ -57,7 +51,7 @@ for dataset_size in [
         "--n_epochs",
         str(epochs),
         "--probe_every_n_steps",
-        str(200),
+        str(100),
         "--check_val_every_n_epoch",
         str(check_val_every_n_epoch),
     ]
