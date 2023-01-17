@@ -10,7 +10,7 @@ from collections import deque
 from glob import glob
 from math import sqrt
 from time import sleep, strftime
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Union
 
 import submitit
 import torch
@@ -95,7 +95,8 @@ class ParamProjector():
 
 
 def load_data(identifier:str, batchsize:int, num_workers:int, pin_memory:bool) -> Tuple[DataLoader, DataLoader]:
-    ckpt_path, name = identifier.split(':')
+    ckpt_path = identifier.split(':')[0] if ':' in identifier else identifier
+    
     config =  Configuration.from_json(os.path.join(os.path.dirname(ckpt_path), 'config.json'))
     config.mc_spec = create_mc_spec(config)
     
@@ -112,9 +113,12 @@ def load_data(identifier:str, batchsize:int, num_workers:int, pin_memory:bool) -
     valid_dl = DataLoader(dataset=valid_ds, batch_size=batchsize, num_workers=num_workers, pin_memory=pin_memory)
     return train_dl, valid_dl
 
-def load_model(identifier:str) -> DINOModel:
+def load_model(identifier:str) -> Union[DINO, DINOModel]:
+    if ':' in identifier:
+        ckpt_path, name = identifier.split(':')
+    else:
+        ckpt_path, name = identifier, ''
 
-    ckpt_path, name = identifier.split(':')
     config =  Configuration.from_json(os.path.join(os.path.dirname(ckpt_path), 'config.json'))
     config.mc_spec = create_mc_spec(config)
 
@@ -145,7 +149,7 @@ def load_model(identifier:str) -> DINOModel:
     if name.startswith('student'):
         return dino.student
 
-    raise ValueError(f'Unkown name \'{name}\', should be either \'teacher\' or \'student\'.')
+    return dino
 
 
 def update_losses(student_out, teacher_out, losses):
@@ -222,6 +226,10 @@ def eval_coords(coords:torch.Tensor, args):
     print('Loading models...')
     fnames = [args['vec0'], args['vec1'], args['vec2']]
     models = [load_model(fname).to(device=device) for fname in fnames]
+    if args['encoder_only']:
+        for model in models:
+            model.head.mlp = torch.nn.Identity()
+            model.head.last_layer = torch.nn.Identity()
     vecs = [U.module_to_vector(model) for model in models]
     [print(f'vec{idx}: {fname}') for idx, fname in enumerate(fnames)]
 
@@ -262,8 +270,9 @@ def eval_coords(coords:torch.Tensor, args):
         out = eval_student(student, teacher, prober, train_dl, valid_dl, device)
         out['coord'] = coord
         out['l2norm'] = vec.norm(p=2)
-        out['enc/l2norm'] = U.module_to_vector(student.enc).norm(p=2)
-        out['head/l2norm'] = U.module_to_vector(student.head).norm(p=2)
+        if not args['encoder_only']:
+            out['enc/l2norm'] = U.module_to_vector(student.enc).norm(p=2)
+            out['head/l2norm'] = U.module_to_vector(student.head).norm(p=2)
 
         # return tensor on cpu
         out_list.append({k: v.cpu() for k,v in out.items()})
@@ -413,6 +422,7 @@ if __name__ == '__main__':
     parser.add_argument('--mem_per_cpu', type=int, default=4096)
     parser.add_argument('--time', type=str, default='04:00:00')
     parser.add_argument('--force_cpu', action='store_true')
+    parser.add_argument('--encoder_only', action='store_true')
     args = vars(parser.parse_args())
 
     # Prepare directories for logging and storing
