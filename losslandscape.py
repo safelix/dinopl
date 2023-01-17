@@ -228,6 +228,7 @@ def eval_coords(coords:torch.Tensor, args):
     models = [load_model(fname).to(device=device) for fname in fnames]
     if args['encoder_only']:
         for model in models:
+            model.head.cent.data = model.head.cent[:model.embed_dim]
             model.head.mlp = torch.nn.Identity()
             model.head.last_layer = torch.nn.Identity()
     vecs = [U.module_to_vector(model) for model in models]
