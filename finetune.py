@@ -85,7 +85,7 @@ def main(args:dict, wandb_run:wandb.wandb_sdk.wandb_run.Run):
 
     lin.train(probing.load_data(model, train_dl, device))
     acc = lin.valid(probing.load_data(model, valid_dl, device))
-    wandb_run.log({'epoch':-1, 'trainer/step': -1, 'valid/acc':acc})
+    wandb_run.log({'trainer/epoch':-1, 'trainer/step': -1, 'valid/acc':acc})
 
     model.classifier = copy.deepcopy(lin.clf) # add trained classifier to encoder
     lin.cleanup()
