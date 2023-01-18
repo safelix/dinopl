@@ -1,0 +1,181 @@
+import argparse
+import copy
+import os
+from typing import Dict, Tuple, Union
+
+import torch
+from torch import nn
+from torch.nn import functional as F
+from torch.nn.utils import prune
+from torchmetrics import Accuracy
+from tqdm import tqdm
+
+import dinopl.utils as U
+import wandb
+from dinopl import DINO, DINOHead, DINOModel, probing
+from losslandscape import load_model
+from models import Encoder
+import datasets
+from torchvision import transforms
+from torch.utils.data import DataLoader
+
+
+def get_prune_params(module):
+    prune_params = []
+    for m in module.modules():
+        if getattr(m, 'weight', None) is not None:
+            prune_params.append((m, 'weight'))
+        if getattr(m, 'bias', None) is not None:
+            prune_params.append((m, 'bias'))
+    return prune_params
+
+def get_dataloader(dataset:str, batch_size:int, num_workers:int, pin_memory:bool):
+    if dataset == 'mnist':
+        DSet = datasets.MNIST
+    if dataset == 'cifar10':
+        DSet = datasets.CIFAR10
+    if dataset == 'cifar100':
+        DSet = datasets.CIFAR100
+
+    transform = transforms.Compose([
+                    transforms.Lambda(lambda img: img.convert('RGB')), 
+                    transforms.ToTensor(),
+                    transforms.Normalize(DSet.mean, DSet.std)])
+    
+    train_ds = DSet(root=os.environ['DINO_DATA'], train=True, transform=transform, download=True)
+    valid_ds = DSet(root=os.environ['DINO_DATA'], train=True, transform=transform, download=True)
+    train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=pin_memory)
+    valid_dl = DataLoader(valid_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory)
+    return train_dl, valid_dl
+
+def get_optimizer(args:dict, params):
+    kwargs = {}
+    if args.get('opt_lr', None) is not None:
+        kwargs['lr'] = args['opt_lr']
+    if args.get('opt_wd', None) is not None:
+        kwargs['weight_decay'] = args['opt_wd']
+
+    if args['opt'].lower() == 'sgd':
+        return torch.optim.SGD(params, **kwargs)
+    if args['opt'].lower() == 'adam':
+        return torch.optim.Adam(params, **kwargs)
+    if args['opt'].lower() == 'adamw':
+        return torch.optim.AdamW(params, **kwargs)
+
+@torch.no_grad()
+def main(args:dict, wandb_run:wandb.wandb_sdk.wandb_run.Run):
+    wandb_run.define_metric('train/acc', summary='max')
+    wandb_run.define_metric('valid/acc', summary='max')
+    device = torch.device('cpu' if args['force_cpu'] else U.pick_single_gpu())
+
+    # Load Data and model
+    train_dl, valid_dl = get_dataloader(args['dataset'], args['batch_size'], args['num_workers'], not args['force_cpu'])
+    args['n_classes'] = train_dl.dataset.ds_classes
+    model:Encoder = load_model(args['ckpt']).enc.to(device)
+    if isinstance(model, DINO):
+        raise ValueError('Checkpoint needs to be either :teacher or :student')
+
+    # Prune encoder
+    prune.global_unstructured(get_prune_params(model), prune.L1Unstructured, amount=args['prune_ratio'])
+    
+    # Prepare Classifier
+    lin = probing.LinearAnalysis(args['pre_epochs_clf'])
+    lin.prepare(model.embed_dim, train_dl.dataset.ds_classes, device=device)
+    #lin.clf = type(model)(num_classes=args['n_classes']).classifier # get new classifier from encoder type
+
+    lin.train(probing.load_data(model, train_dl, device))
+    acc = lin.valid(probing.load_data(model, valid_dl, device))
+    wandb_run.log({'epoch':-1, 'trainer/step': -1, 'valid/acc':acc})
+
+    model.classifier = copy.deepcopy(lin.clf) # add trained classifier to encoder
+    lin.cleanup()
+
+    # Train Loop
+    step = 0
+    train_acc, valid_acc = Accuracy().to(device), Accuracy().to(device)
+    opt = get_optimizer(args, model.parameters())
+    for epoch in range(args['n_epochs']):
+        
+        # Training Epoch
+        train_acc.reset(),
+        progress_bar = tqdm(train_dl, desc=f'Train Epoch {epoch}', leave=False)
+        for inputs, targets in progress_bar:
+            inputs, targets = inputs.to(device), targets.to(device)
+
+            opt.zero_grad(True)
+            with torch.enable_grad():
+                predictions = model(inputs)
+                loss = F.cross_entropy(predictions, targets)
+            loss.backward()
+            opt.step()
+
+            # process logs
+            step += 1
+            acc = train_acc(predictions, targets)
+            progress_bar.set_postfix({'loss':loss.item(), 'acc':acc.item()})
+            wandb_run.log({'trainer/step': step, 'train/acc':acc, 'train/loss':loss})
+
+        # Validation Epoch
+        valid_acc.reset()
+        valid_loss, numel = 0, 0
+        progress_bar = tqdm(valid_dl, desc=f'Valid Epoch {epoch}', leave=False)
+        for inputs, targets in progress_bar:
+            inputs, targets = inputs.to(device), targets.to(device)
+
+            predictions = model(inputs)
+            loss = F.cross_entropy(predictions, targets)
+
+            # process logs
+            numel += len(targets)
+            valid_loss += loss * len(targets)
+            valid_acc.update(predictions, targets)
+            progress_bar.set_postfix({'loss':loss.item(), 'acc':valid_acc.compute().item()})
+        valid_loss = valid_loss / numel
+
+
+        # Log Epoch
+        wandb_run.log({'trainer/epoch':epoch, 'trainer/step': step,
+                        'valid/loss':valid_loss, 'valid/acc':valid_acc.compute()})
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+
+    # Model arguments
+    parser.add_argument('ckpt', type=str,
+                        help='Checkpoint to finetune.')
+    parser.add_argument('--prune_ratio', type=float, default=0,
+                        help='Ratio of smallest weights to prune.')
+    
+    # Data Arguments
+    parser.add_argument('--dataset', choices={'mnist', 'cifar10'}, default='cifar10')
+    parser.add_argument('--batch_size', type=int, default=256, 
+                        help='Batch size for the data loader.')
+    parser.add_argument('--num_workers', type=int, default=4, 
+                        help='Number of parallel threads for data loading.')
+
+    # Training arguments
+    parser.add_argument('--n_epochs', type=int, default=50, 
+                    help='Number of epochs to train for.')
+    parser.add_argument('--pre_epochs_clf', type=int, default=20,
+                        help='Number of epochs to pretrain classifier for.')
+    parser.add_argument('--opt', type=str, choices={'adamw', 'adam', 'sgd'}, default='adamw', 
+                        help='Optimizer to use for training.')                   
+    parser.add_argument('--opt_lr', type=float, default=None, 
+                        help='Learning rate for optimizer, specified wrt batch size 256 and linearly scaled.')
+    parser.add_argument('--opt_wd', type=float, default=None, 
+                        help='Weight decay for optimizer.')
+
+    parser.add_argument('--force_cpu', action='store_true')
+    args = vars(parser.parse_args())
+
+
+    # if path is not relative, make relative for saving to wandb
+    if not args['ckpt'].startswith('DINO'): 
+        args['ckpt'] = os.path.relpath(args['ckpt'], os.environ['DINO_RESULTS']) 
+
+    # init wandb
+    run = wandb.init(project='DINO_finetune', dir=os.environ['DINO_RESULTS'], config=args)
+    args['ckpt'] = os.path.join(os.environ['DINO_RESULTS'], args['ckpt']) # make absolute
+
+    main(args, run)
