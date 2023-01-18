@@ -135,14 +135,14 @@ def main(args:dict, wandb_run:wandb.wandb_sdk.wandb_run.Run):
 
         # Log Epoch
         wandb_run.log({'trainer/epoch':epoch, 'trainer/step': step,
-                        'valid/loss':valid_loss, 'valid/acc':valid_acc.compute()})
+                        'valid/loss':valid_loss, 'valid/acc':valid_acc.compute()}, )
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # Model arguments
-    parser.add_argument('ckpt', type=str,
+    parser.add_argument('--ckpt', type=str, default=None,
                         help='Checkpoint to finetune.')
     parser.add_argument('--prune_ratio', type=float, default=0,
                         help='Ratio of smallest weights to prune.')
@@ -169,6 +169,8 @@ if __name__ == '__main__':
     parser.add_argument('--force_cpu', action='store_true')
     args = vars(parser.parse_args())
 
+    if args['ckpt'] is None:
+        raise ValueError('Please specify checkpoint.')
 
     # if path is not relative, make relative for saving to wandb
     if not args['ckpt'].startswith('DINO'): 
