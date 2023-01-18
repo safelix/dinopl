@@ -43,7 +43,7 @@ def get_dataloader(dataset:str, batch_size:int, num_workers:int, pin_memory:bool
                     transforms.Normalize(DSet.mean, DSet.std)])
     
     train_ds = DSet(root=os.environ['DINO_DATA'], train=True, transform=transform, download=True)
-    valid_ds = DSet(root=os.environ['DINO_DATA'], train=True, transform=transform, download=True)
+    valid_ds = DSet(root=os.environ['DINO_DATA'], train=False, transform=transform, download=True)
     train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=pin_memory)
     valid_dl = DataLoader(valid_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory)
     return train_dl, valid_dl
