@@ -138,10 +138,16 @@ def load_model(identifier:str) -> Union[DINO, DINOModel]:
     dino = DINO.load_from_checkpoint(ckpt_path, map_location='cpu', mc_spec=config.mc_spec, student=student, teacher=teacher)
     
     # init if required by .init suffix
-    if name.endswith('.init'):
+    if '.init' in name:
         student, teacher = init_student_teacher(config, student)
         dino.student = student
         dino.teacher = teacher
+
+    if '.enc' in name:
+        for model in [dino.student, dino.teacher]:
+            model.head.cent.data = model.head.cent[:model.embed_dim]
+            model.head.mlp = torch.nn.Identity()
+            model.head.last_layer = torch.nn.Identity()
 
     if name.startswith('teacher'):
         return dino.teacher
@@ -226,11 +232,6 @@ def eval_coords(coords:torch.Tensor, args):
     print('Loading models...')
     fnames = [args['vec0'], args['vec1'], args['vec2']]
     models = [load_model(fname).to(device=device) for fname in fnames]
-    if args['encoder_only']:
-        for model in models:
-            model.head.cent.data = model.head.cent[:model.embed_dim]
-            model.head.mlp = torch.nn.Identity()
-            model.head.last_layer = torch.nn.Identity()
     vecs = [U.module_to_vector(model) for model in models]
     [print(f'vec{idx}: {fname}') for idx, fname in enumerate(fnames)]
 
@@ -271,9 +272,8 @@ def eval_coords(coords:torch.Tensor, args):
         out = eval_student(student, teacher, prober, train_dl, valid_dl, device)
         out['coord'] = coord
         out['l2norm'] = vec.norm(p=2)
-        if not args['encoder_only']:
-            out['enc/l2norm'] = U.module_to_vector(student.enc).norm(p=2)
-            out['head/l2norm'] = U.module_to_vector(student.head).norm(p=2)
+        out['enc/l2norm'] = U.module_to_vector(student.enc).norm(p=2)
+        out['head/l2norm'] = U.module_to_vector(student.head).norm(p=2)
 
         # return tensor on cpu
         out_list.append({k: v.cpu() for k,v in out.items()})
@@ -423,7 +423,6 @@ if __name__ == '__main__':
     parser.add_argument('--mem_per_cpu', type=int, default=4096)
     parser.add_argument('--time', type=str, default='04:00:00')
     parser.add_argument('--force_cpu', action='store_true')
-    parser.add_argument('--encoder_only', action='store_true')
     args = vars(parser.parse_args())
 
     # Prepare directories for logging and storing
