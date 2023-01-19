@@ -19,7 +19,6 @@ __all__ = [
     "vgg19_bn",
 ]
 
-
 class VGG(nn.Module):
     def __init__(
         self, 
@@ -29,12 +28,18 @@ class VGG(nn.Module):
     ) -> None:
         super().__init__()
         self.features = features
+        self.embed_dim = 512 # cfgs[:][-1]
+        
         self.avgpool = nn.Identity()
         self.classifier = nn.Identity()
-        
         if num_classes is not None:
-            self.avgpool = nn.AdaptiveAvgPool2d((7, 7))
-            self.classifier = nn.Sequential(
+            self.add_classifier(num_classes, dropout)
+
+        self.reset_parameters()
+
+    def add_classifier(self, num_classes:int, dropout:float=0.5):
+        self.avgpool = nn.AdaptiveAvgPool2d((7, 7))
+        self.classifier = nn.Sequential(
                 nn.Linear(512 * 7 * 7, 4096),
                 nn.ReLU(True),
                 nn.Dropout(p=dropout),
@@ -43,31 +48,29 @@ class VGG(nn.Module):
                 nn.Dropout(p=dropout),
                 nn.Linear(4096, num_classes),
             )
-
-        if num_classes is None:
-            self.avgpool = nn.Identity()
-            self.classifier = nn.Identity()
-        self.embed_dim = 512 # cfgs[:][-1]
-
-        self.reset_parameters()
+        for m in self.classifier.modules():
+            if isinstance(m, nn.Linear):
+                init.normal_(m.weight, 0, 0.01)
+                if m.bias is not None:
+                    init.constant_(m.bias, 0)
     
     def reset_parameters(self, mode='fan_out', nonlinearity='relu', generator:torch.Generator=None):
-            for m in self.modules():
-                if isinstance(m, nn.Conv2d):
-                    init.kaiming_normal_(m.weight, mode=mode, nonlinearity=nonlinearity, generator=generator)
-                    if m.bias is not None:
-                        init.constant_(m.bias, 0)
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                init.kaiming_normal_(m.weight, mode=mode, nonlinearity=nonlinearity, generator=generator)
+                if m.bias is not None:
+                    init.constant_(m.bias, 0)
 
-                elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
-                    if m.weight is not None:
-                        init.constant_(m.weight, 1)
-                    if m.bias is not None:
-                        init.constant_(m.bias, 0)
+            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+                if m.weight is not None:
+                    init.constant_(m.weight, 1)
+                if m.bias is not None:
+                    init.constant_(m.bias, 0)
 
-                elif isinstance(m, nn.Linear):
-                    init.normal_(m.weight, 0, 0.01)
-                    if m.bias is not None:
-                        init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Linear):
+                init.normal_(m.weight, 0, 0.01, generator=generator)
+                if m.bias is not None:
+                    init.constant_(m.bias, 0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.features(x)

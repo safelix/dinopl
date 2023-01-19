@@ -243,9 +243,14 @@ class ResNet(nn.Module):
         self.embed_dim = 512 * block.expansion # layer4.planes * prod(avgpool.output_size)
         
         # make classifier
-        self.fc = nn.Identity() if num_classes is None else nn.Linear(self.embed_dim, num_classes)
+        self.classifier = nn.Identity() 
+        if num_classes is not None:
+            self.add_classifier(num_classes)
 
         self.reset_parameters()
+
+    def add_classifier(self, num_classes):
+        self.classifier = nn.Linear(self.embed_dim, num_classes)
 
     def reset_parameters(self, mode='fan_out', nonlinearity='relu', generator:torch.Generator=None):
         for m in self.modules():
@@ -313,7 +318,7 @@ class ResNet(nn.Module):
 
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
-        x = self.fc(x)
+        x = self.classifier(x)
 
         return x
 
