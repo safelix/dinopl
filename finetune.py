@@ -19,6 +19,7 @@ from models import Encoder
 import datasets
 from torchvision import transforms
 from torch.utils.data import DataLoader
+from dinopl.scheduling import Schedule, Scheduler
 
 
 def get_prune_params(module):
@@ -56,22 +57,31 @@ def get_dataloader(dataset:str, augmentations:bool, batch_size:int, num_workers:
     valid_dl = DataLoader(valid_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory)
     return train_dl, valid_dl
 
-def get_optimizer(args:dict, params):
-    kwargs = {}
-    if args.get('opt_lr', None) is not None:
-        kwargs['lr'] = args['opt_lr']
-    if args.get('opt_wd', None) is not None:
-        kwargs['weight_decay'] = args['opt_wd']
+def get_optimizer(args:dict, params) -> torch.optim.Optimizer:
+    # Learning rate and weight decay are set by the scheduler
+    # Raise error since lr wouldn't be set
+    if args['opt'].lower() == 'sgd' and args['opt_lr'] is None: 
+        raise ValueError('SGD requires a learning rate to be set.')
 
     if args['opt'].lower() == 'sgd':
-        return torch.optim.SGD(params, momentum=0.9, **kwargs)
+        return torch.optim.SGD(params, lr=float('inf'), momentum=0.9) 
     if args['opt'].lower() == 'adam':
-        return torch.optim.Adam(params, **kwargs)
+        return torch.optim.Adam(params)
     if args['opt'].lower() == 'adamw':
-        return torch.optim.AdamW(params, **kwargs)
+        return torch.optim.AdamW(params)
+
+def get_scheduler(args:dict, optimizer):
+    scheduler = Scheduler()
+    if isinstance(args['opt_lr'], Schedule):
+        scheduler.add(optimizer, 'lr', args['opt_lr'])
+    if isinstance(args['opt_lr'], Schedule):
+        scheduler.add(optimizer, 'weight_decay', args['opt_wd'])
+
+    return scheduler
 
 @torch.no_grad()
-def main(args:dict, wandb_run:wandb.wandb_sdk.wandb_run.Run):
+def main(args:dict):
+    wandb_run:wandb.wandb_sdk.wandb_run.Run = wandb.run # for pylint
     wandb_run.define_metric('train/acc', summary='max')
     wandb_run.define_metric('valid/acc', summary='max')
     device = torch.device('cpu' if args['force_cpu'] else U.pick_single_gpu())
@@ -99,9 +109,10 @@ def main(args:dict, wandb_run:wandb.wandb_sdk.wandb_run.Run):
     lin.cleanup()
 
     # Train Loop
-    step = 0
+    step = -1
     model.requires_grad_(True)
-    opt = get_optimizer(args, model.parameters())
+    optimizer = get_optimizer(args, model.parameters())
+    scheduler = get_scheduler(args, optimizer).prep(args['n_epochs'], len(train_dl))
     train_acc, valid_acc = Accuracy().to(device), Accuracy().to(device)
     for epoch in range(args['n_epochs']):
         
@@ -111,18 +122,22 @@ def main(args:dict, wandb_run:wandb.wandb_sdk.wandb_run.Run):
         for inputs, targets in progress_bar:
             inputs, targets = inputs.to(device), targets.to(device)
 
-            opt.zero_grad(True)
+            step += 1
+            scheduler.step(step)
+            optimizer.zero_grad(True)
             with torch.enable_grad():
                 predictions = model(inputs)
                 loss = F.cross_entropy(predictions, targets)
             loss.backward()
-            opt.step()
+            optimizer.step()
 
             # process logs
-            step += 1
             acc = train_acc(predictions, targets)
             progress_bar.set_postfix({'loss':loss.item(), 'acc':acc.item()})
-            wandb_run.log({'trainer/step': step, 'train/acc':acc, 'train/loss':loss})
+            wandb_run.log({'trainer/step': step, 'train/acc':acc, 'train/loss':loss,
+                            'hparams/lr':scheduler.get(optimizer, 'lr'),
+                            'hparams/wd':scheduler.get(optimizer, 'weight_decay')})
+                            
 
         # Validation Epoch
         valid_acc.reset()
@@ -144,7 +159,7 @@ def main(args:dict, wandb_run:wandb.wandb_sdk.wandb_run.Run):
 
         # Log Epoch
         wandb_run.log({'trainer/epoch':epoch, 'trainer/step': step,
-                        'valid/loss':valid_loss, 'valid/acc':valid_acc.compute()}, )
+                        'valid/loss':valid_loss, 'valid/acc':valid_acc.compute()})
 
 
 if __name__ == '__main__':
@@ -171,9 +186,9 @@ if __name__ == '__main__':
                         help='Number of epochs to pretrain classifier for.')
     parser.add_argument('--opt', type=str, choices={'adamw', 'adam', 'sgd'}, default='adamw', 
                         help='Optimizer to use for training.')                   
-    parser.add_argument('--opt_lr', type=float, default=None, 
+    parser.add_argument('--opt_lr', type=Schedule.parse, default=None, 
                         help='Learning rate for optimizer.')
-    parser.add_argument('--opt_wd', type=float, default=None, 
+    parser.add_argument('--opt_wd', type=Schedule.parse, default=None, 
                         help='Weight decay for optimizer.')
 
     parser.add_argument('--force_cpu', action='store_true')

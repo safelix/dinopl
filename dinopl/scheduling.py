@@ -58,11 +58,11 @@ class Schedule():
         self.ys = torch.full((self.n_steps, ), torch.nan)
         raise NotImplementedError('Please compute ys here.')
 
-    def prep(self, n_steps:int, n_epochs:int) -> Self:
+    def prep(self, n_epochs:int, steps_per_epoch:int) -> Self:
         'Materialize schedule with n_steps and n_epochs'
-        self.n_steps = n_steps
         self.n_epochs = n_epochs
-        self.steps_per_epoch = n_steps // n_epochs
+        self.steps_per_epoch =  steps_per_epoch # n_steps // n_epochs
+        self.n_steps = n_epochs * steps_per_epoch 
         self.set_ys()
         return self
 
@@ -169,16 +169,20 @@ class Scheduler(pl.Callback):
                 return curr_sched
         raise RuntimeError(f'Schedule {loc}[{key}] could not be retrieved.')
     
-    def prep(self, n_steps:int, n_epochs:int):
+    def prep(self, n_epochs:int, steps_per_epoch:int):
         for loc, key, sched in self.scheduled_params: # prepare all schedules
-            sched.prep(n_steps, n_epochs)
+            sched.prep(n_epochs, steps_per_epoch)
+        return self
+    
+    def step(self, step:int):
+        for loc, key, sched in self.scheduled_params: # update parameter
+            loc[key] = sched(step)
 
     def on_fit_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):
-        self.prep(trainer.estimated_stepping_batches, trainer.max_epochs)
+        self.prep(trainer.max_epochs, trainer.estimated_stepping_batches // trainer.max_epochs)
 
     def on_train_batch_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):
-        for loc, key, sched in self.scheduled_params: # update parameter
-                loc[key] = sched(trainer.global_step)
+        self.step(trainer.global_step)
 
 
 
