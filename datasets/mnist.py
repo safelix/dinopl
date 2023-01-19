@@ -8,6 +8,7 @@ __all__ = [
 ]
 
 class MNIST(datasets.MNIST):
+    img_size = (28,28)
     ds_pixels = 1024
     ds_channels = 3
     ds_classes = 10
