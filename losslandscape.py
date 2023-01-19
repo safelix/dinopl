@@ -93,12 +93,18 @@ class ParamProjector():
             return self.map(inp, is_position)
         raise ValueError('Cannot infer whether to project or map input.')
 
+def load_config(identifier:str) -> Configuration:
+    if ':' in identifier:
+        ckpt_path, name = identifier.split(':')
+    else:
+        ckpt_path, name = identifier, ''
+    config =  Configuration.from_json(os.path.join(os.path.dirname(ckpt_path), 'config.json'))
+    config.mc_spec = create_mc_spec(config)
+    return config
 
 def load_data(identifier:str, batchsize:int, num_workers:int, pin_memory:bool) -> Tuple[DataLoader, DataLoader]:
     ckpt_path = identifier.split(':')[0] if ':' in identifier else identifier
-    
-    config =  Configuration.from_json(os.path.join(os.path.dirname(ckpt_path), 'config.json'))
-    config.mc_spec = create_mc_spec(config)
+    config = load_config(ckpt_path)
     
     DSet = get_dataset(config)
     trfm = transforms.Compose([ # self-training
@@ -118,9 +124,7 @@ def load_model(identifier:str) -> Union[DINO, DINOModel]:
         ckpt_path, name = identifier.split(':')
     else:
         ckpt_path, name = identifier, ''
-
-    config =  Configuration.from_json(os.path.join(os.path.dirname(ckpt_path), 'config.json'))
-    config.mc_spec = create_mc_spec(config)
+    config = load_config(ckpt_path)
 
     # get configuration and prepare model
     enc = get_encoder(config)()
