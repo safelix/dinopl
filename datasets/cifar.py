@@ -9,7 +9,7 @@ __all__ = [
 ]
 
 class CIFAR10(datasets.CIFAR10):
-    size = (32, 32)
+    img_size = (32, 32)
     ds_pixels = 1024
     ds_channels = 3
     ds_classes = 10

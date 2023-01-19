@@ -64,7 +64,7 @@ def get_optimizer(args:dict, params):
         kwargs['weight_decay'] = args['opt_wd']
 
     if args['opt'].lower() == 'sgd':
-        return torch.optim.SGD(params, **kwargs)
+        return torch.optim.SGD(params, momentum=0.9, **kwargs)
     if args['opt'].lower() == 'adam':
         return torch.optim.Adam(params, **kwargs)
     if args['opt'].lower() == 'adamw':
@@ -167,7 +167,7 @@ if __name__ == '__main__':
     # Training arguments
     parser.add_argument('--n_epochs', type=int, default=50, 
                     help='Number of epochs to train for.')
-    parser.add_argument('--pre_epochs_clf', type=int, default=20,
+    parser.add_argument('--pre_epochs_clf', type=int, default=0,
                         help='Number of epochs to pretrain classifier for.')
     parser.add_argument('--opt', type=str, choices={'adamw', 'adam', 'sgd'}, default='adamw', 
                         help='Optimizer to use for training.')                   
@@ -187,7 +187,7 @@ if __name__ == '__main__':
         args['ckpt'] = os.path.relpath(args['ckpt'], os.environ['DINO_RESULTS']) 
 
     # init wandb
-    args['dino_config'] = vars(load_config(os.path.join((os.environ['DINO_RESULTS'], args['ckpt'])))) # add dino_config
+    args['dino_config'] = vars(load_config(os.path.join(os.environ['DINO_RESULTS'], args['ckpt']))) # add dino_config
     run = wandb.init(project='DINO_finetune', dir=os.environ['DINO_RESULTS'], config=args)
     args['ckpt'] = os.path.join(os.environ['DINO_RESULTS'], args['ckpt']) # make absolute
 
