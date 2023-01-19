@@ -187,7 +187,7 @@ if __name__ == '__main__':
         args['ckpt'] = os.path.relpath(args['ckpt'], os.environ['DINO_RESULTS']) 
 
     # init wandb
-    args['dino_config'] = vars(load_config(os.environ['DINO_RESULTS'], args['ckpt'])) # add dino_config
+    args['dino_config'] = vars(load_config(os.path.join((os.environ['DINO_RESULTS'], args['ckpt'])))) # add dino_config
     run = wandb.init(project='DINO_finetune', dir=os.environ['DINO_RESULTS'], config=args)
     args['ckpt'] = os.path.join(os.environ['DINO_RESULTS'], args['ckpt']) # make absolute
 
