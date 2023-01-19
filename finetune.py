@@ -10,10 +10,11 @@ from torch.nn.utils import prune
 from torchmetrics import Accuracy
 from tqdm import tqdm
 
+from configuration import Configuration
 import dinopl.utils as U
 import wandb
 from dinopl import DINO, DINOHead, DINOModel, probing
-from losslandscape import load_model
+from losslandscape import load_model, load_config
 from models import Encoder
 import datasets
 from torchvision import transforms
@@ -29,7 +30,7 @@ def get_prune_params(module):
             prune_params.append((m, 'bias'))
     return prune_params
 
-def get_dataloader(dataset:str, batch_size:int, num_workers:int, pin_memory:bool):
+def get_dataloader(dataset:str, augmentations:bool, batch_size:int, num_workers:int, pin_memory:bool):
     if dataset == 'mnist':
         DSet = datasets.MNIST
     if dataset == 'cifar10':
@@ -41,6 +42,13 @@ def get_dataloader(dataset:str, batch_size:int, num_workers:int, pin_memory:bool
                     transforms.Lambda(lambda img: img.convert('RGB')), 
                     transforms.ToTensor(),
                     transforms.Normalize(DSet.mean, DSet.std)])
+
+    if augmentations:
+        transform = transforms.Compose([
+            transforms.RandomHorizontalFlip(), 
+            transforms.RandomCrop(DSet.img_size, 4),
+            transform,
+        ])
     
     train_ds = DSet(root=os.environ['DINO_DATA'], train=True, transform=transform, download=True)
     valid_ds = DSet(root=os.environ['DINO_DATA'], train=False, transform=transform, download=True)
@@ -69,7 +77,7 @@ def main(args:dict, wandb_run:wandb.wandb_sdk.wandb_run.Run):
     device = torch.device('cpu' if args['force_cpu'] else U.pick_single_gpu())
 
     # Load Data and model
-    train_dl, valid_dl = get_dataloader(args['dataset'], args['batch_size'], args['num_workers'], not args['force_cpu'])
+    train_dl, valid_dl = get_dataloader(args['dataset'], args['augmentations'], args['batch_size'], args['num_workers'], not args['force_cpu'])
     args['n_classes'] = train_dl.dataset.ds_classes
     model:Encoder = load_model(args['ckpt']).enc.to(device)
     if isinstance(model, DINO):
@@ -150,6 +158,7 @@ if __name__ == '__main__':
     
     # Data Arguments
     parser.add_argument('--dataset', choices={'mnist', 'cifar10'}, default='cifar10')
+    parser.add_argument('--augmentations', type=U.bool_parser, default=False)
     parser.add_argument('--batch_size', type=int, default=256, 
                         help='Batch size for the data loader.')
     parser.add_argument('--num_workers', type=int, default=4, 
@@ -163,7 +172,7 @@ if __name__ == '__main__':
     parser.add_argument('--opt', type=str, choices={'adamw', 'adam', 'sgd'}, default='adamw', 
                         help='Optimizer to use for training.')                   
     parser.add_argument('--opt_lr', type=float, default=None, 
-                        help='Learning rate for optimizer, specified wrt batch size 256 and linearly scaled.')
+                        help='Learning rate for optimizer.')
     parser.add_argument('--opt_wd', type=float, default=None, 
                         help='Weight decay for optimizer.')
 
@@ -178,6 +187,7 @@ if __name__ == '__main__':
         args['ckpt'] = os.path.relpath(args['ckpt'], os.environ['DINO_RESULTS']) 
 
     # init wandb
+    args['dino_config'] = vars(load_config(os.environ['DINO_RESULTS'], args['ckpt'])) # add dino_config
     run = wandb.init(project='DINO_finetune', dir=os.environ['DINO_RESULTS'], config=args)
     args['ckpt'] = os.path.join(os.environ['DINO_RESULTS'], args['ckpt']) # make absolute
 
