@@ -305,6 +305,35 @@ class ExpWarmup(CatSched, Schedule):
         return Schedule.__repr__(self, [self.y_start, self.y_end, self.where])
 
 
+class MultiStep(Schedule):
+    def __init__(self, start:float, gamma:float, *steps:List[Union[int, float]]):
+        self.start = float(start)
+        self.gamma = float(gamma)
+        self.steps = steps # ratio of steps if float, epochs if int
+
+    def set_ys(self) -> Self:
+        last_step = 0
+        value = self.start
+        self.ys = torch.full((self.n_steps, ), torch.nan)
+
+        for step in self.steps:
+
+            if isinstance(step, int):
+                step = step * self.steps_per_epoch
+            if isinstance(step, float):
+                step = int(step * self.n_steps)
+
+            self.ys[last_step:step] = value # fill ys
+            value *= self.gamma # update value
+            last_step = step # update last step
+
+        self.ys[last_step:] = value # fill remaining
+
+    def __repr__(self) -> str:
+        return Schedule.__repr__(self, [self.start, self.gamma] + list(self.steps))
+
+
+# run with: python -m dinopl.scheduling
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('schedule', type=Schedule.parse,
@@ -322,5 +351,5 @@ if __name__ == '__main__':
         sched.prep(args.n_epochs, args.steps_per_epoch)
         print(f'Prepared Schedule: {sched.ys}')  
     elif args.n_epochs or args.steps_per_epoch:
-        raise RuntimeError('Please specify n_steps and n_epochs.')
+        raise RuntimeError('Please specify n_epochs and steps_per_epoch.')
         
