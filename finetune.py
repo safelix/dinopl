@@ -92,8 +92,9 @@ def main(args:dict, wandb_run:wandb.wandb_sdk.wandb_run.Run):
 
     # Train Loop
     step = 0
-    train_acc, valid_acc = Accuracy().to(device), Accuracy().to(device)
+    model.requires_grad_(True)
     opt = get_optimizer(args, model.parameters())
+    train_acc, valid_acc = Accuracy().to(device), Accuracy().to(device)
     for epoch in range(args['n_epochs']):
         
         # Training Epoch
