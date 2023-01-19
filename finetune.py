@@ -70,12 +70,12 @@ def get_optimizer(args:dict, params) -> torch.optim.Optimizer:
     if args['opt'].lower() == 'adamw':
         return torch.optim.AdamW(params)
 
-def get_scheduler(args:dict, optimizer):
+def get_scheduler(args:dict, optimizer:torch.optim.Optimizer) -> Schedule:
     scheduler = Scheduler()
     if isinstance(args['opt_lr'], Schedule):
-        scheduler.add(optimizer, 'lr', args['opt_lr'])
-    if isinstance(args['opt_lr'], Schedule):
-        scheduler.add(optimizer, 'weight_decay', args['opt_wd'])
+        scheduler.add(optimizer.param_groups[0], 'lr', args['opt_lr'])
+    if isinstance(args['opt_wd'], Schedule):
+        scheduler.add(optimizer.param_groups[0], 'weight_decay', args['opt_wd'])
 
     return scheduler
 
@@ -135,9 +135,8 @@ def main(args:dict):
             acc = train_acc(predictions, targets)
             progress_bar.set_postfix({'loss':loss.item(), 'acc':acc.item()})
             wandb_run.log({'trainer/step': step, 'train/acc':acc, 'train/loss':loss,
-                            'hparams/lr':scheduler.get(optimizer, 'lr'),
-                            'hparams/wd':scheduler.get(optimizer, 'weight_decay')})
-                            
+                            'hparams/lr':optimizer.param_groups[0]['lr'],
+                            'hparams/wd':optimizer.param_groups[0]['weight_decay']})
 
         # Validation Epoch
         valid_acc.reset()
@@ -185,9 +184,9 @@ if __name__ == '__main__':
     parser.add_argument('--pre_epochs_clf', type=int, default=0,
                         help='Number of epochs to pretrain classifier for.')
     parser.add_argument('--opt', type=str, choices={'adamw', 'adam', 'sgd'}, default='adamw', 
-                        help='Optimizer to use for training.')                   
+                        help='Optimizer to use for training (float or Schedule)')                   
     parser.add_argument('--opt_lr', type=Schedule.parse, default=None, 
-                        help='Learning rate for optimizer.')
+                        help='Learning rate for optimizer (float or Schedule).')
     parser.add_argument('--opt_wd', type=Schedule.parse, default=None, 
                         help='Weight decay for optimizer.')
 
@@ -203,7 +202,7 @@ if __name__ == '__main__':
 
     # init wandb
     args['dino_config'] = vars(load_config(os.path.join(os.environ['DINO_RESULTS'], args['ckpt']))) # add dino_config
-    run = wandb.init(project='DINO_finetune', dir=os.environ['DINO_RESULTS'], config=args)
+    wandb.init(project='DINO_finetune', dir=os.environ['DINO_RESULTS'], config=args)
     args['ckpt'] = os.path.join(os.environ['DINO_RESULTS'], args['ckpt']) # make absolute
 
-    main(args, run)
+    main(args)

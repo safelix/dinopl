@@ -309,18 +309,18 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('schedule', type=Schedule.parse,
                         help='Schedule to parse, prep and print.')
-    parser.add_argument('--n_steps', type=int, default=None,
-                        help='Number of steps to prepare the Schedule for.')
     parser.add_argument('--n_epochs', type=int, default=None,
                         help='Number of epochs to prepare the Schedule for.')
+    parser.add_argument('--steps_per_epoch', type=int, default=None,
+                        help='Number of steps per epoch.')
 
     args = parser.parse_args()
-    sched = args.schedule
+    sched:Schedule = args.schedule
     print(f'Parsed: {sched}')
 
-    if args.n_steps and args.n_epochs:
-        sched.prep(args.n_steps, args.n_epochs)
+    if args.n_epochs and args.steps_per_epoch:
+        sched.prep(args.n_epochs, args.steps_per_epoch)
         print(f'Prepared Schedule: {sched.ys}')  
-    elif args.n_steps or args.n_epochs:
+    elif args.n_epochs or args.steps_per_epoch:
         raise RuntimeError('Please specify n_steps and n_epochs.')
         
