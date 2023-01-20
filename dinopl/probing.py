@@ -17,7 +17,7 @@ __all__ = [
     'Prober'
 ]
 
-class Analysis():
+class Analysis(object):
     def prepare(self, n_features:int, n_classes:int, device:torch.device=None, generator:torch.Generator=None) -> None:   
         raise NotImplementedError()
 
@@ -29,7 +29,9 @@ class Analysis():
     
     def cleanup(self) -> None:
         raise NotImplementedError()
-
+    
+    def __del__(self):
+        self.cleanup()
 
 class LinearAnalysis(Analysis):
     def __init__(self, n_epochs:int):

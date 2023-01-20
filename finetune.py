@@ -22,15 +22,6 @@ from torch.utils.data import DataLoader
 from dinopl.scheduling import Schedule, Scheduler
 
 
-def get_prune_params(module):
-    prune_params = []
-    for m in module.modules():
-        if getattr(m, 'weight', None) is not None:
-            prune_params.append((m, 'weight'))
-        if getattr(m, 'bias', None) is not None:
-            prune_params.append((m, 'bias'))
-    return prune_params
-
 def get_dataloader(dataset:str, augmentations:bool, batch_size:int, num_workers:int, pin_memory:bool):
     if dataset == 'mnist':
         DSet = datasets.MNIST
@@ -92,21 +83,69 @@ def main(args:dict):
     model:Encoder = load_model(args['ckpt']).enc.to(device)
     if isinstance(model, DINO):
         raise ValueError('Checkpoint needs to be either :teacher or :student')
-
-    # Prune encoder
-    prune.global_unstructured(get_prune_params(model), prune.L1Unstructured, amount=args['prune_ratio'])
     
     # Prepare Classifier
     lin = probing.LinearAnalysis(args['pre_epochs_clf'])
     lin.prepare(model.embed_dim, train_dl.dataset.ds_classes, device=device)
     #lin.clf = type(model)(num_classes=args['n_classes']).classifier # get new classifier from encoder type
 
-    lin.train(probing.load_data(model, train_dl, device))
+    if args['pre_epochs_clf'] > 0:
+        lin.train(probing.load_data(model, train_dl, device))
     acc = lin.valid(probing.load_data(model, valid_dl, device))
     wandb_run.log({'trainer/epoch':-1, 'trainer/step': -1, 'valid/acc':acc})
 
     model.classifier = copy.deepcopy(lin.clf) # add trained classifier to encoder
-    lin.cleanup()
+    del lin
+
+
+    # Prepare pruning: get parameter names and their parent modules for pruning
+    p_names = [n for m in model.modules() for n, p in m.named_parameters(recurse=False)]
+    p_modules = [m for m in model.modules() for p in m.parameters(recurse=False)]
+    
+    # Train once with potentially pre-pruned network
+    if args['n_rewinds'] == 0:
+        prune.global_unstructured(zip(p_modules, p_names), prune.L1Unstructured, amount=args['prune_ratio'])
+        train(args, model, train_dl, valid_dl, device=device)
+        return
+
+
+    # TODO: Rewind to k args['rewind_to_k']
+    init_model = copy.deepcopy(model).to('cpu')
+
+    # Train with rewinding and iterative magnitude pruning
+    pruner = prune.L1Unstructured(amount=0)                                                             # start with no pruning
+    mask = torch.ones_like(torch.cat([p.view(-1) for p in model.parameters()]))                         # and no mask
+    for rewind_idx in range(args['n_rewinds']):
+        wandb_run.log({'rewind':rewind_idx})
+
+        # Training
+        train(args, model, train_dl, valid_dl, logprefix=f'Rewind{rewind_idx}', device=device)
+
+        # Compute global mask
+        pruner.amount = pruner.amount + (1-pruner.amount) * args['prune_ratio']                         # set cumulative pruning ratio
+        [prune.remove(m, n) for m, n in zip(p_modules, p_names) if prune.is_pruned(m)]                  # bake pruning into parameters (remove re-parametrization)
+        vec = torch.cat([p.view(-1) for m in model.modules() for p in m.parameters(recurse=False)])     # access parameters() with standard prametrization 
+        mask:torch.Tensor = pruner.compute_mask(vec, mask)                                              # this has no side-effects
+
+        # Rewind to init 
+        model = copy.deepcopy(init_model).to(device=device)                                             # model now is not 
+        p_names = [n for m in model.modules() for n, p in m.named_parameters(recurse=False)]            # store names to restore prametrization
+        p_modules = [m for m in model.modules() for p in m.parameters(recurse=False)]                   # store parent modules to restore prametrization
+
+        # Apply global mask to module
+        idx = 0  
+        for m in model.modules():
+            for n, p in list(m.named_parameters(recurse=False)):                                        # list since _parameters odict will change during iteration
+                prune.custom_from_mask(m, n, mask[idx:idx+p.numel()].view_as(p))                        # introduce re-parametrization: .name = .name_orig * .name_mask
+                idx += p.numel()
+        assert idx == mask.numel(), 'Did not iterate over entire mask.'
+
+
+
+def train(args, model:Encoder, train_dl:DataLoader, valid_dl:DataLoader, logprefix='', device=None):
+    wandb_run:wandb.wandb_sdk.wandb_run.Run = wandb.run # for pylint
+    barprefix = '' if (logprefix == '') else f'{logprefix}: '
+    logprefix = '' if (logprefix == '') else f'{logprefix}/'
 
     # Train Loop
     step = -1
@@ -119,7 +158,7 @@ def main(args:dict):
         # Training Epoch
         model.train()
         train_acc.reset()
-        progress_bar = tqdm(train_dl, desc=f'Train Epoch {epoch}', leave=False)
+        progress_bar = tqdm(train_dl, desc=f'{barprefix}Train Epoch {epoch}', leave=False)
         for inputs, targets in progress_bar:
             inputs, targets = inputs.to(device), targets.to(device)
 
@@ -135,15 +174,16 @@ def main(args:dict):
             # process logs
             acc = train_acc(predictions, targets)
             progress_bar.set_postfix({'loss':loss.item(), 'acc':acc.item()})
-            wandb_run.log({'trainer/step': step, 'train/acc':acc, 'train/loss':loss,
-                            'hparams/lr':optimizer.param_groups[0]['lr'],
-                            'hparams/wd':optimizer.param_groups[0]['weight_decay']})
+            logs = {'trainer/step': step, 'train/acc':acc, 'train/loss':loss,
+                        'hparams/lr':optimizer.param_groups[0]['lr'],
+                        'hparams/wd':optimizer.param_groups[0]['weight_decay']}
+            wandb_run.log({f'{logprefix}{k}':v for k,v in logs.items()})
 
         # Validation Epoch
         model.eval()
         valid_acc.reset()
         valid_loss, numel = 0, 0
-        progress_bar = tqdm(valid_dl, desc=f'Valid Epoch {epoch}', leave=False)
+        progress_bar = tqdm(valid_dl, desc=f'{barprefix}Valid Epoch {epoch}', leave=False)
         for inputs, targets in progress_bar:
             inputs, targets = inputs.to(device), targets.to(device)
 
@@ -159,8 +199,9 @@ def main(args:dict):
 
 
         # Log Epoch
-        wandb_run.log({'trainer/epoch':epoch, 'trainer/step': step,
-                        'valid/loss':valid_loss, 'valid/acc':valid_acc.compute()})
+        logs = {'trainer/epoch':epoch, 'trainer/step': step,
+                    'valid/loss':valid_loss, 'valid/acc':valid_acc.compute()}
+        wandb_run.log({f'{logprefix}{k}':v for k,v in logs.items()})
 
 
 if __name__ == '__main__':
@@ -169,8 +210,10 @@ if __name__ == '__main__':
     # Model arguments
     parser.add_argument('--ckpt', type=str, default=None,
                         help='Checkpoint to finetune.')
-    parser.add_argument('--prune_ratio', type=float, default=0,
-                        help='Ratio of smallest weights to prune.')
+    parser.add_argument('--prune_ratio', type=float, default=0.0,
+                        help='Ratio of globally smallest weights to prune.')
+    parser.add_argument('--n_rewinds', type=int, default=0,
+                        help='Number of times to rewind and prune for IMP. Applies pruning before training if =0.')
     
     # Data Arguments
     parser.add_argument('--dataset', choices={'mnist', 'cifar10'}, default='cifar10')
