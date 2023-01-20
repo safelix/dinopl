@@ -117,7 +117,8 @@ def main(args:dict):
     for epoch in range(args['n_epochs']):
         
         # Training Epoch
-        train_acc.reset(),
+        model.train()
+        train_acc.reset()
         progress_bar = tqdm(train_dl, desc=f'Train Epoch {epoch}', leave=False)
         for inputs, targets in progress_bar:
             inputs, targets = inputs.to(device), targets.to(device)
@@ -139,6 +140,7 @@ def main(args:dict):
                             'hparams/wd':optimizer.param_groups[0]['weight_decay']})
 
         # Validation Epoch
+        model.eval()
         valid_acc.reset()
         valid_loss, numel = 0, 0
         progress_bar = tqdm(valid_dl, desc=f'Valid Epoch {epoch}', leave=False)
