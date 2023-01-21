@@ -116,10 +116,10 @@ def main(args:dict):
     pruner = prune.L1Unstructured(amount=0)                                                             # start with no pruning
     mask = torch.ones_like(torch.cat([p.view(-1) for p in model.parameters()]))                         # and no mask
     for rewind_idx in range(args['n_rewinds']):
-        wandb_run.log({'rewind':rewind_idx})
 
         # Training
-        train(args, model, train_dl, valid_dl, logprefix=f'Rewind{rewind_idx}', device=device)
+        acc = train(args, model, train_dl, valid_dl, logprefix=f'Rewind{rewind_idx}', device=device)
+        wandb_run.log({'rewind':rewind_idx, 'cumulative_ratio':pruner.amount, 'rewind_acc':acc})
 
         # Compute global mask
         pruner.amount = pruner.amount + (1-pruner.amount) * args['prune_ratio']                         # set cumulative pruning ratio
@@ -140,9 +140,10 @@ def main(args:dict):
                 idx += p.numel()
         assert idx == mask.numel(), 'Did not iterate over entire mask.'
 
+    return
 
 
-def train(args, model:Encoder, train_dl:DataLoader, valid_dl:DataLoader, logprefix='', device=None):
+def train(args, model:Encoder, train_dl:DataLoader, valid_dl:DataLoader, logprefix='', device=None) -> float:
     wandb_run:wandb.wandb_sdk.wandb_run.Run = wandb.run # for pylint
     barprefix = '' if (logprefix == '') else f'{logprefix}: '
     logprefix = '' if (logprefix == '') else f'{logprefix}/'
@@ -202,6 +203,8 @@ def train(args, model:Encoder, train_dl:DataLoader, valid_dl:DataLoader, logpref
         logs = {'trainer/epoch':epoch, 'trainer/step': step,
                     'valid/loss':valid_loss, 'valid/acc':valid_acc.compute()}
         wandb_run.log({f'{logprefix}{k}':v for k,v in logs.items()})
+    
+    return valid_acc.compute()
 
 
 if __name__ == '__main__':
