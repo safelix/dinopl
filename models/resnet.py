@@ -200,6 +200,7 @@ class ResNet(nn.Module):
         block: Type[Union[BasicBlock, Bottleneck]],
         layers: List[int],
         num_classes: Optional[int] = 1000,
+        inplanes: int = 64,
         groups: int = 1,
         width_per_group: int = 64,
         replace_stride_with_dilation: Optional[List[bool]] = None,
@@ -211,7 +212,7 @@ class ResNet(nn.Module):
             norm_layer = nn.BatchNorm2d
         self._norm_layer = norm_layer
 
-        self.inplanes = 64
+        self.inplanes = inplanes
         self.dilation = 1
         if replace_stride_with_dilation is None:
             # each element in the tuple indicates if we should replace
@@ -235,22 +236,28 @@ class ResNet(nn.Module):
             self.maxpool = nn.Identity()
 
         # make layers
-        self.layer1 = self._make_layer(block, 64, layers[0])
-        self.layer2 = self._make_layer(block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0])
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=2, dilate=replace_stride_with_dilation[1])
-        self.layer4 = self._make_layer(block, 512, layers[3], stride=2, dilate=replace_stride_with_dilation[2])
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.embed_dim = 512 * block.expansion # layer4.planes * prod(avgpool.output_size)
+        planes = self.inplanes
+        self.layer1 = self._make_layer(block, planes, layers[0])
+        planes = 2 * planes # next layer has stride 2 => double planes
+        self.layer2 = self._make_layer(block, planes, layers[1], stride=2, dilate=replace_stride_with_dilation[0])
+        planes = 2 * planes # next layer has stride 2 => double planes
+        self.layer3 = self._make_layer(block, planes, layers[2], stride=2, dilate=replace_stride_with_dilation[1])
         
-        # make classifier
-        self.classifier = nn.Identity() 
+        # make layer4 only for non-cifar resnets
+        self.layer4 = nn.Identity()
+        if len(layers) == 4: 
+            planes = 2 * planes # next layer has stride 2 => double planes
+            self.layer4 = self._make_layer(block, planes, layers[3], stride=2, dilate=replace_stride_with_dilation[2])
+
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.embed_dim = planes * block.expansion
+        
+        # make fully-connected classifier
+        self.fc = nn.Identity() 
         if num_classes is not None:
-            self.add_classifier(num_classes)
+            self.fc = nn.Linear(self.embed_dim, num_classes)
 
         self.reset_parameters()
-
-    def add_classifier(self, num_classes):
-        self.classifier = nn.Linear(self.embed_dim, num_classes)
 
     def reset_parameters(self, mode='fan_out', nonlinearity='relu', generator:torch.Generator=None):
         for m in self.modules():
@@ -318,7 +325,7 @@ class ResNet(nn.Module):
 
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
-        x = self.classifier(x)
+        x = self.fc(x)
 
         return x
 
@@ -378,3 +385,32 @@ def resnet50(preact=False, **kwargs: Any) -> ResNet:
     
     block  = Bottleneck
     return ResNet(block, [3, 4, 6, 3], **kwargs)
+
+
+### CIFAR-10 ResNets
+
+def resnet20(preact=False, **kwargs: Any) -> ResNet:
+    """CIFAR ResNet-20 from `Deep Residual Learning for Image Recognition <https://arxiv.org/pdf/1512.03385.pdf>`__.
+
+    Args:
+        preact: Construct a pre-activation resnet, default is ``False``.
+        **kwargs: parameters passed to the ``models.resnet.ResNet`` base class.
+    """
+
+    kwargs['inplanes'] = 16
+    kwargs['tiny_input'] = True
+    block = PreActBasicBlock if preact else BasicBlock
+    return ResNet(block, [3, 3, 3], **kwargs)
+
+def resnet56(preact=False, **kwargs: Any) -> ResNet:
+    """CIFAR ResNet-56 from `Deep Residual Learning for Image Recognition <https://arxiv.org/pdf/1512.03385.pdf>`__.
+
+    Args:
+        preact: Construct a pre-activation resnet, default is ``False``.
+        **kwargs: parameters passed to the ``models.resnet.ResNet`` base class.
+    """
+
+    kwargs['inplanes'] = 16
+    kwargs['tiny_input'] = True
+    block = PreActBasicBlock if preact else BasicBlock
+    return ResNet(block, [9, 9, 9], tiny_input=True, **kwargs)

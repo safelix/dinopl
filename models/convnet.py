@@ -50,14 +50,11 @@ class ConvNet(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d((2, 2))
         self.embed_dim:int = width * 4
         
-        self.classifier = nn.Identity()
+        self.fc = nn.Identity()
         if num_classes is not None:
-            self.add_classifier(num_classes)
+            self.fc = nn.Linear(self.embed_dim, num_classes)
 
         self.reset_parameters()
-    
-    def add_classifier(self, num_classes):
-        self.classifier = nn.Linear(self.embed_dim, num_classes)
     
     def reset_parameters(self, mode='fan_out', nonlinearity='relu', generator:torch.Generator=None):
         for m in self.modules():
@@ -74,7 +71,7 @@ class ConvNet(nn.Module):
 
         x = self.avgpool(x)
         x = torch.flatten(x, 1)  # flatten all dimensions except batch
-        x = self.classifier(x)
+        x = self.fc(x)
         return x
 
 

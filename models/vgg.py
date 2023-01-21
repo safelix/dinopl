@@ -24,35 +24,26 @@ class VGG(nn.Module):
         self, 
         features: nn.Module, 
         num_classes: Optional[int] = 1000, 
-        dropout: float = 0.5,
+        #dropout: float = 0.5,
     ) -> None:
         super().__init__()
         self.features = features
         self.embed_dim = 512 # cfgs[:][-1]
         
-        self.avgpool = nn.Identity()
-        self.classifier = nn.Identity()
+        self.fc = nn.Identity()
         if num_classes is not None:
-            self.add_classifier(num_classes, dropout)
+            self.fc = nn.Linear(self.embed_dim, num_classes)
+            #self.avgpool = nn.AdaptiveAvgPool2d((7, 7))
+            #self.classifier = nn.Sequential(
+            #    nn.Linear(512 * 7 * 7, 4096),
+            #    nn.ReLU(True),
+            #    nn.Dropout(p=dropout),
+            #    nn.Linear(4096, 4096),
+            #    nn.ReLU(True),
+            #    nn.Dropout(p=dropout),
+            #    nn.Linear(4096, num_classes))
 
-        self.reset_parameters()
-
-    def add_classifier(self, num_classes:int, dropout:float=0.5):
-        self.avgpool = nn.AdaptiveAvgPool2d((7, 7))
-        self.classifier = nn.Sequential(
-                nn.Linear(512 * 7 * 7, 4096),
-                nn.ReLU(True),
-                nn.Dropout(p=dropout),
-                nn.Linear(4096, 4096),
-                nn.ReLU(True),
-                nn.Dropout(p=dropout),
-                nn.Linear(4096, num_classes),
-            )
-        for m in self.classifier.modules():
-            if isinstance(m, nn.Linear):
-                init.normal_(m.weight, 0, 0.01)
-                if m.bias is not None:
-                    init.constant_(m.bias, 0)
+        self.reset_parameters()       
     
     def reset_parameters(self, mode='fan_out', nonlinearity='relu', generator:torch.Generator=None):
         for m in self.modules():
@@ -74,9 +65,10 @@ class VGG(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.features(x)
-        x = self.avgpool(x)
+        #x = self.avgpool(x)
         x = torch.flatten(x, 1)
-        x = self.classifier(x)
+        #x = self.classifier(x)
+        x = self.fc(x)
         return x
 
 

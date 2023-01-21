@@ -2,9 +2,7 @@
 from torch.nn import Module
 class Encoder(Module):
     embed_dim:int
-    classifier:Module
-    def add_classifier(self, num_classes:int):
-        raise NotImplementedError()
+    fc:Module
     def reset_parameters(self) -> None:
         raise NotImplementedError()
 

@@ -87,14 +87,13 @@ def main(args:dict):
     # Prepare Classifier
     lin = probing.LinearAnalysis(args['pre_epochs_clf'])
     lin.prepare(model.embed_dim, train_dl.dataset.ds_classes, device=device)
-    #lin.clf = type(model)(num_classes=args['n_classes']).classifier # get new classifier from encoder type
 
     if args['pre_epochs_clf'] > 0:
         lin.train(probing.load_data(model, train_dl, device))
     acc = lin.valid(probing.load_data(model, valid_dl, device))
     wandb_run.log({'trainer/epoch':-1, 'trainer/step': -1, 'valid/acc':acc})
 
-    model.classifier = copy.deepcopy(lin.clf) # add trained classifier to encoder
+    model.fc = copy.deepcopy(lin.clf) # add trained classifier to encoder
     del lin
 
 
