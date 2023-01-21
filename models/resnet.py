@@ -12,7 +12,6 @@ from dinopl.modules import init
 
 __all__ = [
     "ResNet",
-    "resnet10",
     "resnet18",
     "resnet34",
     "resnet20",
