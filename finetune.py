@@ -119,7 +119,7 @@ def main(args:dict):
 
         # Training
         acc = train(args, model, train_dl, valid_dl, logprefix=f'Rewind{rewind_idx}', device=device)
-        wandb_run.log({'rewind':rewind_idx, 'cumulative_ratio':pruner.amount, 'rewind_acc':acc})
+        wandb_run.log({'IMP/rewind':rewind_idx, 'IMP/ratio':pruner.amount, 'IMP/acc':acc})
 
         # Compute global mask
         pruner.amount = pruner.amount + (1-pruner.amount) * args['prune_ratio']                         # set cumulative pruning ratio
