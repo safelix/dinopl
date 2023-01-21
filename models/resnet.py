@@ -1,8 +1,8 @@
 # Copy from torchvision.models.resnet (src: https://github.com/pytorch/vision/blob/v0.14.0/torchvision/models/resnet.py). 
 # - Include PreActBasicBlock class to allow for preactivation resnets (https://arxiv.org/abs/1603.05027).
 # - Include reset_parameters() functions to expose torch.Generator objects from underlying init implementations.
-# - Include resnet10() constructor for a minial resnet implementation.
 # - Remove functionality pretrained weights, api logging and bindings for more complex resnets.
+# - Include CIFAR ResNets (resnet20, resnet56) with only three layers and initial width 16
 from typing import Any, Callable, List, Optional, Type, Union
 
 import torch
@@ -15,6 +15,8 @@ __all__ = [
     "resnet10",
     "resnet18",
     "resnet34",
+    "resnet20",
+    "resnet56",
 ]
 
 
@@ -331,18 +333,6 @@ class ResNet(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         return self._forward_impl(x)
-
-
-def resnet10(preact=False, **kwargs: Any) -> ResNet:
-    """ResNet-10 from `Deep Residual Learning for Image Recognition <https://arxiv.org/pdf/1512.03385.pdf>`__.
-
-    Args:
-        preact: Construct a pre-activation resnet, default is ``False``.
-        **kwargs: parameters passed to the ``models.resnet.ResNet`` base class.
-    """
-
-    block = PreActBasicBlock if preact else BasicBlock
-    return ResNet(block, [1, 1, 1, 1], **kwargs)
 
 
 def resnet18(preact=False, **kwargs: Any) -> ResNet:
