@@ -206,6 +206,8 @@ class Configuration(object):
                             help='Learning rate for optimizer (float or Schedule): specified wrt batch size 256 and linearly scaled.')
         training.add_argument('--opt_wd', type=str, default=str(CosSched(0.04, 0.4)), 
                             help='Weight decay for optimizer (float or Schedule).')
+        training.add_argument('--opt_mom', type=float, default=0.9, 
+                            help='Momentum for SGD optimizer.')
         training.add_argument('--opt_beta1', type=float, default=0.9, 
                             help='Beta1 for Adam(W) optimizer.')
         training.add_argument('--opt_beta2', type=float, default=0.999, 
@@ -429,7 +431,7 @@ def create_optimizer(config:Configuration) -> torch.optim.Optimizer:
         return (lambda *args, **kwargs: torch.optim.Adam(*args, betas=(config.opt_beta1, config.opt_beta2), **kwargs))
 
     if config.opt == 'sgd':
-        return torch.optim.SGD
+        return (lambda *args, **kwargs: torch.optim.SGD(*args, momentum=config.opt_mom, **kwargs))
 
     raise RuntimeError('Unkown optimizer name.')
 
