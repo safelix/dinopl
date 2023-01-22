@@ -115,10 +115,12 @@ def main(args:dict):
     pruner = prune.L1Unstructured(amount=0)                                                             # start with no pruning
     mask = torch.ones_like(torch.cat([p.view(-1) for p in model.parameters()]))                         # and no mask
     for rewind_idx in range(args['n_rewinds']):
+        logprefix = f'Rewind{rewind_idx:02d}' if rewind_idx > 0 else ''
 
         # Training
-        acc = train(args, model, train_dl, valid_dl, logprefix=f'Rewind{rewind_idx}', device=device)
-        wandb_run.log({'IMP/rewind':rewind_idx, 'IMP/ratio':pruner.amount, 'IMP/acc':acc})
+        best_acc, last_acc = train(args, model, train_dl, valid_dl, logprefix=logprefix, device=device)
+        wandb_run.log({'IMP/rewind':rewind_idx, 'IMP/ratio':pruner.amount, 
+                        'IMP/best_acc':best_acc, 'IMP/last_acc':last_acc, })
 
         # Compute global mask
         pruner.amount = pruner.amount + (1-pruner.amount) * args['prune_ratio']                         # set cumulative pruning ratio
@@ -146,13 +148,25 @@ def train(args, model:Encoder, train_dl:DataLoader, valid_dl:DataLoader, logpref
     wandb_run:wandb.wandb_sdk.wandb_run.Run = wandb.run # for pylint
     barprefix = '' if (logprefix == '') else f'{logprefix}: '
     logprefix = '' if (logprefix == '') else f'{logprefix}/'
+    wandb_run.define_metric(f'{logprefix}train/acc', summary='max')
+    wandb_run.define_metric(f'{logprefix}valid/acc', summary='max')
+
+    if args['seed'] is None:
+        torch.seed()
+        train_dl.generator.seed() if (train_dl.generator is not None) else None
+    else:
+        torch.manual_seed(args['seed'])
+        train_dl.generator.manual_seed(args['seed']) if (train_dl.generator is not None) else None
 
     # Train Loop
     step = -1
     model.requires_grad_(True)
     optimizer = get_optimizer(args, model.parameters())
     scheduler = get_scheduler(args, optimizer).prep(args['n_epochs'], len(train_dl))
-    train_acc, valid_acc = Accuracy().to(device), Accuracy().to(device)
+    
+    best_acc = 0
+    train_acc = Accuracy().to(device)
+    valid_acc = Accuracy().to(device)
     for epoch in range(args['n_epochs']):
         
         # Training Epoch
@@ -202,8 +216,9 @@ def train(args, model:Encoder, train_dl:DataLoader, valid_dl:DataLoader, logpref
         logs = {'trainer/epoch':epoch, 'trainer/step': step,
                     'valid/loss':valid_loss, 'valid/acc':valid_acc.compute()}
         wandb_run.log({f'{logprefix}{k}':v for k,v in logs.items()})
-    
-    return valid_acc.compute()
+        best_acc = max(best_acc, valid_acc.compute())
+
+    return best_acc, valid_acc.compute()
 
 
 if __name__ == '__main__':
@@ -236,6 +251,8 @@ if __name__ == '__main__':
                         help='Learning rate for optimizer (float or Schedule).')
     parser.add_argument('--opt_wd', type=Schedule.parse, default=None, 
                         help='Weight decay for optimizer.')
+    parser.add_argument('--seed', type=int, default=None,
+                        help='Seed for dataloader and default generator.')
 
     parser.add_argument('--force_cpu', action='store_true')
     args = vars(parser.parse_args())
