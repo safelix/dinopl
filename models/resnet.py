@@ -402,4 +402,4 @@ def resnet56(preact=False, **kwargs: Any) -> ResNet:
     kwargs['inplanes'] = 16
     kwargs['tiny_input'] = True
     block = PreActBasicBlock if preact else BasicBlock
-    return ResNet(block, [9, 9, 9], tiny_input=True, **kwargs)
+    return ResNet(block, [9, 9, 9], **kwargs)
