@@ -142,12 +142,12 @@ def load_model(identifier:str) -> Union[DINO, DINOModel]:
     dino = DINO.load_from_checkpoint(ckpt_path, map_location='cpu', mc_spec=config.mc_spec, student=student, teacher=teacher)
     
     # init if required by .init suffix
-    if '.init' in name:
+    if 'init' in name:
         student, teacher = init_student_teacher(config, student)
         dino.student = student
         dino.teacher = teacher
 
-    if '.enc' in name:
+    if 'enc' in name:
         for model in [dino.student, dino.teacher]:
             model.head.cent.data = model.head.cent[:model.embed_dim]
             model.head.mlp = torch.nn.Identity()

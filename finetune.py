@@ -264,6 +264,9 @@ if __name__ == '__main__':
     if not args['ckpt'].startswith('DINO'): 
         args['ckpt'] = os.path.relpath(args['ckpt'], os.environ['DINO_RESULTS']) 
 
+    # add is_init boolean for easier handling in wandb
+    args['is_init'] = ('init' in args['ckpt'].split()[-1])
+
     # init wandb
     args['dino_config'] = vars(load_config(os.path.join(os.environ['DINO_RESULTS'], args['ckpt']))) # add dino_config
     wandb.init(project='DINOfinetune', dir=os.environ['DINO_RESULTS'], config=args)
