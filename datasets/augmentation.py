@@ -5,13 +5,14 @@ from torchvision import transforms
 from .base import BaseDataset
 
 __all__ = [
-    'flip',
-    'crop',
+    'hflip',
+    'padcrop',
 ]
 
-def flip(DSet: Type[BaseDataset]):
+# Do not use underscore to specify augmentation! Underscore is used to concat names for parsing.
+
+def hflip(DSet: Type[BaseDataset]):
     return transforms.RandomHorizontalFlip()
 
-def crop(DSet: Type[BaseDataset]):
+def padcrop(DSet: Type[BaseDataset]):
     return transforms.RandomCrop(DSet.img_size, 4)
-
