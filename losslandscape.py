@@ -23,7 +23,7 @@ import dinopl.utils as U
 from configuration import (Configuration, create_mc_spec, get_dataset,
                            get_encoder, init_student_teacher)
 from dinopl import DINO, DINOHead, DINOModel
-from dinopl.augmentation import MultiCrop
+from dinopl import MultiCrop
 from dinopl.probing import KNNAnalysis, LinearAnalysis, Prober, normalize_data
 
 

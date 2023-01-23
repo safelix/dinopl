@@ -61,7 +61,7 @@ def get_optimizer(args:dict, params) -> torch.optim.Optimizer:
     if args['opt'].lower() == 'adamw':
         return torch.optim.AdamW(params)
 
-def get_scheduler(args:dict, optimizer:torch.optim.Optimizer) -> Schedule:
+def get_scheduler(args:dict, optimizer:torch.optim.Optimizer) -> Scheduler:
     scheduler = Scheduler()
     if isinstance(args['opt_lr'], Schedule):
         scheduler.add(optimizer.param_groups[0], 'lr', args['opt_lr'])
@@ -71,7 +71,7 @@ def get_scheduler(args:dict, optimizer:torch.optim.Optimizer) -> Schedule:
     return scheduler
 
 @torch.no_grad()
-def main(args:dict):
+def main():
     wandb_run:wandb.wandb_sdk.wandb_run.Run = wandb.run # for pylint
     wandb_run.define_metric('train/acc', summary='max')
     wandb_run.define_metric('valid/acc', summary='max')
@@ -86,7 +86,8 @@ def main(args:dict):
     
     # Prepare Classifier
     lin = probing.LinearAnalysis(args['pre_epochs_clf'])
-    lin.prepare(model.embed_dim, train_dl.dataset.ds_classes, device=device)
+    generator = None if args['seed'] is None else  torch.Generator().manual_seed(args['seed']) 
+    lin.prepare(model.embed_dim, train_dl.dataset.ds_classes, device=device, generator=generator)
 
     if args['pre_epochs_clf'] > 0:
         lin.train(probing.load_data(model, train_dl, device))
@@ -103,13 +104,19 @@ def main(args:dict):
     
     # Train once with potentially pre-pruned network
     if args['n_rewinds'] == 0:
-        prune.global_unstructured(zip(p_modules, p_names), prune.L1Unstructured, amount=args['prune_ratio'])
-        train(args, model, train_dl, valid_dl, device=device)
+        prune.global_unstructured(list(zip(p_modules, p_names)), prune.L1Unstructured, amount=args['prune_ratio'])
+        train(args['n_epochs'], model, train_dl, valid_dl, device=device)
         return
 
 
-    # TODO: Rewind to k args['rewind_to_k']
-    init_model = copy.deepcopy(model).to('cpu')
+    # Pretrain epochs to rewinding point
+    state_dict = {}
+    if args['rewind_to'] > 0:
+        train(args['rewind_to'], model, train_dl, valid_dl, state_dict=state_dict, logprefix='Pretrain', device=device)
+    
+    # Store state to rewind to
+    rewind_to_state_dict = copy.deepcopy(state_dict)
+    rewind_to_model = copy.deepcopy(model).to('cpu')
 
     # Train with rewinding and iterative magnitude pruning
     pruner = prune.L1Unstructured(amount=0)                                                             # start with no pruning
@@ -118,7 +125,7 @@ def main(args:dict):
         logprefix = f'Rewind{rewind_idx:02d}' if rewind_idx > 0 else ''
 
         # Training
-        best_acc, last_acc = train(args, model, train_dl, valid_dl, logprefix=logprefix, device=device)
+        best_acc, last_acc = train(args['n_epochs'], model, train_dl, valid_dl, state_dict=state_dict, logprefix=logprefix, device=device)
         wandb_run.log({'IMP/rewind':rewind_idx, 'IMP/ratio':pruner.amount, 
                         'IMP/best_acc':best_acc, 'IMP/last_acc':last_acc, })
 
@@ -128,8 +135,9 @@ def main(args:dict):
         vec = torch.cat([p.view(-1) for m in model.modules() for p in m.parameters(recurse=False)])     # access parameters() with standard prametrization 
         mask:torch.Tensor = pruner.compute_mask(vec, mask)                                              # this has no side-effects
 
-        # Rewind to init 
-        model = copy.deepcopy(init_model).to(device=device)                                             # model now is not 
+        # Rewind to init
+        state_dict = copy.deepcopy(rewind_to_state_dict)
+        model = copy.deepcopy(rewind_to_model).to(device=device)                                        # model now is not 
         p_names = [n for m in model.modules() for n, p in m.named_parameters(recurse=False)]            # store names to restore prametrization
         p_modules = [m for m in model.modules() for p in m.parameters(recurse=False)]                   # store parent modules to restore prametrization
 
@@ -144,30 +152,34 @@ def main(args:dict):
     return
 
 
-def train(args, model:Encoder, train_dl:DataLoader, valid_dl:DataLoader, logprefix='', device=None) -> float:
+def train(train_epochs, model:Encoder, train_dl:DataLoader, valid_dl:DataLoader, state_dict:dict={}, logprefix='', device=None) -> float:
     wandb_run:wandb.wandb_sdk.wandb_run.Run = wandb.run # for pylint
     barprefix = '' if (logprefix == '') else f'{logprefix}: '
     logprefix = '' if (logprefix == '') else f'{logprefix}/'
     wandb_run.define_metric(f'{logprefix}train/acc', summary='max')
     wandb_run.define_metric(f'{logprefix}valid/acc', summary='max')
 
-    if args['seed'] is None:
-        torch.seed()
-        train_dl.generator.seed() if (train_dl.generator is not None) else None
-    else:
-        torch.manual_seed(args['seed'])
-        train_dl.generator.manual_seed(args['seed']) if (train_dl.generator is not None) else None
-
-    # Train Loop
-    step = -1
+    # Prepare training
+    step, epoch = 0, 0
     model.requires_grad_(True)
     optimizer = get_optimizer(args, model.parameters())
-    scheduler = get_scheduler(args, optimizer).prep(args['n_epochs'], len(train_dl))
+    scheduler = get_scheduler(args, optimizer).prep(args['n_epochs'], len(train_dl)) # use total n_epochs, since schedules stay the same
+
+    # Setup Random Generators
+    seed = torch.seed() if args['seed'] is None else args['seed']
+    generator = torch.manual_seed(seed) # set default random generator seed
+
+    # Overwrite state from state_dict, if keys exist exist
+    step = state_dict.get('step', step)
+    epoch = state_dict.get('epoch', epoch)
+    optimizer.load_state_dict(state_dict.get('optimizer', optimizer.state_dict()))
+    generator.set_state(state_dict.get('generator', generator.get_state()))
     
+    # Train Loop
     best_acc = 0
     train_acc = Accuracy().to(device)
     valid_acc = Accuracy().to(device)
-    for epoch in range(args['n_epochs']):
+    while epoch < train_epochs:
         
         # Training Epoch
         model.train()
@@ -176,7 +188,6 @@ def train(args, model:Encoder, train_dl:DataLoader, valid_dl:DataLoader, logpref
         for inputs, targets in progress_bar:
             inputs, targets = inputs.to(device), targets.to(device)
 
-            step += 1
             scheduler.step(step)
             optimizer.zero_grad(True)
             with torch.enable_grad():
@@ -191,7 +202,9 @@ def train(args, model:Encoder, train_dl:DataLoader, valid_dl:DataLoader, logpref
             logs = {'trainer/step': step, 'train/acc':acc, 'train/loss':loss,
                         'hparams/lr':optimizer.param_groups[0]['lr'],
                         'hparams/wd':optimizer.param_groups[0]['weight_decay']}
-            wandb_run.log({f'{logprefix}{k}':v for k,v in logs.items()})
+            if step % args['log_every'] == 0:
+                wandb_run.log({f'{logprefix}{k}':v for k,v in logs.items()})
+            step += 1
 
         # Validation Epoch
         model.eval()
@@ -217,6 +230,13 @@ def train(args, model:Encoder, train_dl:DataLoader, valid_dl:DataLoader, logpref
                     'valid/loss':valid_loss, 'valid/acc':valid_acc.compute()}
         wandb_run.log({f'{logprefix}{k}':v for k,v in logs.items()})
         best_acc = max(best_acc, valid_acc.compute())
+        epoch += 1
+
+
+    state_dict['step'] = step
+    state_dict['epoch'] = epoch
+    state_dict['optimizer'] = optimizer.state_dict()
+    state_dict['generator'] = generator.get_state()
 
     return best_acc, valid_acc.compute()
 
@@ -231,6 +251,8 @@ if __name__ == '__main__':
                         help='Ratio of globally smallest weights to prune.')
     parser.add_argument('--n_rewinds', type=int, default=0,
                         help='Number of times to rewind and prune for IMP. Applies pruning before training if =0.')
+    parser.add_argument('--rewind_to', type=int, default=0,
+                        help='Epoch to rewind to for IMP.')
     
     # Data Arguments
     parser.add_argument('--dataset', choices={'mnist', 'cifar10'}, default='cifar10')
@@ -254,11 +276,16 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=None,
                         help='Seed for dataloader and default generator.')
 
+    parser.add_argument('--log_every', type=int, default=1,
+                        help='Log every so many steps.')
     parser.add_argument('--force_cpu', action='store_true')
     args = vars(parser.parse_args())
 
     if args['ckpt'] is None:
         raise ValueError('Please specify checkpoint.')
+
+    if args['rewind_to'] >= args['n_epochs']:
+        raise ValueError('Rewinding point must be smaller than n_epochs')
 
     # if path is not relative, make relative for saving to wandb
     if not args['ckpt'].startswith('DINO'): 
@@ -272,4 +299,6 @@ if __name__ == '__main__':
     wandb.init(project='DINOfinetune', dir=os.environ['DINO_RESULTS'], config=args)
     args['ckpt'] = os.path.join(os.environ['DINO_RESULTS'], args['ckpt']) # make absolute
 
-    main(args)
+    main()
+
+
