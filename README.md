@@ -1,10 +1,16 @@
 # Self-Distillation with no labels DINO
 
-This repo provides an pytorch-lightning implementation of DINO, its instanciation within a configurable experiment bed, as well as tools to investigate the method in various settings. By default everything is logged to WANDB.
+This repo provides a pytorch-lightning implementation of DINO, its instanciation within a configurable experiment bed, as well as tools to investigate the method in various settings. By default everything is logged to WANDB.
 
 ### Installation
 
 Install with `pip install -e`. Currently tested with `python==3.8.5`, `torch==1.13.0+cu117`, `pytorch-lightning==1.6.3`, `torchmetrics==0.10.0` and `wandb==0.12.12`. Newer pytorch-lightning versions use inference_mode by default which seems to break some things.. update needed from my side here.
+
+Specify data and results path in environment `DINO_DATA` `DINO_RESULTS` variables, e.g. by adding to your .bashrc
+```
+export DINO_DATA=$HOME/dinopl/datasets/data
+export DINO_RESULTS=$HOME/dinopl/results
+```
 
 ### Usage
 
