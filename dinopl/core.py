@@ -90,6 +90,7 @@ class DINOModel(nn.Module):
         self.head = head
         self.out_dim = head.out_dim
         self.crops : Dict[str, List] = None
+        self.return_dict = True
 
     def reset_parameters(self, generator:torch.Generator=None):
         self.enc.reset_parameters(generator=generator)
@@ -108,6 +109,10 @@ class DINOModel(nn.Module):
         # compute outputs from embeddings
         # -> [n_crops, n_batches, out_dim]
         out = self.head(embeddings, **kwargs)
+
+        if not self.return_dict:
+            return out['logits']
+            
         out['embeddings'] = embeddings
         return out
 
