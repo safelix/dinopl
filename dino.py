@@ -218,6 +218,7 @@ def main(config:Configuration):
 
     # log updated config to wandb before training
     wandb_logger.experiment.config.update(config, allow_val_change=True)
+    config.to_json(os.path.join(config.logdir, 'config.json'))
 
     # move dino to selected GPU, validate, then fit
     dino = dino if config.force_cpu else dino.to(trainer.device_ids[0])
