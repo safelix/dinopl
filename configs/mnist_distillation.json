@@ -1,5 +1,5 @@
 {
-    "dataset":"mnist",
+    "dataset":"MNIST",
     "mc":"1x28",
     "tiny_input":true,
     "bs_train":256,

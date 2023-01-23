@@ -165,6 +165,10 @@ results
 
 scratchspace
 datasets/**
+
+# specifically add dataset files
 !__init__.py
 !datasets/cifar.py
 !datasets/mnist.py
+!datasets/augmentation.py
+!datasets/targetnoise.py

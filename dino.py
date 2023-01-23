@@ -13,15 +13,15 @@ from torchvision import transforms
 
 from configuration import CONSTANTS as C
 from configuration import (Configuration, create_mc_spec, create_optimizer,
-                           get_dataset, get_encoder, init_student_teacher)
+                           get_dataset, get_encoder, init_student_teacher, get_augmentations)
+from datasets.targetnoise import LabelNoiseWrapper, LogitNoiseWrapper
 from dinopl import *
 from dinopl import utils as U
-from dinopl.augmentation import LabelNoiseWrapper, LogitNoiseWrapper, MultiCrop
-from dinopl.probing import LinearAnalysis, KNNAnalysis, Prober
+from dinopl.probing import KNNAnalysis, LinearAnalysis, Prober
 from dinopl.scheduling import Schedule
 from dinopl.tracking import (AccuracyTracker, FeatureSaver, FeatureTracker,
-                             HParamTracker, MetricsTracker, ParamTracker,
-                             PerCropEntropyTracker, ParamStatSaver)
+                             HParamTracker, MetricsTracker, ParamStatSaver,
+                             ParamTracker, PerCropEntropyTracker)
 
 
 def main(config:Configuration):
@@ -50,26 +50,28 @@ def main(config:Configuration):
 
     # Create Multicrop Specification from name
     config.mc_spec = create_mc_spec(config)
-
-    # Standard Augmentations, always work on RGB
     DSet = get_dataset(config)
-    self_trfm = transforms.Compose([ # self-training
-                    transforms.Lambda(lambda img: img.convert('RGB')), transforms.ToTensor(),
-                    transforms.Normalize(DSet.mean, DSet.std),
-                ])
 
-    if config.float64: # convert inputs to float64 if needed
-        self_trfm = transforms.Compose([self_trfm, transforms.ConvertImageDtype(torch.float64)])
+    # Standard Tranformations: make tensor, normalize, cast to float64 if needed
+    trfm = transforms.Compose([transforms.ToTensor(), transforms.Normalize(DSet.mean, DSet.std)])
+    if config.float64: 
+        trfm = transforms.Compose([trfm, transforms.ConvertImageDtype(torch.float64)])
 
-    eval_trfm = transforms.Compose([ # evaluation
-                    transforms.Resize(size=config.mc_spec[0]['out_size']),
-                    self_trfm
-                ])
-    mc = MultiCrop(config.mc_spec, per_crop_transform=self_trfm)
+    # Add DINO transformations
+    dino_trfm = transforms.Compose([
+        get_augmentations(config, DSet), # first apply dataset specific augmentations (for all imgs)
+        MultiCrop(config.mc_spec, per_crop_transform=transforms.Compose([ # make crops
+            get_augmentations(config, DSet, per_crop=True), # make per crop augmentations
+            trfm # standard transformations are applied at the end per crop
+        ]))
+    ])
+
+    # Resize to first cropsize of multicrop, apply standard transformations 
+    eval_trfm = transforms.Compose([transforms.Resize(size=config.mc_spec[0]['out_size']), trfm])
           
     # Data Setup.
-    dino_train_set = DSet(root=C.DATA_DIR, train=True, transform=mc)
-    dino_valid_set = DSet(root=C.DATA_DIR, train=False, transform=mc)
+    dino_train_set = DSet(root=C.DATA_DIR, train=True, transform=dino_trfm)
+    dino_valid_set = DSet(root=C.DATA_DIR, train=False, transform=dino_trfm)
     probe_train_set = DSet(root=C.DATA_DIR, train=True, transform=eval_trfm)
     probe_valid_set = DSet(root=C.DATA_DIR, train=False, transform=eval_trfm)
 

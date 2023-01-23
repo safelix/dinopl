@@ -17,14 +17,14 @@ import pprint
 import typing
 import warnings
 
-import pyparsing
 import torch
 
 import dinopl.utils as U
 import models
-from datasets import CIFAR10, MNIST
+import datasets
 from dinopl import DINO, DINOModel
 from dinopl.scheduling import *
+import torchvision
 
 
 class Constants(object):
@@ -108,7 +108,7 @@ class Configuration(object):
 
         # Data.
         data = parser.add_argument_group('Data')
-        data.add_argument('--dataset', type=str, choices=['mnist','cifar10'], default='mnist',
+        data.add_argument('--dataset', choices=datasets.__all__, default='mnist',
                             help='Datset to train on.')
         data.add_argument('--n_classes', type=int, default=None,
                             help='Number of classes. By default determined from dataset but can be overwritten for logit noise.')
@@ -126,10 +126,14 @@ class Configuration(object):
                             help='Add label noise (random assignemt) for supervised training.')
         data.add_argument('--logit_noise_temp', type=float, default=0,
                             help='Add logit noise (sharpened gaussian logits) for supervised training.')
-        data.add_argument('--resample_noise', type=bool, default=False) # TODO: help
-        data.add_argument('--aug', type=str, choices={'iid_normal'}, nargs='*',
-                            help='Augmentation(s) to apply to Dataset.')
-        #data.add_argument('--per_crop_aug', type=str, choices={'rot', 'blur', 'shift', 'simclr'})
+        data.add_argument('--resample_target_noise', type=bool, default=False,
+                            help='Resample the the logits/labels at every access.')
+        data.add_argument('--augs', type=str, nargs='*', default=[],
+                            help='Augmentation(s) to apply to Dataset. ' 
+                            +'Supply multiple names as list or a string joined by \'_\'.')
+        data.add_argument('--per_crop_augs', type=str, nargs='*', default=[],
+                            help='Augmentation(s) to apply to each crop individually. ' 
+                            +'Supply multiple names as list or a string joined by \'_\'.')
 
         # Model.
         model = parser.add_argument_group('Model')
@@ -436,26 +440,38 @@ def create_optimizer(config:Configuration) -> torch.optim.Optimizer:
     raise RuntimeError('Unkown optimizer name.')
 
 
-def get_dataset(config:Configuration) -> typing.Union[MNIST, CIFAR10]:
+def get_dataset(config:Configuration) -> typing.Type[datasets.BaseDataset]:
     '''
     This is a helper function that can be useful if you have several dataset definitions that you want to
     choose from via the command line.
     '''
-    config.dataset = config.dataset.lower()
+    if config.dataset not in datasets.__all__:
+        raise RuntimeError('Unkown dataset name.')
+    
+    DSet = datasets.__dict__[config.dataset]
+    config.ds_pixels = DSet.ds_pixels
+    config.ds_classes = DSet.ds_classes
+    config.n_classes = config.ds_classes if config.n_classes is None else config.n_classes
+    return DSet
 
-    if config.dataset == 'mnist':
-        config.ds_pixels = MNIST.ds_pixels
-        config.ds_classes = MNIST.ds_pixels
-        config.n_classes = MNIST.ds_classes if config.n_classes is None else config.n_classes
-        return MNIST
 
-    if config.dataset == 'cifar10':
-        config.ds_pixels = CIFAR10.ds_pixels
-        config.ds_classes = CIFAR10.ds_classes
-        config.n_classes = config.ds_classes if config.n_classes is None else config.n_classes
-        return CIFAR10
+def get_augmentations(config:Configuration, DSet, per_crop=False) -> typing.Callable:
+    augnames:typing.List[str] = config.per_crop_augs if per_crop else config.augs
 
-    raise RuntimeError('Unkown dataset name.')
+    # make list, if not already
+    if not isinstance(augnames, list):
+        augnames = [augnames]
+
+    augnames = [augname.split('_') for augname in augnames]  # split augnames with '_'
+    augnames = [elem for sublist in augnames for elem in sublist] # flatten nested list
+        
+    trfm = [] # Get list of transformation
+    for augname in augnames:
+        if augname not in datasets.augmentation.__all__:
+            raise RuntimeError(f'Unkown augmentation name {augname}.')
+        trfm.append(datasets.augmentation.__dict__[augname](DSet))
+    
+    return torchvision.transforms.Compose(trfm)
 
 
 def create_mc_spec(config:Configuration):

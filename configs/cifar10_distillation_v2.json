@@ -1,5 +1,5 @@
 {
-    "dataset":"cifar10",
+    "dataset":"CIFAR10",
     "mc":"1x32",
     "enc":"resnet18",
     "tiny_input":true,
