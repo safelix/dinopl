@@ -152,7 +152,7 @@ def main():
     return
 
 
-def train(train_epochs, model:Encoder, train_dl:DataLoader, valid_dl:DataLoader, state_dict:dict={}, logprefix='', device=None) -> float:
+def train(train_epochs, model:Encoder, train_dl:DataLoader, valid_dl:DataLoader, state_dict:dict=None, logprefix='', device=None) -> float:
     wandb_run:wandb.wandb_sdk.wandb_run.Run = wandb.run # for pylint
     barprefix = '' if (logprefix == '') else f'{logprefix}: '
     logprefix = '' if (logprefix == '') else f'{logprefix}/'
@@ -163,17 +163,20 @@ def train(train_epochs, model:Encoder, train_dl:DataLoader, valid_dl:DataLoader,
     step, epoch = 0, 0
     model.requires_grad_(True)
     optimizer = get_optimizer(args, model.parameters())
-    scheduler = get_scheduler(args, optimizer).prep(args['n_epochs'], len(train_dl)) # use total n_epochs, since schedules stay the same
 
     # Setup Random Generators
     seed = torch.seed() if args['seed'] is None else args['seed']
     generator = torch.manual_seed(seed) # set default random generator seed
 
     # Overwrite state from state_dict, if keys exist exist
-    step = state_dict.get('step', step)
-    epoch = state_dict.get('epoch', epoch)
-    optimizer.load_state_dict(state_dict.get('optimizer', optimizer.state_dict()))
-    generator.set_state(state_dict.get('generator', generator.get_state()))
+    if state_dict is not None:
+        step = state_dict.get('step', step)
+        epoch = state_dict.get('epoch', epoch)
+        optimizer.load_state_dict(state_dict.get('optimizer', optimizer.state_dict()))
+        generator.set_state(state_dict.get('generator', generator.get_state()))
+    
+    # use total n_epochs, since schedules stay the same
+    scheduler = get_scheduler(args, optimizer).prep(args['n_epochs'], len(train_dl)) 
     
     # Train Loop
     best_acc = 0
@@ -232,11 +235,12 @@ def train(train_epochs, model:Encoder, train_dl:DataLoader, valid_dl:DataLoader,
         best_acc = max(best_acc, valid_acc.compute())
         epoch += 1
 
-
-    state_dict['step'] = step
-    state_dict['epoch'] = epoch
-    state_dict['optimizer'] = optimizer.state_dict()
-    state_dict['generator'] = generator.get_state()
+    if state_dict is not None:
+        state_dict['step'] = step
+        state_dict['epoch'] = epoch
+        state_dict['optimizer'] = optimizer.state_dict()
+        state_dict['generator'] = generator.get_state()
+        # scheduler state is recomputed every time
 
     return best_acc, valid_acc.compute()
 
