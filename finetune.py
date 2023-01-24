@@ -86,7 +86,7 @@ def main():
     
     # Prepare Classifier
     lin = probing.LinearAnalysis(args['pre_epochs_clf'])
-    generator = None if args['seed'] is None else  torch.Generator().manual_seed(args['seed']) 
+    generator = None if args['seed'] is None else  torch.Generator(device=device).manual_seed(args['seed']) 
     lin.prepare(model.embed_dim, train_dl.dataset.ds_classes, device=device, generator=generator)
 
     if args['pre_epochs_clf'] > 0:
