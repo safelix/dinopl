@@ -1,6 +1,7 @@
 from math import sqrt
 from time import time
 from typing import Dict, List, Tuple
+from warnings import warn
 
 import pytorch_lightning as pl
 import torch
@@ -131,7 +132,10 @@ class KNNAnalysis(Analysis):
             _, indices = self.index.search(embeddings, self.k)
             predictions = self.labels[indices].mode()[0]
 
-            self.acc.update(predictions, targets)
+            try: # catch bug from torchmetric?
+                self.acc.update(predictions, targets)
+            except Exception as e:
+                warn(f'Could not compute accuracy: {str(e)})') 
             valid_pbar.set_postfix({'acc':float(self.acc.compute())})
 
         return float(self.acc.compute())

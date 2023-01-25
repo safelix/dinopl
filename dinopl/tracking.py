@@ -132,6 +132,22 @@ def matrix_rank(matrix, hermitian=False):
         warn(f'Cannot compute rank ({str(e)}), returning torch.nan.')
         return torch.nan
 
+def batch_cossim(x:torch.Tensor):
+    try:
+        cossim = torch.corrcoef(x).nan_to_num() # similarity with anything of norm zero is zero
+        return cossim
+    except Exception as e:
+        warn(f'Cannot batch cosssim ({str(e)}), returning torch.nan.')
+        return torch.full((x.shape[0], x.shape[0]), torch.nan, dtype=x.dtype, device=x.device)
+
+def batch_l2dist(x:torch.Tensor):
+    try:
+        l2dist = torch.cdist(x,x)
+        return l2dist
+    except Exception as e:
+        warn(f'Cannot batch l2dist ({str(e)}), returning torch.nan.')
+        return torch.full((x.shape[0], x.shape[0]), torch.nan, dtype=x.dtype, device=x.device)
+
 class FeatureTracker(pl.Callback):       
     def step(self, prefix, out:Dict[str, torch.Tensor], dino:DINO):
         logs, logs_wandb = {}, {}
@@ -158,14 +174,14 @@ class FeatureTracker(pl.Callback):
                     logs[f'{prefix}/{n}/{i}_x.nPC(var_explained=0.999)'] = float(pc_sigma.numel() - torch.sum(0.999 < torch.cumsum(pc_sigma, dim=0) / pc_sigma.sum()))
 
                 # within batch cosine similarity distance
-                cossim = torch.corrcoef(x).nan_to_num() # similarity with anything of norm zero is zero
+                cossim = batch_cossim(x)
                 cossim_triu = cossim[torch.triu_indices(*cossim.shape, offset=1).unbind()] # upper triangular values
                 logs[f'{prefix}/{n}/{i}_x.corr().mean()'] = cossim_triu.mean()
                 logs_wandb[f'{prefix}/{n}/{i}_x.corr().hist()'] = wandb_histogram(cossim_triu, 64)
                 logs[f'{prefix}/{n}/{i}_x.corr().rank()'] = matrix_rank(cossim, hermitian=True)
                 
                 # within batch l2 distance
-                l2dist = torch.cdist(x, x)
+                l2dist = batch_l2dist(x)
                 l2dist_triu = l2dist[torch.triu_indices(*l2dist.shape, offset=1).unbind()] # upper triangular values
                 logs[f'{prefix}/{n}/{i}_x.pdist().mean()'] = l2dist_triu.mean()
                 logs_wandb[f'{prefix}/{n}/{i}_x.pdist().hist()'] = wandb_histogram(l2dist_triu, 64)
@@ -235,6 +251,11 @@ class ParamTracker(pl.Callback):
         # get vector representation of student and teacher
         t_vec = U.module_to_vector(self.teacher)
         s_vec = U.module_to_vector(self.student)
+
+        logs[f'params/{self.name}nans(teach)'] = torch.isnan(t_vec).sum()
+        logs[f'params/{self.name}nans(stud)'] = torch.isnan(s_vec).sum()
+        logs[f'params/{self.name}infs(teach)'] = torch.isinf(t_vec).sum()
+        logs[f'params/{self.name}infss(stud)'] = torch.isinf(s_vec).sum()
 
         # log position and angle relative to origin
         t_norm = torch.norm(t_vec)
