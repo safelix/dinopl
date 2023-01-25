@@ -407,7 +407,7 @@ def init_student_teacher(config:Configuration, model:DINOModel) -> typing.Tuple[
             alpha = config.s_init_alpha
             p_s.data = (1 - alpha) * p_t + alpha * p_s # interpolate between teacher and random
             if config.s_init_var_preserving:
-                p_s.data /= math.sqrt(2*alpha**2  - 2*alpha + 1)   # apply variance preserving correction
+                p_s.data /= math.sqrt(2*(alpha**2) - 2*alpha + 1)   # apply variance preserving correction
     elif config.s_init == 'neighborhood':
         student = copy.deepcopy(model)
         student.reset_parameters(generator=s_generator)  # initialize student with random parameters
