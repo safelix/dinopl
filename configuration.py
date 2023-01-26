@@ -57,6 +57,9 @@ class Constants(object):
                     - DINO_DATA: path to datasets
                     - DINO_RESULTS: path to store results''', stacklevel=4)
 
+            print('SLURM_JOB_ID: ' + os.environ.get('SLURM_JOB_ID', ''), flush=True)
+            print('SLURM_ARRAY_TASK_ID: ' + os.environ.get('SLURM_ARRAY_TASK_ID', ''), flush=True)
+
     instance = None
 
     def __new__(cls, *args, **kwargs):

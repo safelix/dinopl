@@ -255,7 +255,7 @@ class ParamTracker(pl.Callback):
         logs[f'params/{self.name}nans(teach)'] = torch.isnan(t_vec).sum()
         logs[f'params/{self.name}nans(stud)'] = torch.isnan(s_vec).sum()
         logs[f'params/{self.name}infs(teach)'] = torch.isinf(t_vec).sum()
-        logs[f'params/{self.name}infss(stud)'] = torch.isinf(s_vec).sum()
+        logs[f'params/{self.name}infs(stud)'] = torch.isinf(s_vec).sum()
 
         # log position and angle relative to origin
         t_norm = torch.norm(t_vec)
