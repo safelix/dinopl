@@ -448,6 +448,7 @@ def get_dataset(config:Configuration) -> typing.Type[datasets.BaseDataset]:
     This is a helper function that can be useful if you have several dataset definitions that you want to
     choose from via the command line.
     '''
+    config.dataset = config.dataset.upper()
     if config.dataset not in datasets.__all__:
         raise RuntimeError('Unkown dataset name.')
     
