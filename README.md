@@ -1,6 +1,6 @@
-# Self-Distillation with no labels DINO
+# Random Teachers are Good Teachers
 
-This repo provides a pytorch-lightning implementation of DINO, its instanciation within a configurable experiment bed, as well as tools to investigate the method in various settings. By default everything is logged to WANDB.
+This repo provides a pytorch-lightning implementation of self-distillation with no labels DINO, its instanciation within a configurable experiment bed, as well as tools to investigate the method in various settings. It is used to investiagate the role of teacher networks under a very simplified setting in the paper 'Random Teachers are Good Teachers'. By default everything is logged to WANDB.
 
 ### Installation
 
@@ -19,11 +19,11 @@ or any other desired path.
 usage: dino.py [-h] [--from_json FROM_JSON] [--n_workers N_WORKERS] [--seed SEED] [--log_every LOG_EVERY] [--ckpt_path CKPT_PATH] [--force_cpu] [--float64 FLOAT64] [--dataset {MNIST,CIFAR10,CIFAR100}] [--n_classes N_CLASSES] [--mc {2x128+4x96,2x128,1x128,2x32+4x32,2x32,1x32,2x28+4x28,2x28,1x28}]
                [--bs_train BS_TRAIN] [--bs_eval BS_EVAL] [--label_noise_ratio LABEL_NOISE_RATIO] [--logit_noise_temp LOGIT_NOISE_TEMP] [--resample_target_noise RESAMPLE_TARGET_NOISE] [--augs [AUGS [AUGS ...]]] [--per_crop_augs [PER_CROP_AUGS [PER_CROP_AUGS ...]]]
                [--enc {ConvNet,convnet_16_1,convnet_16_1e,convnet_16_2,convnet_16_2e,convnet_32_1,convnet_32_1e,convnet_32_2,convnet_32_2e,ResNet,resnet18,resnet34,resnet20,resnet56,VGG,vgg11,vgg11_bn,vgg13,vgg13_bn,vgg16,vgg16_bn,vgg19,vgg19_bn,Flatten}]
-               [--enc_norm_layer {BatchNorm,InstanceNorm,GroupNorm8,LayerNorm,Identity}] [--tiny_input] [--mlp_act {ReLU,GELU}] [--mlp_bn] [--hid_dims [HID_DIMS [HID_DIMS ...]]] [--l2bot_dim L2BOT_DIM] [--l2bot_cfg L2BOT_CFG] [--out_dim OUT_DIM] [--t_init {t_ckpt,random,s_ckpt}] [--t_init_seed T_INIT_SEED]
-               [--s_init {random,neighborhood,t_ckpt,s_ckpt,teacher,interpolated}] [--s_init_seed S_INIT_SEED] [--s_init_alpha S_INIT_ALPHA] [--s_init_eps S_INIT_EPS] [--s_init_var_preserving S_INIT_VAR_PRESERVING] [--s_mode {supervised,distillation}] [--t_mode {ema,prev_epoch,no_update}] [--t_mom T_MOM]
-               [--t_update_every T_UPDATE_EVERY] [--t_bn_mode {from_data,from_student}] [--t_eval T_EVAL] [--t_cmom T_CMOM] [--s_cmom S_CMOM] [--t_temp T_TEMP] [--s_temp S_TEMP] [--loss {H_pred,KL,CE,MSE}] [--loss_pairing {all,same,opposite}] [--n_epochs N_EPOCHS] [--opt {adam,adamw,sgd}] [--opt_lr OPT_LR]
-               [--opt_wd OPT_WD] [--opt_mom OPT_MOM] [--opt_beta1 OPT_BETA1] [--opt_beta2 OPT_BETA2] [--clip_grad CLIP_GRAD] [--wn_freeze_epochs WN_FREEZE_EPOCHS] [--probe_every PROBE_EVERY] [--probing_epochs PROBING_EPOCHS] [--probing_k PROBING_K] [--normalize_probe NORMALIZE_PROBE]
-               [--prober_seed PROBER_SEED] [--save_features [{embeddings,projections,logits,all} [{embeddings,projections,logits,all} ...]]] [--save_paramstats [{student,teacher,logits,all} [{student,teacher,logits,all} ...]]]
+               [--enc_norm_layer {BatchNorm,InstanceNorm,GroupNorm8,LayerNorm,Identity}] [--tiny_input] [--mlp_act {GELU,ReLU}] [--mlp_bn] [--hid_dims [HID_DIMS [HID_DIMS ...]]] [--l2bot_dim L2BOT_DIM] [--l2bot_cfg L2BOT_CFG] [--out_dim OUT_DIM] [--t_init {s_ckpt,random,t_ckpt}]
+               [--t_init_seed T_INIT_SEED] [--s_init {interpolated,neighborhood,random,t_ckpt,s_ckpt,teacher}] [--s_init_seed S_INIT_SEED] [--s_init_alpha S_INIT_ALPHA] [--s_init_eps S_INIT_EPS] [--s_init_var_preserving S_INIT_VAR_PRESERVING] [--s_mode {distillation,supervised}]
+               [--t_mode {prev_epoch,ema,no_update}] [--t_mom T_MOM] [--t_update_every T_UPDATE_EVERY] [--t_bn_mode {from_data,from_student}] [--t_eval T_EVAL] [--t_cmom T_CMOM] [--s_cmom S_CMOM] [--t_temp T_TEMP] [--s_temp S_TEMP] [--loss {H_pred,MSE,CE,KL}] [--loss_pairing {all,same,opposite}]
+               [--n_epochs N_EPOCHS] [--opt {adam,adamw,sgd}] [--opt_lr OPT_LR] [--opt_wd OPT_WD] [--opt_mom OPT_MOM] [--opt_beta1 OPT_BETA1] [--opt_beta2 OPT_BETA2] [--clip_grad CLIP_GRAD] [--wn_freeze_epochs WN_FREEZE_EPOCHS] [--probe_every PROBE_EVERY] [--probing_epochs PROBING_EPOCHS]
+               [--probing_k PROBING_K] [--normalize_probe NORMALIZE_PROBE] [--prober_seed PROBER_SEED] [--save_features [{embeddings,projections,logits,all} [{embeddings,projections,logits,all} ...]]] [--save_paramstats [{student,teacher,logits,all} [{student,teacher,logits,all} ...]]]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -70,7 +70,7 @@ Model:
   --enc_norm_layer {BatchNorm,InstanceNorm,GroupNorm8,LayerNorm,Identity}
                         Overwrite the normalization layer of the model if supported.
   --tiny_input          Adjust encoder for tiny inputs, e.g. resnet for cifar 10.
-  --mlp_act {ReLU,GELU}
+  --mlp_act {GELU,ReLU}
                         Activation function of DINOHead MLP.
   --mlp_bn              Use batchnorm in DINOHead MLP.
   --hid_dims [HID_DIMS [HID_DIMS ...]]
@@ -86,9 +86,9 @@ Model:
                         The seed for student initialization, use numbers with good balance of 0 and 1 bits. None will reuse teacher generator.
 
 DINO:
-  --t_init {t_ckpt,random,s_ckpt}
+  --t_init {s_ckpt,random,t_ckpt}
                         Initialization of teacher, specify '--ckpt_path'.
-  --s_init {random,neighborhood,t_ckpt,s_ckpt,teacher,interpolated}
+  --s_init {interpolated,neighborhood,random,t_ckpt,s_ckpt,teacher}
                         Initialization of student, specify '--ckpt_path'.
   --s_init_alpha S_INIT_ALPHA
                         Alpha for interpolated random initialization of student.
@@ -96,9 +96,9 @@ DINO:
                         Epsilon for neighborhood random initialization of student.
   --s_init_var_preserving S_INIT_VAR_PRESERVING
                         Apply variance preserving correction for 'interpolated' and 'neighborhood' s_init
-  --s_mode {supervised,distillation}
+  --s_mode {distillation,supervised}
                         Mode of student update.
-  --t_mode {ema,prev_epoch,no_update}
+  --t_mode {prev_epoch,ema,no_update}
                         Mode of teacher update.
   --t_mom T_MOM         Teacher momentum for exponential moving average (float or Schedule).
   --t_update_every T_UPDATE_EVERY
@@ -110,7 +110,7 @@ DINO:
   --s_cmom S_CMOM       Student centering momentum of DINOHead (float or Schedule).
   --t_temp T_TEMP       Teacher temperature of DINOHead (float or Schedule).
   --s_temp S_TEMP       Student temperature of DINOHead (float or Schedule).
-  --loss {H_pred,KL,CE,MSE}
+  --loss {H_pred,MSE,CE,KL}
                         Loss function to use in the multicrop loss.
   --loss_pairing {all,same,opposite}
                         Pairing strategy for the multicrop views in the loss function.
@@ -149,11 +149,15 @@ addons:
 ```
 
 
-## License
-This repository is released under the Apache 2.0 license as found in the [LICENSE](LICENSE) file.
-
 ## Citation
 ```
+@article{sarnthein2022random,
+  title={Random Teachers are Good Teachers},
+  author={Sarnthein, Felix and Bachmann, Gregor and Anagnostidis, Sotiris and Hofmann, Thomas},
+  year={2023}
+  archivePrefix={arXiv},
+  primaryClass={cs.LG}
+}
 @inproceedings{caron2021emerging,
   title={Emerging Properties in Self-Supervised Vision Transformers},
   author={Caron, Mathilde and Touvron, Hugo and Misra, Ishan and J\'egou, Herv\'e  and Mairal, Julien and Bojanowski, Piotr and Joulin, Armand},
