@@ -151,13 +151,14 @@ addons:
 
 ## Citation
 ```
-@article{sarnthein2022random,
-  title={Random Teachers are Good Teachers},
-  author={Sarnthein, Felix and Bachmann, Gregor and Anagnostidis, Sotiris and Hofmann, Thomas},
-  year={2023}
-  archivePrefix={arXiv},
-  primaryClass={cs.LG}
+@article{sarnthein2023random,
+  doi = {10.48550/ARXIV.2302.12091},
+  url = {https://arxiv.org/abs/2302.12091},
+  title = {Random Teachers are Good Teachers},
+  author = {Sarnthein, Felix and Bachmann, Gregor and Anagnostidis, Sotiris and Hofmann, Thomas},
+  year = {2023},
 }
+
 @inproceedings{caron2021emerging,
   title={Emerging Properties in Self-Supervised Vision Transformers},
   author={Caron, Mathilde and Touvron, Hugo and Misra, Ishan and J\'egou, Herv\'e  and Mairal, Julien and Bojanowski, Piotr and Joulin, Armand},
