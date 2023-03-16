@@ -252,10 +252,10 @@ class ParamTracker(pl.Callback):
         t_vec = U.module_to_vector(self.teacher)
         s_vec = U.module_to_vector(self.student)
 
-        logs[f'params/{self.name}nans(teach)'] = torch.isnan(t_vec).sum()
-        logs[f'params/{self.name}nans(stud)'] = torch.isnan(s_vec).sum()
-        logs[f'params/{self.name}infs(teach)'] = torch.isinf(t_vec).sum()
-        logs[f'params/{self.name}infs(stud)'] = torch.isinf(s_vec).sum()
+        logs[f'params/{self.name}nans(teach)'] = float(torch.isnan(t_vec).sum())
+        logs[f'params/{self.name}nans(stud)'] = float(torch.isnan(s_vec).sum())
+        logs[f'params/{self.name}infs(teach)'] = float(torch.isinf(t_vec).sum())
+        logs[f'params/{self.name}infs(stud)'] = float(torch.isinf(s_vec).sum())
 
         # log position and angle relative to origin
         t_norm = torch.norm(t_vec)
