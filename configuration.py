@@ -351,6 +351,9 @@ def get_encoder(config:Configuration) -> typing.Type[models.Encoder]:
         if 'resnet' in config.enc.lower():
             kwargs['tiny_input'] = getattr(config, 'tiny_input', False)
 
+        if 'mlp' in config.enc.lower():
+            kwargs['in_numel'] = config.ds_pixels * 3
+
         if getattr(config, 'enc_norm_layer', None) is not None:
             kwargs['norm_layer'] = get_enc_norm_layer(config)
 
