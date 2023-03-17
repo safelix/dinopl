@@ -2,7 +2,8 @@ import torch
 from torch import nn
 
 __all__ = [
-    "Flatten"
+    "Flatten",
+    "flatten",
 ]
 
 class Flatten(nn.Module):
@@ -15,3 +16,6 @@ class Flatten(nn.Module):
 
     def forward(self, x):
         return torch.flatten(x, start_dim=1, end_dim=-1)
+
+def flatten(n_pixels, n_channels) -> Flatten:
+    return Flatten(n_pixels, n_channels)

@@ -201,7 +201,7 @@ class ViT(nn.Module):
         return x
     
 
-def vit_tiny(img_chans:int, img_size:int, patch_size:int=16, **kwargs):
+def vit_tiny(img_chans:int, img_size:int, patch_size:int=16, **kwargs) -> ViT:
     """Tiny ViT from `An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale <https://arxiv.org/abs/2010.11929>`.
 
     Args:
@@ -217,7 +217,7 @@ def vit_tiny(img_chans:int, img_size:int, patch_size:int=16, **kwargs):
 
 
 
-def vit_small(img_chans:int, img_size:int, patch_size:int=16, **kwargs):
+def vit_small(img_chans:int, img_size:int, patch_size:int=16, **kwargs) -> ViT:
     """Small ViT from `An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale <https://arxiv.org/abs/2010.11929>`.
 
     Args:
@@ -232,7 +232,7 @@ def vit_small(img_chans:int, img_size:int, patch_size:int=16, **kwargs):
     return ViT(embedder, num_heads=6, num_layers=12, **kwargs)
 
 
-def vit_base(img_chans:int, img_size:int, patch_size:int=16, **kwargs):
+def vit_base(img_chans:int, img_size:int, patch_size:int=16, **kwargs) -> ViT:
     """Small ViT from `An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale <https://arxiv.org/abs/2010.11929>`.
 
     Args:
