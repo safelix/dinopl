@@ -25,6 +25,7 @@ from dinopl.tracking import (AccuracyTracker, FeatureSaver, FeatureTracker,
 
 
 def main(config:Configuration):
+    devices = None if config.force_cpu else [U.pick_single_gpu()]
 
     if config.float64:
         torch.set_default_dtype(torch.float64)
@@ -206,7 +207,7 @@ def main(config:Configuration):
 
         # acceleration
         accelerator='cpu' if config.force_cpu else 'gpu',
-        devices=None if config.force_cpu else [U.pick_single_gpu()],
+        devices=devices,
         auto_select_gpus=False,
 
         # performance
