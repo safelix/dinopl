@@ -4,7 +4,7 @@ This repo provides a pytorch-lightning implementation of self-distillation with 
 
 ### Installation
 
-Install with `pip install -e`. Currently tested with `python==3.8.5`, `torch==1.13.0+cu117`, `pytorch-lightning==1.6.3`, `torchmetrics==0.10.0` and `wandb==0.12.12`. Newer pytorch-lightning versions use inference_mode by default which seems to break some things.. update needed from my side here.
+Install with `pip install -e .`. Currently tested with `python==3.8.5`, `torch==1.13.0+cu117`, `pytorch-lightning==1.6.3`, `torchmetrics==0.10.0` and `wandb==0.12.12`. Newer pytorch-lightning versions use inference_mode by default which seems to break some things.. update needed from my side here.
 
 Specify data and results path in environment `DINO_DATA` `DINO_RESULTS` variables, e.g. by adding to your .bashrc
 ```

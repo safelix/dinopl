@@ -458,7 +458,10 @@ def get_dataset(config:Configuration) -> typing.Type[datasets.BaseDataset]:
     This is a helper function that can be useful if you have several dataset definitions that you want to
     choose from via the command line.
     '''
-    config.dataset = config.dataset.upper()
+    # backwards compatibility: if everything is lower make upper
+    if all([c.islower() for c in config.dataset]):
+        config.dataset = config.dataset.upper() 
+
     if config.dataset not in datasets.__all__:
         raise RuntimeError('Unkown dataset name.')
     
@@ -515,7 +518,18 @@ def create_mc_spec(config:Configuration):
         return [
             {'name':'global1', 'out_size':128, 'min_scale':1.0, 'max_scale':1.0, 'teacher':True, 'student':True},
         ]
-
+    
+    if config.mc == '2x64':
+        return [
+            {'name':'global1', 'out_size':64, 'min_scale':0.14, 'max_scale':1.0, 'teacher':True, 'student':True},
+            {'name':'global2', 'out_size':64, 'min_scale':0.14, 'max_scale':1.0, 'teacher':True, 'student':True},
+        ] 
+    
+    if config.mc == '1x64':
+        return [
+            {'name':'global1', 'out_size':64, 'min_scale':1.0, 'max_scale':1.0, 'teacher':True, 'student':True},
+        ] 
+    
     if config.mc == '2x32+4x32':
         return [
             {'name':'global1', 'out_size':32, 'min_scale':0.4, 'max_scale':1.0, 'teacher':True, 'student':True},
