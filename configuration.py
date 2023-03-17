@@ -117,6 +117,7 @@ class Configuration(object):
                             help='Number of classes. By default determined from dataset but can be overwritten for logit noise.')
         data.add_argument('--mc', type=str, choices=[
                                 '2x128+4x96', '2x128', '1x128',
+                                '2x64+4x64', '1x64', '2x64',
                                 '2x32+4x32', '2x32', '1x32',
                                 '2x28+4x28', '2x28', '1x28'], 
                                 default='2x128+4x96',
@@ -517,6 +518,16 @@ def create_mc_spec(config:Configuration):
     if config.mc == '1x128':
         return [
             {'name':'global1', 'out_size':128, 'min_scale':1.0, 'max_scale':1.0, 'teacher':True, 'student':True},
+        ]
+    
+    if config.mc == '2x64+4x64':
+        return [
+            {'name':'global1', 'out_size':64, 'min_scale':0.4, 'max_scale':1.0, 'teacher':True, 'student':True},
+            {'name':'global2', 'out_size':64, 'min_scale':0.4, 'max_scale':1.0, 'teacher':True, 'student':True},
+            {'name':'local1', 'out_size':64, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
+            {'name':'local2', 'out_size':64, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
+            {'name':'local3', 'out_size':64, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
+            {'name':'local4', 'out_size':64, 'min_scale':0.05, 'max_scale':0.4, 'teacher':False, 'student':True},
         ]
     
     if config.mc == '2x64':

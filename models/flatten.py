@@ -7,9 +7,13 @@ __all__ = [
 ]
 
 class Flatten(nn.Module):
-    def __init__(self, n_pixels, n_channels) -> None:
+    def __init__(self, n_pixels, n_channels, num_classes=None) -> None:
         super().__init__()
         self.embed_dim = n_pixels * n_channels
+
+        self.fc = nn.Identity()
+        if num_classes is None:
+            self.fc = nn.Linear(self.embed_dim, num_classes)
 
     def reset_parameters(self, generator=None):
         pass
@@ -17,5 +21,5 @@ class Flatten(nn.Module):
     def forward(self, x):
         return torch.flatten(x, start_dim=1, end_dim=-1)
 
-def flatten(n_pixels, n_channels) -> Flatten:
-    return Flatten(n_pixels, n_channels)
+def flatten(**kwargs) -> Flatten:
+    return Flatten(**kwargs)
