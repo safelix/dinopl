@@ -8,7 +8,6 @@ from dinopl.modules import init
 __all__ = [
     "ViT",
     "vit_tiny",
-    "vit_cifar",
     "vit_small",
     "vit_base",
 ]
@@ -216,21 +215,6 @@ def vit_tiny(img_chans:int, img_size:int, patch_size:int=16, **kwargs):
     embedder = PatchEmbedder(img_chans, img_size, patch_size, embed_dim=192)
     return ViT(embedder, num_heads=3, num_layers=12, **kwargs)
 
-
-def vit_cifar(img_chans:int, img_size:int, patch_size:int=8, **kwargs):
-    """ViT from `An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale <https://arxiv.org/abs/2010.11929>`.
-        CIFAR configuration from here: https://github.com/omihub777/ViT-CIFAR 
-
-    Args:
-        img_chans: Number of channels in input image.
-        img_size: Square size of channels in input image.
-        patch_size: Patch size for patchwise embedding.
-        preact: Construct a pre-activation resnet, default is ``False``.
-        **kwargs: parameters passed to the ``models.resnet.ResNet`` base class.
-    """
-    
-    embedder = PatchEmbedder(img_chans, img_size, patch_size, embed_dim=384)
-    return ViT(embedder, num_heads=8, num_layers=7, **kwargs)
 
 
 def vit_small(img_chans:int, img_size:int, patch_size:int=16, **kwargs):
