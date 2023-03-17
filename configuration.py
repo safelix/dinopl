@@ -348,11 +348,18 @@ def get_encoder(config:Configuration) -> typing.Type[models.Encoder]:
     if config.enc in models.__dict__.keys():
         # prepare keyword arguments
         kwargs = dict(num_classes=None)
+        if 'mlp' in config.enc.lower():
+            kwargs['in_numel'] = config.ds_pixels * 3
+
         if 'resnet' in config.enc.lower():
             kwargs['tiny_input'] = getattr(config, 'tiny_input', False)
 
-        if 'mlp' in config.enc.lower():
-            kwargs['in_numel'] = config.ds_pixels * 3
+        if 'vit' in config.enc.lower():
+            kwargs['img_chans'] = 3
+            kwargs['img_size'] = config.img_size
+            if getattr(config, 'tiny_input', False):
+                kwargs['patch_size'] = 8
+
 
         if getattr(config, 'enc_norm_layer', None) is not None:
             kwargs['norm_layer'] = get_enc_norm_layer(config)
@@ -455,7 +462,8 @@ def get_dataset(config:Configuration) -> typing.Type[datasets.BaseDataset]:
     if config.dataset not in datasets.__all__:
         raise RuntimeError('Unkown dataset name.')
     
-    DSet = datasets.__dict__[config.dataset]
+    DSet:datasets.BaseDataset = datasets.__dict__[config.dataset]
+    config.img_size = DSet.img_size
     config.ds_pixels = DSet.ds_pixels
     config.ds_classes = DSet.ds_classes
     config.n_classes = config.ds_classes if config.n_classes is None else config.n_classes

@@ -161,7 +161,7 @@ def load_data(encoder:nn.Module, dl:DataLoader, device:torch.device=None):
             inputs, targets = inputs.to(device), targets.to(device)
         
         embeddings:torch.Tensor = encoder(inputs)
-        data.append((embeddings, targets))
+        data.append((embeddings.contiguous(), targets))
         
         mem += embeddings.element_size() * embeddings.nelement()
         loading_pbar.set_postfix({'mem':f'{mem*1e-6:.1f}MB'})
