@@ -477,5 +477,5 @@ class DINO(pl.LightningModule):
 
     def on_before_optimizer_step(self, *args):
         if self.current_epoch < self.wn_freeze_epochs:
-            if getattr(self.student.head.last_layer, 'lin2') is not None:
+            if getattr(self.student.head.last_layer, 'lin2', None) is not None:
                 self.student.head.last_layer.lin2.zero_grad(True)

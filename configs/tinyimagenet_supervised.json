@@ -1,0 +1,21 @@
+{
+    "dataset":"TinyImageNet",
+    "mc":"1x64",
+    "tiny_input":true,
+    "bs_train":256,
+    "hid_dims":[],
+    "l2bot_dim":0,
+    "out_dim":1000,
+    "s_mode":"supervised",
+    "t_mode":"no_update",
+    "t_bn_mode":"from_student",
+    "t_eval":true,
+    "t_temp":1,
+    "s_temp":1,
+    "loss":"CE",
+    "loss_pairing":"same",
+    "opt":"adamw",
+    "opt_lr": 0.001,
+    "opt_wd":0.01,
+    "clip_grad":0
+}
