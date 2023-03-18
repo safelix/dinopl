@@ -359,7 +359,7 @@ def get_encoder(config:Configuration) -> typing.Type[models.Encoder]:
 
         if 'vit' in config.enc.lower():
             kwargs['img_chans'] = 3
-            kwargs['img_size'] = input_pixels
+            kwargs['img_size'] = config.mc_spec[0]['out_size'] 
             if getattr(config, 'tiny_input', False):
                 kwargs['patch_size'] = 8
 
