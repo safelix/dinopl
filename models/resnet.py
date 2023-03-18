@@ -11,7 +11,7 @@ from torch import Tensor
 from dinopl.modules import init
 
 __all__ = [
-    "ResNet",
+    #"ResNet",
     "resnet18",
     "resnet34",
     "resnet20",

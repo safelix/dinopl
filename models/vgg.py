@@ -8,7 +8,7 @@ import torch.nn as nn
 from dinopl.modules import init
 
 __all__ = [
-    "VGG",
+    #"VGG",
     "vgg11",
     "vgg11_bn",
     "vgg13",

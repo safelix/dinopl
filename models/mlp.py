@@ -8,7 +8,7 @@ import torch.nn as nn
 from dinopl.modules import init
 
 __all__ = [
-    "MLPEnc",
+    #"MLPEnc",
     "mlp_512_1",
     "mlp_512_2",
     "mlp_512_3",

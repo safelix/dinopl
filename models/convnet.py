@@ -5,7 +5,7 @@ import torch
 from dinopl.modules import init
 
 __all__ = [
-    "ConvNet",
+    #"ConvNet",
     "convnet_16_1",
     "convnet_16_1e",
     "convnet_16_2",

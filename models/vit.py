@@ -6,7 +6,7 @@ from math import sqrt
 from dinopl.modules import init
 
 __all__ = [
-    "ViT",
+    #"ViT",
     "vit_tiny",
     "vit_small",
     "vit_base",

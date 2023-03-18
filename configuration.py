@@ -343,21 +343,23 @@ def get_encoder(config:Configuration) -> typing.Type[models.Encoder]:
     choose from via the command line.
     '''
 
-    if config.enc == 'Flatten':
-        return (lambda : models.Flatten(n_pixels=config.ds_pixels, n_channels=3))
+    input_pixels = config.mc_spec[0]['out_size'] ** 2
+
+    if config.enc in ['flatten', 'Flatten']:
+        return (lambda : models.flatten(n_pixels=input_pixels, n_channels=3))
 
     if config.enc in models.__dict__.keys():
         # prepare keyword arguments
         kwargs = dict(num_classes=None)
         if 'mlp' in config.enc.lower():
-            kwargs['in_numel'] = 3 * (config.mc_spec[0]['out_size']**2)
+            kwargs['in_numel'] = 3 * input_pixels
 
         if 'resnet' in config.enc.lower():
             kwargs['tiny_input'] = getattr(config, 'tiny_input', False)
 
         if 'vit' in config.enc.lower():
             kwargs['img_chans'] = 3
-            kwargs['img_size'] = config.mc_spec[0]['out_size']
+            kwargs['img_size'] = input_pixels
             if getattr(config, 'tiny_input', False):
                 kwargs['patch_size'] = 8
 

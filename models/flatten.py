@@ -2,7 +2,7 @@ import torch
 from torch import nn
 
 __all__ = [
-    "Flatten",
+    #"Flatten",
     "flatten",
 ]
 
@@ -12,7 +12,7 @@ class Flatten(nn.Module):
         self.embed_dim = n_pixels * n_channels
 
         self.fc = nn.Identity()
-        if num_classes is None:
+        if num_classes is not None:
             self.fc = nn.Linear(self.embed_dim, num_classes)
 
     def reset_parameters(self, generator=None):
