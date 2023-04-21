@@ -41,6 +41,7 @@ class LinearAnalysis(Analysis):
         self.clf = None
         self.opt = None
         self.acc = None
+        self.device = torch.device('cpu')
 
     def prepare(self, n_features:int, n_classes:int, device:torch.device=None, generator:torch.Generator=None):   
         from .modules import init
@@ -51,6 +52,7 @@ class LinearAnalysis(Analysis):
         if device and device.type == 'cuda':
             self.clf = self.clf.to(device=device)
             self.acc = self.acc.to(device=device)
+            self.device = device
 
         #m.reset_parameters() is equal to:
         bound = 1 / sqrt(self.clf.in_features)
@@ -68,7 +70,7 @@ class LinearAnalysis(Analysis):
                 self.opt.zero_grad(set_to_none=True) # step clf parameters
 
                 with torch.enable_grad():
-                    loss = F.cross_entropy(self.clf(embeddings), targets)
+                    loss = F.cross_entropy(self.clf(embeddings.to(self.device)), targets.to(self.device))
                 loss.backward()
                 self.opt.step()
 
@@ -81,8 +83,8 @@ class LinearAnalysis(Analysis):
 
         self.acc.reset()
         for embeddings, targets in valid_pbar:
-            predictions = self.clf(embeddings)
-            self.acc.update(predictions, targets)
+            predictions = self.clf(embeddings.to(self.device))
+            self.acc.update(predictions, targets.to(self.device))
             valid_pbar.set_postfix({'acc':float(self.acc.compute())})
 
         return float(self.acc.compute())
@@ -91,6 +93,7 @@ class LinearAnalysis(Analysis):
         self.clf = None
         self.opt = None
         self.acc = None
+        self.device = torch.device('cpu')
 
         
 class KNNAnalysis(Analysis):
@@ -101,6 +104,7 @@ class KNNAnalysis(Analysis):
         self.index = None
         self.labels = None
         self.acc = None
+        self.device = torch.device('cpu')
 
     def prepare(self, n_features:int, n_classes:int=0, device:torch.device=None, generator:torch.Generator=None):   
         import faiss
@@ -112,6 +116,7 @@ class KNNAnalysis(Analysis):
             res = faiss.StandardGpuResources()
             self.index = faiss.index_cpu_to_gpu(res, device.index, self.index)
             self.acc = self.acc.to(device=device)
+            self.device = device
 
     def train(self, train_data:List[Tuple[torch.Tensor, torch.Tensor]]):
         train_pbar = tqdm(train_data, leave=False)
@@ -119,8 +124,8 @@ class KNNAnalysis(Analysis):
 
         labels = []
         for embeddings, targets in train_pbar: 
-            self.index.add(embeddings)
-            labels.append(targets)
+            self.index.add(embeddings.to(self.device))
+            labels.append(targets.to(self.device))
         self.labels = torch.cat(labels)
 
     def valid(self, valid_data:List[Tuple[torch.Tensor, torch.Tensor]]):
@@ -129,11 +134,11 @@ class KNNAnalysis(Analysis):
 
         self.acc.reset()
         for embeddings, targets in valid_pbar:
-            _, indices = self.index.search(embeddings, self.k)
+            _, indices = self.index.search(embeddings.to(self.device), self.k)
             predictions = self.labels[indices].mode()[0]
 
             try: # catch bug from torchmetric?
-                self.acc.update(predictions, targets)
+                self.acc.update(predictions, targets.to(self.device))
             except Exception as e:
                 warn(f'Could not compute accuracy: {str(e)})') 
             valid_pbar.set_postfix({'acc':float(self.acc.compute())})
@@ -141,9 +146,11 @@ class KNNAnalysis(Analysis):
         return float(self.acc.compute())
 
     def cleanup(self):
+        self.index.reset()
         self.index = None
         self.labels = None
         self.acc = None
+        self.device = torch.device('cpu')
 
 @torch.no_grad()
 def load_data(encoder:nn.Module, dl:DataLoader, device:torch.device=None):
@@ -161,7 +168,7 @@ def load_data(encoder:nn.Module, dl:DataLoader, device:torch.device=None):
             inputs, targets = inputs.to(device), targets.to(device)
         
         embeddings:torch.Tensor = encoder(inputs)
-        data.append((embeddings.contiguous(), targets))
+        data.append((embeddings.contiguous().squeeze().cpu(), targets.cpu()))
         
         mem += embeddings.element_size() * embeddings.nelement()
         loading_pbar.set_postfix({'mem':f'{mem*1e-6:.1f}MB'})
@@ -242,7 +249,8 @@ class Prober(pl.Callback):
         return accs
 
     @torch.no_grad()
-    def probe(self, device=None, verbose=True):
+    def probe(self, device_enc=None, device_emb=None, verbose=True):
+        device_emb = device_emb or device_enc # use encoder device for embeddings by default
 
         out = {}
         for enc_id, encoder in self.encoders.items():
@@ -258,11 +266,11 @@ class Prober(pl.Callback):
                     self.train_dl.generator.manual_seed(self.seed) 
 
             # load data
-            train_data = load_data(encoder, self.train_dl, device=device)
-            valid_data = load_data(encoder, self.valid_dl, device=device)
+            train_data = load_data(encoder, self.train_dl, device=device_enc) # store embeddings on cpu
+            valid_data = load_data(encoder, self.valid_dl, device=device_enc) # store embeddings on cpu
 
             # evaluate data
-            accs = self.eval_probe(train_data, valid_data, device=device)
+            accs = self.eval_probe(train_data, valid_data, device=device_emb) # move to device_emb on demand
             for key, val in accs.items():
                 key = f'probe/{enc_id}' if key=='' else f'probe/{enc_id}/{key}'
                 out[key] = val
@@ -270,7 +278,7 @@ class Prober(pl.Callback):
             # evaluate normalized data
             if self.normalize:
                 normalize_data(train_data, valid_data)
-                accs = self.eval_probe(train_data, valid_data, device=device)
+                accs = self.eval_probe(train_data, valid_data, device=device_emb) # move to device_emb on demand
                 for key, val in accs.items():
                     key = f'probe/norm/{enc_id}' if key=='' else f'probe/norm/{enc_id}/{key}'
                     out[key] = val
@@ -278,7 +286,10 @@ class Prober(pl.Callback):
             if verbose:
                 t = time() - t
                 tqdm.write(f' ..{enc_id} took {int(t//60):02d}:{int(t%60):02d}min', end='')
-        
+
+            # cleanup data
+            del train_data, valid_data
+
         if verbose:
             tqdm.write(str({key: f'{val:.3}' for key, val in out.items()}))
 
