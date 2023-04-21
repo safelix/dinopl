@@ -110,7 +110,7 @@ def main(config:Configuration):
     model = DINOModel(enc, head)
 
     print(f'Created encoder and head:')
-    summary(model, depth=4, device='cpu', input_data=next(iter(dino_valid_dl))[0])
+    summary(model, depth=4, device='cpu', input_data=[next(iter(dino_valid_dl))[0]])
 
     student, teacher = init_student_teacher(config=config, model=model)
     del model # don't need this anymore

@@ -1,0 +1,9 @@
+{
+    "dataset":"CIFAR10",
+    "mc":"2x32+4x32",
+    "bs_train":256,
+    "bs_eval":256,
+    "per_crop_augs":"dino",
+    "enc":"resnet18",
+    "tiny_input":true
+}
