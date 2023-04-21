@@ -9,6 +9,7 @@ __all__ = [
     #"ViT",
     "vit_tiny",
     "vit_small",
+    "vit_medium",
     "vit_base",
 ]
 
@@ -232,8 +233,23 @@ def vit_small(img_chans:int, img_size:int, patch_size:int=16, **kwargs) -> ViT:
     return ViT(embedder, num_heads=6, num_layers=12, **kwargs)
 
 
+def vit_medium(img_chans:int, img_size:int, patch_size:int=16, **kwargs) -> ViT:
+    """Medium ViT from `An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale <https://arxiv.org/abs/2010.11929>`.
+
+    Args:
+        img_chans: Number of channels in input image.
+        img_size: Square size of channels in input image.
+        patch_size: Patch size for patchwise embedding.
+        preact: Construct a pre-activation resnet, default is ``False``.
+        **kwargs: parameters passed to the ``models.resnet.ResNet`` base class.
+    """
+
+    embedder = PatchEmbedder(img_chans, img_size, patch_size, embed_dim=512)
+    return ViT(embedder, num_heads=8, num_layers=12, **kwargs)
+
+
 def vit_base(img_chans:int, img_size:int, patch_size:int=16, **kwargs) -> ViT:
-    """Small ViT from `An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale <https://arxiv.org/abs/2010.11929>`.
+    """Base ViT from `An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale <https://arxiv.org/abs/2010.11929>`.
 
     Args:
         img_chans: Number of channels in input image.
