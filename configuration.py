@@ -206,7 +206,7 @@ class Configuration(object):
         
         # Training configurations.        
         training = parser.add_argument_group('Training')
-        training.add_argument('--n_epochs', type=int, default=50, 
+        training.add_argument('--n_epochs', type=int, default=100, 
                             help='Number of epochs to train for.')
         training.add_argument('--opt', type=str, choices={'adamw', 'adam', 'sgd'}, default='adamw', 
                             help='Optimizer to use for training.')                   
