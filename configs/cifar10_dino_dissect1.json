@@ -4,7 +4,6 @@
     "bs_train":256,
     "bs_eval":256,
     "per_crop_augs":"dino",
-    "enc":"resnet18",
     "tiny_input":true,
     "t_mode":"no_update",
     "t_eval":true,

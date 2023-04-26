@@ -3,7 +3,6 @@
     "mc":"1x32",
     "bs_train":256,
     "bs_eval":256,
-    "enc":"resnet18",
     "tiny_input":true,
     "t_mode":"no_update",
     "t_eval":true,

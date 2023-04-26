@@ -1,7 +1,6 @@
 {
     "dataset":"TinyImageNet",
     "mc":"1x64",
-    "enc":"resnet18",
     "tiny_input":true,
     "bs_train":256,
     "hid_dims":[2048, 2048],
