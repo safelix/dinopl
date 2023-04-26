@@ -1,6 +1,6 @@
 {
     "dataset":"CIFAR10",
-    "mc":"2x32",
+    "mc":"1x32",
     "bs_train":256,
     "bs_eval":256,
     "augs":"dino",
