@@ -7,6 +7,7 @@
     "enc":"resnet18",
     "tiny_input":true,
     "t_mode":"no_update",
+    "t_eval":true,
     "loss":"CE",
     "opt":"adamw",
     "opt_lr":0.001,

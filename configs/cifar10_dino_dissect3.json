@@ -6,6 +6,7 @@
     "enc":"resnet18",
     "tiny_input":true,
     "t_mode":"no_update",
+    "t_eval":true,
     "loss":"CE",
     "loss_pairing":"same",
     "opt":"adamw",
