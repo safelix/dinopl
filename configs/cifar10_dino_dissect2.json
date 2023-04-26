@@ -8,6 +8,7 @@
     "t_mode":"no_update",
     "t_eval":true,
     "loss":"CE",
+    "loss_pairing":"same",
     "opt":"adamw",
     "opt_lr":0.001,
     "opt_wd":0.01,
