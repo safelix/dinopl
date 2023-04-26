@@ -146,7 +146,8 @@ class KNNAnalysis(Analysis):
         return float(self.acc.compute())
 
     def cleanup(self):
-        self.index.reset()
+        if self.index is not None:
+            self.index.reset()
         self.index = None
         self.labels = None
         self.acc = None
