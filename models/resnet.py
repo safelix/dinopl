@@ -14,6 +14,7 @@ __all__ = [
     #"ResNet",
     "resnet18",
     "resnet34",
+    "resnet50",
     "resnet20",
     "resnet56",
 ]
@@ -200,7 +201,7 @@ class ResNet(nn.Module):
         self,
         block: Type[Union[BasicBlock, Bottleneck]],
         layers: List[int],
-        num_classes: Optional[int] = 1000,
+        num_classes: Optional[int] = None,
         inplanes: int = 64,
         groups: int = 1,
         width_per_group: int = 64,

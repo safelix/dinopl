@@ -21,7 +21,7 @@ class ConvNet(nn.Module):
     def __init__(self, 
             width:int = 16, 
             depth:int = 2, 
-            num_classes:Optional[int] = 10, 
+            num_classes:Optional[int] = None, 
             norm_layer:Type[nn.Module] = nn.BatchNorm2d,
     ) -> None :
         super().__init__()

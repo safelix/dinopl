@@ -23,7 +23,7 @@ class VGG(nn.Module):
     def __init__(
         self, 
         features: nn.Module, 
-        num_classes: Optional[int] = 1000, 
+        num_classes: Optional[int] = None, 
         #dropout: float = 0.5,
     ) -> None:
         super().__init__()
