@@ -8,33 +8,6 @@ from torch.nn import functional as F
 import torchvision
 import argparse
 
-## Recursive shape for debugging multicrop
-def recshape(curr, recprefix='', prefix=''):
-    t = type(curr)
-
-    out = '\n'
-    if t == list or t==tuple:
-        out += (f'{recprefix}{prefix}{t.__name__} of length {len(curr)}')
-        
-        for idx, child in enumerate(curr, 1):
-            out += recshape(child, recprefix=f'{recprefix}  ', prefix=f'{idx}. ') 
-    
-    elif t == dict:
-        out += (f'{recprefix}{prefix}{t.__name__} of length {len(curr)}')
-        
-        for name, child in curr.items():
-            out += recshape(child, recprefix=f'{recprefix}  ', prefix=f'\'{name}\': ') 
-    
-    elif t == torch.Tensor or t==np.ndarray:
-        if len(curr.shape) <= 1:
-            out += (f'{recprefix}{prefix}{t.__name__} of shape {curr.shape}: {curr}')
-        else:
-            out += (f'{recprefix}{prefix}{t.__name__} of shape {curr.shape}')
-    
-    else:
-        out += (f'{recprefix}{prefix}object of type {t.__name__}')
-    
-    return out
 
 
 ## Losses and Metrics
@@ -186,3 +159,38 @@ def pick_single_gpu() -> int:
         return i
 
     raise RuntimeError("No GPUs available.")
+
+
+## Recursive shape for debugging multicrop
+def recshape(curr, recprefix='', prefix=''):
+    t = type(curr)
+
+    out = '\n'
+    if t == list or t==tuple:
+        out += (f'{recprefix}{prefix}{t.__name__} of length {len(curr)}')
+        
+        for idx, child in enumerate(curr, 1):
+            out += recshape(child, recprefix=f'{recprefix}  ', prefix=f'{idx}. ') 
+    
+    elif t == dict:
+        out += (f'{recprefix}{prefix}{t.__name__} of length {len(curr)}')
+        
+        for name, child in curr.items():
+            out += recshape(child, recprefix=f'{recprefix}  ', prefix=f'\'{name}\': ') 
+    
+    elif t == torch.Tensor or t==np.ndarray:
+        if len(curr.shape) <= 1:
+            out += (f'{recprefix}{prefix}{t.__name__} of shape {curr.shape}: {curr}')
+        else:
+            out += (f'{recprefix}{prefix}{t.__name__} of shape {curr.shape}')
+    
+    else:
+        out += (f'{recprefix}{prefix}object of type {t.__name__}')
+    
+    return out
+
+def recprint(x):
+    print(recshape(x))
+
+def numparams(module:nn.Module):
+    return sum(p.numel() for p in module.parameters())
