@@ -317,8 +317,8 @@ class DINO(pl.LightningModule):
             print(f' {idx}. {type(cb).__name__}', flush=True)
 
         # linear scaling rule: schedule is by refernce... only scale once
-        bs = self.trainer.train_dataloader.loaders.batch_size
-        self.scheduler.get(self.optimizer.param_groups[0], 'lr').ys *=  bs / 256
+        #bs = self.trainer.train_dataloader.loaders.batch_size
+        #self.scheduler.get(self.optimizer.param_groups[0], 'lr').ys *=  bs / 256
     
     def multicrop_loss_reg(self, pred_logits: torch.Tensor, targ_logits: torch.Tensor = None, targ_labels: torch.Tensor = None):
         # [n_crops, n_batches, out_dim]
