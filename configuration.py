@@ -208,6 +208,8 @@ class Configuration(object):
         training = parser.add_argument_group('Training')
         training.add_argument('--n_epochs', type=int, default=100, 
                             help='Number of epochs to train for.')
+        training.add_argument('--n_steps', type=int, default=-1, 
+                            help='Number of steps to train for, stops at min(n_epochs, n_steps).')
         training.add_argument('--opt', type=str, choices={'adamw', 'adam', 'sgd'}, default='adamw', 
                             help='Optimizer to use for training.')                   
         training.add_argument('--opt_lr', type=str, default=str(CatSched(LinSched(0, 5e-4), CosSched(5e-4, 1e-6), 10)), 

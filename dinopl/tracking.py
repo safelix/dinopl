@@ -135,6 +135,7 @@ def matrix_rank(matrix, hermitian=False):
 def batch_cossim(x:torch.Tensor):
     try:
         cossim = torch.corrcoef(x).nan_to_num() # similarity with anything of norm zero is zero
+        cossim = cossim.reshape(x.shape[0], x.shape[0]) # incase dimension is lost
         return cossim
     except Exception as e:
         warn(f'Cannot batch cosssim ({str(e)}), returning torch.nan.')
@@ -143,6 +144,7 @@ def batch_cossim(x:torch.Tensor):
 def batch_l2dist(x:torch.Tensor):
     try:
         l2dist = torch.cdist(x,x)
+        l2dist = l2dist.reshape(x.shape[0], x.shape[0]) # incase dimension is lost
         return l2dist
     except Exception as e:
         warn(f'Cannot batch l2dist ({str(e)}), returning torch.nan.')

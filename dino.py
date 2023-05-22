@@ -196,6 +196,7 @@ def main(config:Configuration):
     trainer = pl.Trainer(
         # training dynamics
         max_epochs=config.n_epochs,
+        max_steps=config.n_steps,
         gradient_clip_val=config.clip_grad,
         callbacks=callbacks+[ckpt_callback],
         #enable_checkpointing=ckpt_callback,
