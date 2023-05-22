@@ -1,6 +1,6 @@
 import argparse
 import ast
-from math import log
+from math import log, ceil
 from typing import List, Tuple, Union
 
 import pytorch_lightning as pl
@@ -37,7 +37,7 @@ class Schedule():
     Concatenation of schedules is supported and everything can be plotted easily:
     ```
         warmup = CosSched(0.6, 0.8)
-        sched = CatSched(warmup, 0.8, 10).prep(n_steps, n_epochs)
+        sched = CatSched(warmup, 0.8, 10).prep(n_epochs, n_steps, steps_per_epoch)
         plt.plot(sched.xs(0, n_epochs), sched.ys)
     ```
     '''
@@ -58,11 +58,18 @@ class Schedule():
         self.ys = torch.full((self.n_steps, ), torch.nan)
         raise NotImplementedError('Please compute ys here.')
 
-    def prep(self, n_epochs:int, steps_per_epoch:int) -> Self:
+    def prep(self, n_steps:int, n_epochs:int, steps_per_epoch:int) -> Self:
         'Materialize schedule with n_steps and n_epochs'
+        if n_epochs < 0 and n_steps < 0:
+            raise ValueError('Schedule can only be computed if one of n_epoch and n_steps is given.')
+        elif n_epochs < 0 or n_epochs * steps_per_epoch < n_steps:
+            n_epochs = ceil(n_steps / steps_per_epoch)
+        elif n_steps < 0 or n_steps < n_epochs * steps_per_epoch:
+            n_steps = n_epochs * steps_per_epoch
+
+        self.n_steps = n_steps 
         self.n_epochs = n_epochs
-        self.steps_per_epoch =  steps_per_epoch # n_steps // n_epochs
-        self.n_steps = n_epochs * steps_per_epoch 
+        self.steps_per_epoch =  steps_per_epoch 
         self.set_ys()
         return self
 
@@ -169,9 +176,9 @@ class Scheduler(pl.Callback):
                 return curr_sched
         raise RuntimeError(f'Schedule {loc}[{key}] could not be retrieved.')
     
-    def prep(self, n_epochs:int, steps_per_epoch:int):
+    def prep(self, n_steps:int, n_epochs:int, steps_per_epoch:int):
         for loc, key, sched in self.scheduled_params: # prepare all schedules
-            sched.prep(n_epochs, steps_per_epoch)
+            sched.prep(n_epochs, n_steps, steps_per_epoch)
         return self
     
     def step(self, step:int):
@@ -179,7 +186,8 @@ class Scheduler(pl.Callback):
             loc[key] = sched(step)
 
     def on_fit_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):
-        self.prep(trainer.max_epochs, trainer.estimated_stepping_batches // trainer.max_epochs)
+        trainer.reset_train_dataloader() # load train dataloader
+        self.prep(trainer.max_steps, trainer.max_epochs, len(trainer.train_dataloader.loaders))
 
     def on_train_batch_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):
         self.step(trainer.global_step)
@@ -257,19 +265,21 @@ class CatSched(Schedule):
             
     def set_ys(self) -> Self:
         if isinstance(self.where, float):
-            frac = self.where # interprete as fraction
+            frac = self.where # interprete as rounded fraction of epoch
             n_epochs_l = round(frac * self.n_epochs)
-        else:
+        elif isinstance(self.where, int):
             n_epochs_l = self.where # interprete as epoch
+        else:
+            raise ValueError('Unkown type for \'where\'.')
         n_epochs_r = self.n_epochs - n_epochs_l
 
         # prepare schedules of left and right
         ys_list = []
         if n_epochs_l > 0:
-            self.sched_l.prep(self.steps_per_epoch * n_epochs_l, n_epochs_l)
+            self.sched_l.prep(-1, n_epochs_l, self.steps_per_epoch)
             ys_list.append(self.sched_l.ys)
         if n_epochs_r > 0:
-            self.sched_r.prep(self.steps_per_epoch * n_epochs_r, n_epochs_r)
+            self.sched_r.prep(-1, n_epochs_r, self.steps_per_epoch)
             ys_list.append(self.sched_r.ys)
 
         # concatenate left and right schedules
@@ -338,8 +348,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('schedule', type=Schedule.parse,
                         help='Schedule to parse, prep and print.')
-    parser.add_argument('--n_epochs', type=int, default=None,
+    parser.add_argument('--n_epochs', type=int, default=-1,
                         help='Number of epochs to prepare the Schedule for.')
+    parser.add_argument('--n_steps', type=int, default=-1,
+                        help='Number of steps to prepare the Schedule for.')
     parser.add_argument('--steps_per_epoch', type=int, default=None,
                         help='Number of steps per epoch.')
 
@@ -347,9 +359,8 @@ if __name__ == '__main__':
     sched:Schedule = args.schedule
     print(f'Parsed: {sched}')
 
-    if args.n_epochs and args.steps_per_epoch:
-        sched.prep(args.n_epochs, args.steps_per_epoch)
-        print(f'Prepared Schedule: {sched.ys}')  
-    elif args.n_epochs or args.steps_per_epoch:
-        raise RuntimeError('Please specify n_epochs and steps_per_epoch.')
-        
+    if args.steps_per_epoch and (args.n_steps >= 0 or args.n_epochs >= 0):
+        sched.prep(args.n_epochs, args.n_steps, args.steps_per_epoch)
+        print(f'Prepared Schedule: {sched.ys}')
+    elif args.steps_per_epoch and args.n_steps < 0 and args.n_epochs < 0:
+        raise RuntimeError('Please specify n_epochs or n_steps.')
