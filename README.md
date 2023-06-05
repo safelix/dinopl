@@ -14,6 +14,13 @@ export DINO_RESULTS=$HOME/dinopl/results
 or any other desired path.
 
 ### Usage
+To run random teacher distillation, please use 
+
+```
+dino.py --from_json configs/cifar10_distillation_v2.json
+```
+
+The default configuration of `dino.py` corresponds to the fully fledged method from Caron et al., and is overwritten by the `.json` file. The loaded configuration can be overwritten by specific command-line arguments, such as `--n_epochs 150` or `--enc vgg11`. For a full specification, please refer to the `--help` command: 
 
 ```
 usage: dino.py [-h] [--from_json FROM_JSON] [--n_workers N_WORKERS] [--seed SEED] [--log_every LOG_EVERY] [--ckpt_path CKPT_PATH] [--force_cpu] [--float64 FLOAT64] [--dataset {MNIST,CIFAR10,CIFAR100}] [--n_classes N_CLASSES] [--mc {2x128+4x96,2x128,1x128,2x32+4x32,2x32,1x32,2x28+4x28,2x28,1x28}]
@@ -151,12 +158,13 @@ addons:
 
 ## Citation
 ```
-@article{sarnthein2023random,
-  doi = {10.48550/ARXIV.2302.12091},
-  url = {https://arxiv.org/abs/2302.12091},
+@inproceedings{sarnthein2023random,
   title = {Random Teachers are Good Teachers},
   author = {Sarnthein, Felix and Bachmann, Gregor and Anagnostidis, Sotiris and Hofmann, Thomas},
+  booktitle = {International Conference on Machine Learning},
   year = {2023},
+  url = {https://arxiv.org/abs/2302.12091},
+  doi = {10.48550/ARXIV.2302.12091},
 }
 
 @inproceedings{caron2021emerging,
