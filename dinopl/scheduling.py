@@ -37,7 +37,7 @@ class Schedule():
     Concatenation of schedules is supported and everything can be plotted easily:
     ```
         warmup = CosSched(0.6, 0.8)
-        sched = CatSched(warmup, 0.8, 10).prep(n_epochs, n_steps, steps_per_epoch)
+        sched = CatSched(warmup, 0.8, 10).prep(n_steps, n_epochs, steps_per_epoch)
         plt.plot(sched.xs(0, n_epochs), sched.ys)
     ```
     '''
@@ -360,7 +360,7 @@ if __name__ == '__main__':
     print(f'Parsed: {sched}')
 
     if args.steps_per_epoch and (args.n_steps >= 0 or args.n_epochs >= 0):
-        sched.prep(args.n_epochs, args.n_steps, args.steps_per_epoch)
+        sched.prep(args.n_steps, args.n_epochs, args.steps_per_epoch)
         print(f'Prepared Schedule: {sched.ys}')
     elif args.steps_per_epoch and args.n_steps < 0 and args.n_epochs < 0:
         raise RuntimeError('Please specify n_epochs or n_steps.')
