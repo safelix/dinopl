@@ -17,7 +17,7 @@ or any other desired path.
 To run random teacher distillation, please use 
 
 ```
-dino.py --from_json configs/cifar10_distillation_v2.json
+python dino.py --from_json configs/cifar10_distillation_v2.json
 ```
 
 The default configuration of `dino.py` corresponds to the fully fledged method from Caron et al., and is overwritten by the `.json` file. The loaded configuration can be overwritten by specific command-line arguments, such as `--n_epochs 150` or `--enc vgg11`. For a full specification, please refer to the `--help` command: 
