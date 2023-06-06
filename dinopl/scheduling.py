@@ -178,7 +178,7 @@ class Scheduler(pl.Callback):
     
     def prep(self, n_steps:int, n_epochs:int, steps_per_epoch:int):
         for loc, key, sched in self.scheduled_params: # prepare all schedules
-            sched.prep(n_epochs, n_steps, steps_per_epoch)
+            sched.prep(n_steps, n_epochs, steps_per_epoch)
         return self
     
     def step(self, step:int):
