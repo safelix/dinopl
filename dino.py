@@ -21,7 +21,7 @@ from dinopl.probing import KNNAnalysis, LinearAnalysis, Prober
 from dinopl.scheduling import Schedule
 from dinopl.tracking import (AccuracyTracker, FeatureSaver, FeatureTracker,
                              HParamTracker, MetricsTracker, ParamStatSaver,
-                             ParamTracker, PerCropEntropyTracker)
+                             ParamTracker, GradVarTracker, PerCropEntropyTracker)
 
 
 def main(config:Configuration):
@@ -176,6 +176,9 @@ def main(config:Configuration):
                                 seed = config.prober_seed
                             )]
 
+    if config.track_gradvar:
+        model = dino.student
+        callbacks += [GradVarTracker(model, {'enc':model.enc, 'head':model.head})]  
 
     if len(config.save_features) > 0:
         config.save_features = ['embeddings', 'projections', 'logits'] if 'all' in config.save_features else config.save_features

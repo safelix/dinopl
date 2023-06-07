@@ -240,6 +240,8 @@ class Configuration(object):
                             help='Apply feature normalization (standardization) for probing.')
         addons.add_argument('--prober_seed', type=int, default=None,
                             help='The seed for reproducible probing, use numbers with good balance of 0 and 1 bits.')
+        addons.add_argument('--track_gradvar', type=U.bool_parser, default=False,
+                            help='Track gradient variances of model, encoder and head.')
         addons.add_argument('--save_features', type=str, nargs='*', default=[],
                             choices=['embeddings', 'projections', 'logits', 'all'],   
                             help='Save features for embeddings, projections and/or logits.')

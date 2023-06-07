@@ -1,5 +1,5 @@
 import os
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 from warnings import warn
 
 import numpy as np
@@ -23,6 +23,9 @@ __all__ = [
     'ParamTracker',
     'FeatureSaver',
 ]
+
+# Callbacks/Hooks and when they are called:
+# https://lightning.ai/docs/pytorch/stable/common/lightning_module.html#hooks
 
 class AccuracyTracker(pl.Callback):
     def __init__(self, supervised, logit_targets) -> None:
@@ -234,10 +237,11 @@ class HParamTracker(pl.Callback):
 
 class ParamTracker(pl.Callback):
     def __init__(self, student, teacher, name=None, track_init:bool=False) -> None:
-        self.student = student
-        self.teacher = teacher
+        self.student:torch.nn.Module = student
+        self.teacher:torch.nn.Module = teacher
         self.track_init = track_init
         self.name = '' if name is None else name + '/'
+        self.g_vec = None
         
     def on_fit_start(self, *_) -> None:
         if self.track_init:
@@ -298,6 +302,54 @@ class ParamTracker(pl.Callback):
             logs[f'params/{self.name}rms(teach - init)'] = t_vec.square().mean().sqrt()
             logs[f'params/{self.name}rms(stud - init)'] = s_vec.square().mean().sqrt()
 
+        self.g_vec = None
+        dino.log_dict(logs)
+
+
+class GradVarTracker(pl.Callback):
+    def __init__(self, model:torch.nn.Module, submodels:dict={}) -> None:
+        super().__init__()
+        self.model = model
+        self.grad:Dict[str, torch.Tensor] = dict()
+
+        self.submodels = {'':model} 
+        for name, submodel in submodels.items():
+            if name == '': # overwrite behaviour of ''
+                self.submodels[''] = submodel
+            else: # rename to add '/'
+                self.submodels[f'{name}/'] = submodel
+
+    def on_after_backward(self, trainer: pl.Trainer, dino: DINO) -> None:
+        for name, submodel in self.submodels.items():
+            self.grad[name] = U.module_to_vector(submodel, grad=True)
+
+    def on_train_batch_end(self, trainer: pl.Trainer, dino: DINO, batch: Any, batch_idx: int, *args) -> None:
+        batch, batch_targets = batch
+
+        # freeze batch statistics
+        dino.train(False)
+
+        self.model.zero_grad(True)
+        variance = dict({(name, 0.0) for name in self.submodels.keys()})
+        for i in range(len(batch_targets)):
+            # prepare sample by performing one element slice
+            sample = [crop[i:i+1] for crop in batch], batch_targets[i:i+1]
+
+            # compute gradient in validation mode (without other updates)
+            with torch.enable_grad():
+                out = dino.validation_step(sample, batch_idx)
+            out['loss'].backward()
+
+            # accumulate sample gradients
+            for name, submodel in self.submodels.items():
+                sample_grad = U.module_to_vector(submodel, grad=True)
+                variance[name] += torch.square(self.grad[name] - sample_grad).sum()          
+            self.model.zero_grad(True)
+        self.grad = dict()
+        
+        logs = dict()
+        for name in self.submodels.keys():
+            logs[f'params/{name}var(grad)'] = variance[name] / (len(batch_targets) - 1)
         dino.log_dict(logs)
 
 
