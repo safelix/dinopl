@@ -416,16 +416,17 @@ class DINO(pl.LightningModule):
         out['H_targs'] = H_targs
         return out
 
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch, batch_idx) -> Dict[str, torch.Tensor]:
         batch, batch_targets = batch
 
         # generate teacher's targets and student's predictions
         # [n_crops, n_batches, n_channels, height, width]
         # -> [n_crops, n_batches, out_dim]
 
-        assert(self.student.training)
+        self.train()
         if self.t_eval: # set teacher in evaluation mode
             self.teacher.eval() 
+        assert(self.student.training and self.teacher.training != self.t_eval)
             
         # gradient is not computed because of teacher.requires_grad_(False)
         teacher_out = self.teacher([batch[i] for i in self.teacher.crops['idx']], update_cent=True)
@@ -446,9 +447,13 @@ class DINO(pl.LightningModule):
         out['teacher'] = teacher_out
         out['student'] = student_out
         return out
+    
             
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, batch_idx) -> Dict[str, torch.Tensor]:
         batch, batch_targets = batch
+
+        self.eval()
+        assert(not self.student.training and not self.teacher.training)
 
         # generate teacher's targets and student's predictions
         # [n_crops, n_batches, n_channels, height, width]
