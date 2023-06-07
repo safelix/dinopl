@@ -323,7 +323,7 @@ class GradVarTracker(pl.Callback):
         for name, submodel in self.submodels.items():
             self.grad[name] = U.module_to_vector(submodel, grad=True)
 
-    def on_train_batch_end(self, trainer: pl.Trainer, dino: DINO, batch: Any, batch_idx: int, *args) -> None:
+    def on_train_batch_end(self, trainer: pl.Trainer, dino: DINO, outputs, batch: Any, batch_idx: int, *args) -> None:
         batch, batch_targets = batch
 
         # freeze batch statistics
