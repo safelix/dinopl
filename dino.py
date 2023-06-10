@@ -13,15 +13,17 @@ from torchvision import transforms
 
 from configuration import CONSTANTS as C
 from configuration import (Configuration, create_mc_spec, create_optimizer,
-                           get_dataset, get_encoder, init_student_teacher, get_augmentations)
+                           get_augmentations, get_dataset, get_encoder,
+                           init_student_teacher)
 from datasets.targetnoise import LabelNoiseWrapper, LogitNoiseWrapper
 from dinopl import *
 from dinopl import utils as U
 from dinopl.probing import KNNAnalysis, LinearAnalysis, Prober
 from dinopl.scheduling import Schedule
-from dinopl.tracking import (AccuracyTracker, FeatureSaver, FeatureTracker,
-                             HParamTracker, MetricsTracker, ParamStatSaver,
-                             ParamTracker, GradVarTracker, PerCropEntropyTracker)
+from dinopl.tracking import (AccuracyTracker, FeatureHistTracker, FeatureSaver,
+                             FeatureTracker, GradVarTracker, HParamTracker,
+                             MetricsTracker, ParamStatSaver, ParamTracker,
+                             PerCropEntropyTracker)
 
 
 def main(config:Configuration):
@@ -157,6 +159,13 @@ def main(config:Configuration):
         ]
     wandb_logger.experiment.define_metric('train/s_acc', summary='max')
     wandb_logger.experiment.define_metric('valid/s_acc', summary='max')
+
+    if getattr(config, 'track_feathist', False):
+        callbacks += [FeatureHistTracker()]
+
+    if getattr(config, 'track_gradvar', False):
+        model = dino.student
+        callbacks += [GradVarTracker(model, {'enc':model.enc, 'head':model.head})]  
     
 
     if config.probe_every > 0:
@@ -181,9 +190,6 @@ def main(config:Configuration):
                                 seed = config.prober_seed
                             )]
 
-    if config.track_gradvar:
-        model = dino.student
-        callbacks += [GradVarTracker(model, {'enc':model.enc, 'head':model.head})]  
 
     if len(config.save_features) > 0:
         config.save_features = ['embeddings', 'projections', 'logits'] if 'all' in config.save_features else config.save_features

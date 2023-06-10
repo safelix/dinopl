@@ -19,6 +19,7 @@ __all__ = [
     'MetricsTracker',
     'PerCropEntropyTracker',
     'FeatureTracker',
+    'FeatureHistTracker',
     'HParamTracker',
     'ParamTracker',
     'FeatureSaver',
@@ -155,7 +156,7 @@ def batch_l2dist(x:torch.Tensor):
 
 class FeatureTracker(pl.Callback):       
     def step(self, prefix, out:Dict[str, torch.Tensor], dino:DINO):
-        logs, logs_wandb = {}, {}
+        logs = {}
         prefix += '/feat'
         for n in ['embeddings', 'projections', 'logits']:
             t_x = out['teacher'][n].flatten(0,1)     # consider crops as batches
@@ -166,10 +167,8 @@ class FeatureTracker(pl.Callback):
             for i, x in [('t', t_x), ('s', s_x)]:
                 logs[f'{prefix}/{n}/{i}_x.mean().mean()'] = x.mean(dim=0).mean()
                 logs[f'{prefix}/{n}/{i}_x.mean().std()'] = x.mean(dim=0).std()
-                logs_wandb[f'{prefix}/{n}/{i}_x.mean().hist()'] = wandb_histogram(x.mean(dim=0), 64)
                 logs[f'{prefix}/{n}/{i}_x.std().mean()'] = x.std(dim=0).mean()
                 logs[f'{prefix}/{n}/{i}_x.std().std()'] = x.std(dim=0).std()
-                logs_wandb[f'{prefix}/{n}/{i}_x.std().hist()'] = wandb_histogram(x.std(dim=0), 64)
                 logs[f'{prefix}/{n}/{i}_x.rank()'] = matrix_rank(x)
 
                 pc_sigma = matrix_pca(x)
@@ -182,32 +181,70 @@ class FeatureTracker(pl.Callback):
                 cossim = batch_cossim(x)
                 cossim_triu = cossim[torch.triu_indices(*cossim.shape, offset=1).unbind()] # upper triangular values
                 logs[f'{prefix}/{n}/{i}_x.corr().mean()'] = cossim_triu.mean()
-                logs_wandb[f'{prefix}/{n}/{i}_x.corr().hist()'] = wandb_histogram(cossim_triu, 64)
                 logs[f'{prefix}/{n}/{i}_x.corr().rank()'] = matrix_rank(cossim, hermitian=True)
                 
                 # within batch l2 distance
                 l2dist = batch_l2dist(x)
                 l2dist_triu = l2dist[torch.triu_indices(*l2dist.shape, offset=1).unbind()] # upper triangular values
                 logs[f'{prefix}/{n}/{i}_x.pdist().mean()'] = l2dist_triu.mean()
-                logs_wandb[f'{prefix}/{n}/{i}_x.pdist().hist()'] = wandb_histogram(l2dist_triu, 64)
 
             # between student and teacher
             l2dist = (t_x - s_gx).norm(dim=-1)
             logs[f'{prefix}/{n}/l2(t_x,s_x).mean()'] = l2dist.mean()
-            logs_wandb[f'{prefix}/{n}/l2(t_x,s_x).hist()'] = wandb_histogram(l2dist, 64)
 
             rmse = (t_x - s_gx).square().mean(dim=-1).sqrt()
             logs[f'{prefix}/{n}/rmse(t_x,s_x).mean()'] = rmse.mean()
-            logs_wandb[f'{prefix}/{n}/rmse(t_x,s_x).hist()'] = wandb_histogram(rmse, 64)
 
             dot = (t_x * s_gx).sum(-1)
             cossim = dot / (t_x.norm(dim=-1) * s_gx.norm(dim=-1))
             logs[f'{prefix}/{n}/cos(t_x,s_x).mean()'] = cossim.mean()
+
+        dino.log_dict(logs)
+
+    def on_train_batch_end(self, _: pl.Trainer, dino: DINO, outputs:Dict[str, torch.Tensor], *args) -> None:
+        self.step('train', outputs, dino)
+
+    def on_validation_batch_end(self, _: pl.Trainer, dino: DINO, outputs:Dict[str, torch.Tensor], *args) -> None:
+        self.step('valid', outputs, dino)
+
+
+class FeatureHistTracker(pl.Callback):       
+    def step(self, prefix, out:Dict[str, torch.Tensor], dino:DINO):
+        logs_wandb = {}
+        prefix += '/feat'
+        for n in ['embeddings', 'projections', 'logits']:
+            t_x = out['teacher'][n].flatten(0,1)     # consider crops as batches
+            s_x = out['student'][n].flatten(0,1)     # consider crops as batches
+            s_gx = out['student'][n][:2].flatten(0,1)  # consider crops as batches
+            n = n[:5]                       # shortname for plots
+            
+            for i, x in [('t', t_x), ('s', s_x)]:
+                logs_wandb[f'{prefix}/{n}/{i}_x.mean().hist()'] = wandb_histogram(x.mean(dim=0), 64)
+                logs_wandb[f'{prefix}/{n}/{i}_x.std().hist()'] = wandb_histogram(x.std(dim=0), 64)
+
+                # within batch cosine similarity distance
+                cossim = batch_cossim(x)
+                cossim_triu = cossim[torch.triu_indices(*cossim.shape, offset=1).unbind()] # upper triangular values
+                logs_wandb[f'{prefix}/{n}/{i}_x.corr().hist()'] = wandb_histogram(cossim_triu, 64)
+                
+                # within batch l2 distance
+                l2dist = batch_l2dist(x)
+                l2dist_triu = l2dist[torch.triu_indices(*l2dist.shape, offset=1).unbind()] # upper triangular values
+                logs_wandb[f'{prefix}/{n}/{i}_x.pdist().hist()'] = wandb_histogram(l2dist_triu, 64)
+
+            # between student and teacher
+            l2dist = (t_x - s_gx).norm(dim=-1)
+            logs_wandb[f'{prefix}/{n}/l2(t_x,s_x).hist()'] = wandb_histogram(l2dist, 64)
+
+            rmse = (t_x - s_gx).square().mean(dim=-1).sqrt()
+            logs_wandb[f'{prefix}/{n}/rmse(t_x,s_x).hist()'] = wandb_histogram(rmse, 64)
+
+            dot = (t_x * s_gx).sum(-1)
+            cossim = dot / (t_x.norm(dim=-1) * s_gx.norm(dim=-1))
             logs_wandb[f'{prefix}/{n}/cos(t_x,s_x).hist()'] = wandb_histogram(cossim, 64)
 
         #logs['trainer/global_step'] = dino.global_step
         #dino.logger.experiment.log(logs)
-        dino.log_dict(logs)
         dino.logger.log_metrics(logs_wandb, step=max(dino.global_step - 1, 0)) # -1 because global step is updated just before on train_batch_end
 
     def on_train_batch_end(self, _: pl.Trainer, dino: DINO, outputs:Dict[str, torch.Tensor], *args) -> None:
@@ -215,6 +252,7 @@ class FeatureTracker(pl.Callback):
 
     def on_validation_batch_end(self, _: pl.Trainer, dino: DINO, outputs:Dict[str, torch.Tensor], *args) -> None:
         self.step('valid', outputs, dino)
+
 
 class HParamTracker(pl.Callback):  
     def on_train_batch_start(self, _:pl.Trainer, dino:DINO, *args) -> None:
