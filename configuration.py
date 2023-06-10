@@ -246,6 +246,9 @@ class Configuration(object):
                             help='Track gradient variances of model, encoder and head.')
         addons.add_argument('--track_gradvar', type=U.bool_parser, default=False,
                             help='Track gradient variances of model, encoder and head.')
+        addons.add_argument('--save_ckpt', type=str, nargs='*', default=['probe_student'],
+                            choices=['probe_student', 'kl_max'],
+                            help='Save checkpoints for specific types of metrics.')
         addons.add_argument('--save_features', type=str, nargs='*', default=[],
                             choices=['embeddings', 'projections', 'logits', 'all'],   
                             help='Save features for embeddings, projections and/or logits.')

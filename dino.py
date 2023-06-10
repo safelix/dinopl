@@ -203,16 +203,22 @@ def main(config:Configuration):
             callbacks += [ParamStatSaver(dino.student, 'student', dir=config.logdir)]
         
 
-    ckpt_callback = ModelCheckpoint(dirpath=config.logdir, monitor='probe/student', mode='max', save_last=True,
-                        filename='epoch={epoch}-step={step}-probe_student={probe/student:.3f}', auto_insert_metric_name=False)
+    ckpt_callbacks = [ModelCheckpoint(dirpath=config.logdir, monitor=None, filename='last')]
+    if 'probe_student' in config.save_ckpt:
+        ckpt_callbacks += [ModelCheckpoint(dirpath=config.logdir, monitor='probe/student', mode='max', save_last=False, # checked each epoch
+                            filename='epoch={epoch}-probe_student={probe/student:.3f}', auto_insert_metric_name=False)]
+    if 'kl_max' in config.save_ckpt:
+        ckpt_callbacks += [ModelCheckpoint(dirpath=config.logdir, monitor='train/KL', mode='max', save_last=False, every_n_train_steps=1,
+                            filename='epoch={epoch}-step={step}-kl_max={train/KL:.1e}', auto_insert_metric_name=False)]
 
+    
     # Training
     trainer = pl.Trainer(
         # training dynamics
         max_epochs=config.n_epochs,
         max_steps=config.n_steps,
         gradient_clip_val=config.clip_grad,
-        callbacks=callbacks+[ckpt_callback],
+        callbacks=callbacks+ckpt_callbacks,
         #enable_checkpointing=ckpt_callback,
         accumulate_grad_batches=getattr(config, 'batchaccum', None),
 
