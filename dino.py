@@ -93,10 +93,15 @@ def main(config:Configuration):
     dl_args = dict(
         num_workers = config.n_workers,
         pin_memory = False if config.force_cpu else True) 
-    dino_train_dl = DataLoader(dataset=dino_train_set, batch_size=config.bs_train, shuffle=True, generator=generator, **dl_args)
+    drop_last = getattr(config, 'batchaccum', None) is not None # drop last in case of gradient accumulation
+
+    dino_train_dl = DataLoader(dataset=dino_train_set, batch_size=config.bs_train, shuffle=True, generator=generator, drop_last=drop_last, **dl_args)
     dino_valid_dl = DataLoader(dataset=dino_valid_set, batch_size=config.bs_eval, **dl_args)
     probe_train_dl = DataLoader(dataset=probe_train_set, batch_size=config.bs_eval, shuffle=True, generator=torch.Generator(), **dl_args)
     probe_valid_dl = DataLoader(dataset=probe_valid_set, batch_size=config.bs_eval, **dl_args)
+    # -1 is full batch gradient descent
+    if getattr(config, 'batchaccum', None) == -1:
+        config.batchaccum = len(dino_train_dl) 
 
     # Model Setup.
     enc = get_encoder(config)()
@@ -203,6 +208,7 @@ def main(config:Configuration):
         gradient_clip_val=config.clip_grad,
         callbacks=callbacks+[ckpt_callback],
         #enable_checkpointing=ckpt_callback,
+        accumulate_grad_batches=getattr(config, 'batchaccum', None),
 
         # logging
         logger=wandb_logger,

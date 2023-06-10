@@ -124,6 +124,8 @@ class Configuration(object):
                             help='Specification of multicrop augmentation.')
         data.add_argument('--bs_train', type=int, default=64, 
                             help='Batch size for the training set.')
+        data.add_argument('--batchaccum', type=int, default=None, 
+                            help='How many batches to accumulate for one gradient update. If -1, full batch is used.')
         data.add_argument('--bs_eval', type=int, default=256, 
                             help='Batch size for valid/test set.')
         data.add_argument('--label_noise_ratio', type=float, default=0,
