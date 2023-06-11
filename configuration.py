@@ -126,6 +126,8 @@ class Configuration(object):
                             help='Batch size for the training set.')
         data.add_argument('--batchaccum', type=int, default=None, 
                             help='How many batches to accumulate for one gradient update. If -1, full batch is used.')
+        data.add_argument('--samples_per_epoch', type=int, default=None,
+                            help='Number of samples used by the dataloader per epoch.')
         data.add_argument('--bs_eval', type=int, default=256, 
                             help='Batch size for valid/test set.')
         data.add_argument('--label_noise_ratio', type=float, default=0,
@@ -246,6 +248,7 @@ class Configuration(object):
                             help='Track gradient variances of model, encoder and head.')
         addons.add_argument('--track_gradvar', type=U.bool_parser, default=False,
                             help='Track gradient variances of model, encoder and head.')
+        # specify lists as: --argument choice1 choice2
         addons.add_argument('--save_ckpt', type=str, nargs='*', default=['probe_student'],
                             choices=['probe_student', 'kl_max'],
                             help='Save checkpoints for specific types of metrics.')

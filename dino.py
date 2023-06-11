@@ -7,7 +7,7 @@ import pytorch_lightning as pl
 import torch
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, RandomSampler
 from torchinfo import summary
 from torchvision import transforms
 
@@ -95,9 +95,9 @@ def main(config:Configuration):
     dl_args = dict(
         num_workers = config.n_workers,
         pin_memory = False if config.force_cpu else True) 
-    drop_last = getattr(config, 'batchaccum', None) is not None # drop last in case of gradient accumulation
-
-    dino_train_dl = DataLoader(dataset=dino_train_set, batch_size=config.bs_train, shuffle=True, generator=generator, drop_last=drop_last, **dl_args)
+        
+    sampler = RandomSampler(dino_train_set, num_samples=config.samples_per_epoch, generator=generator)
+    dino_train_dl = DataLoader(dataset=dino_train_set, batch_size=config.bs_train, sampler=sampler, **dl_args)
     dino_valid_dl = DataLoader(dataset=dino_valid_set, batch_size=config.bs_eval, **dl_args)
     probe_train_dl = DataLoader(dataset=probe_train_set, batch_size=config.bs_eval, shuffle=True, generator=torch.Generator(), **dl_args)
     probe_valid_dl = DataLoader(dataset=probe_valid_set, batch_size=config.bs_eval, **dl_args)
