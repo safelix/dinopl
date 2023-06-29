@@ -6,6 +6,7 @@
     "hid_dims":[],
     "l2bot_dim":512,
     "l2bot_cfg": "-/-/-/-/lb/-",
+    "head_init_method": "default",
     "out_dim":512,
     "s_mode":"distillation",
     "t_mode":"no_update",

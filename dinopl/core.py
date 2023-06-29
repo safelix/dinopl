@@ -10,7 +10,7 @@ from torch.nn import functional as F
 from models import Encoder
 
 from . import utils as U
-from .modules import L2Bottleneck, MLP, init
+from .modules import L2Bottleneck, MLP, Linear
 from .scheduling import *
 from torchvision import transforms
 
@@ -74,6 +74,7 @@ class DINOHead(nn.Module):
         temp:float = 1.0,     
         cent:float = 0.0,
         cmom:float = torch.nan,
+        init_method = 'trunc_normal',
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -81,29 +82,20 @@ class DINOHead(nn.Module):
         self.temp = temp
         self.cmom = cmom
         self.register_buffer('cent', torch.full((out_dim,), cent))
+        self.init_method = init_method
 
         # multi-layer perceptron classification head
         dims = [embed_dim] + hidden_dims
         self.mlp = MLP(dims, act_fn=act_fn, use_bn=use_bn)  # build mlp
 
         if l2bot_dim is None or l2bot_dim <= 0:
-            self.last_layer = nn.Linear(dims[-1], out_dim)
+            self.last_layer = Linear(dims[-1], out_dim)
         else:
             self.last_layer = L2Bottleneck(dims[-1], l2bot_dim, out_dim, l2bot_cfg)
 
     def reset_parameters(self, generator:torch.Generator=None):
-        self.mlp.reset_parameters(method='trunc_normal', generator=generator)
-
-        if isinstance(self.last_layer, L2Bottleneck):
-            self.last_layer.reset_parameters(generator=generator)
-
-        if isinstance(self.last_layer, nn.Linear):
-            #m.reset_parameters() is equal to:
-            bound = 1 / math.sqrt(self.last_layer.in_features)
-            init.uniform_(self.last_layer.weight, -bound, bound, generator=generator)
-            if self.last_layer.bias is not None:
-                init.uniform_(self.last_layer.bias, -bound, bound, generator=generator)
-
+        self.mlp.reset_parameters(method=self.init_method, generator=generator)
+        self.last_layer.reset_parameters(method=self.init_method, generator=generator)
 
     def forward(self, x:torch.Tensor, update_cent:bool=False) -> Dict[str, torch.Tensor]:
         # [n_crops, n_batches, embed_dim]

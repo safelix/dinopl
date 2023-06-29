@@ -6,7 +6,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from . import init
+from .linear import Linear
 
 __all__ = [
     'L2Bottleneck',
@@ -52,22 +52,12 @@ class L2Bottleneck(nn.Module):
 
         self.reset_parameters()
     
-    def reset_parameters(self, generator:torch.Generator=None):
+    def reset_parameters(self, method='trunc_normal', generator:torch.Generator=None):
         if self.lin1 is not None:
-            m = self.lin1
-            init.trunc_normal_(m.weight, std=.02, generator=generator)
-            if m.bias is not None:
-                init.constant_(m.bias, 0)
+            self.lin1.reset_parameters(method, generator=generator)
 
         if self.lin2 is not None:
-            m = self.lin2
-            #m.reset_parameters() is equal to:
-            bound = 1 / sqrt(m.in_features)
-            #init.uniform_(m.weight, -bound, bound, generator=generator)
-            init.trunc_normal_(m.weight, std=.02, generator=generator)
-            if m.bias is not None:
-                #init.uniform_(m.bias, -bound, bound, generator=generator)
-                init.constant_(m.bias, 0)
+            self.lin2.reset_parameters(method=method, generator=generator)
 
 
     def forward(self, x):
@@ -85,11 +75,6 @@ class L2Bottleneck(nn.Module):
 
         return x
 
-class Linear(nn.Linear):
-    def forward(self, input: torch.Tensor, weight:torch.Tensor=None, bias:torch.Tensor=None) -> torch.Tensor:
-        weight = self.weight if weight is None else weight
-        bias = self.bias if bias is None else bias
-        return F.linear(input, self.weight, self.bias)
 
 class LpNormalize(nn.Module):
     def __init__(self, p:float = 2, dim:int = -1):

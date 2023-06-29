@@ -113,7 +113,8 @@ def main(config:Configuration):
             l2bot_dim=config.l2bot_dim, 
             l2bot_cfg=config.l2bot_cfg,
             use_bn=config.mlp_bn,
-            act_fn=config.mlp_act)
+            act_fn=config.mlp_act,
+            init_method=config.head_init_method)
     model = DINOModel(enc, head)
 
     print(f'Created encoder and head:')

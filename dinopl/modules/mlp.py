@@ -3,6 +3,7 @@ from math import sqrt
 from typing import List, Optional
 import torch
 from torch import nn
+from .linear import Linear
 from . import init
 
 __all__ = [
@@ -11,7 +12,7 @@ __all__ = [
 
 def mlp_layer(in_dim:int, out_dim:int, act_fn:str = 'GELU', use_bn:bool = False):
     sublayers = OrderedDict()
-    sublayers['lin'] = nn.Linear(in_dim, out_dim)
+    sublayers['lin'] = Linear(in_dim, out_dim)
 
     if use_bn:
         sublayers['bn'] = nn.BatchNorm1d(out_dim)
@@ -40,18 +41,8 @@ class MLP(nn.Sequential):
     
     def reset_parameters(self, method='trunc_normal', generator:torch.Generator=None):
         for m in self.modules():
-            if isinstance(m, nn.Linear):
-                if method == 'default':
-                    #m.reset_parameters() is equal to:
-                    bound = 1 / sqrt(m.in_features)
-                    init.uniform_(m.weight, -bound, bound, generator=generator)
-                    if m.bias is not None:
-                        init.uniform_(m.bias, -bound, bound, generator=generator)
-
-                if method == 'trunc_normal':
-                    init.trunc_normal_(m.weight, std=.02, generator=generator)
-                    if m.bias is not None:
-                        init.constant_(m.bias, 0)
+            if isinstance(m, Linear):
+                m.reset_parameters(method=method, generator=generator)
             
             if isinstance(m, (nn.modules.batchnorm._NormBase, nn.GroupNorm, nn.LayerNorm)):
                 if m.weight is not None:
