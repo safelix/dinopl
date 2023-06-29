@@ -5,7 +5,7 @@
     "bs_train":256,
     "hid_dims":[],
     "l2bot_dim":512,
-    "l2bot_cfg": "-\\-\\-\\-\\-\\lb",
+    "l2bot_cfg": "-/-/-/-/lb/-",
     "out_dim":512,
     "s_mode":"distillation",
     "t_mode":"no_update",
