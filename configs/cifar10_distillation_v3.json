@@ -1,0 +1,23 @@
+{
+    "dataset":"CIFAR10",
+    "mc":"1x32",
+    "tiny_input":true,
+    "bs_train":256,
+    "hid_dims":[],
+    "l2bot_dim":0,
+    "out_dim":512,
+    "s_mode":"distillation",
+    "t_mode":"no_update",
+    "t_bn_mode":"from_data",
+    "t_eval":true,
+    "t_cmom":"nan",
+    "s_cmom":"nan",
+    "t_temp":1,
+    "s_temp":1,
+    "loss":"MSE",
+    "loss_pairing":"same",
+    "opt":"sgd",
+    "opt_wd":0.0,
+    "clip_grad":0,
+    "wn_freeze_epochs":0
+}
