@@ -76,12 +76,13 @@ class AccuracyTracker(pl.Callback):
 class MetricsTracker(pl.Callback):
     def step(self, prefix, out:Dict[str, torch.Tensor], dino:DINO):
         logs = {}
+        logs[f'{prefix}/loss'] = out['loss']
         if dino.loss in ['CE', 'KL', 'H_preds']:
             logs[f'{prefix}/CE'] = out['CE']
             logs[f'{prefix}/KL'] = out['KL']
             logs[f'{prefix}/H_preds'] = out['H_preds'].mean()
             logs[f'{prefix}/H_targs'] = out['H_targs'].mean()
-        else:
+        elif dino.loss in ['MSE']:
             logs[f'{prefix}/MSE'] = out['MSE']
 
         dino.log_dict(logs)

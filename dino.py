@@ -208,9 +208,9 @@ def main(config:Configuration):
     if 'probe_student' in config.save_ckpt:
         ckpt_callbacks += [ModelCheckpoint(dirpath=config.logdir, monitor='probe/student', mode='max', save_last=False, # checked each epoch
                             filename='epoch={epoch}-probe_student={probe/student:.3f}', auto_insert_metric_name=False)]
-    if 'kl_max' in config.save_ckpt:
-        ckpt_callbacks += [ModelCheckpoint(dirpath=config.logdir, monitor='train/KL', mode='max', save_last=False, every_n_train_steps=1,
-                            filename='epoch={epoch}-step={step}-kl_max={train/KL:.1e}', auto_insert_metric_name=False)]
+    if 'loss_max' in config.save_ckpt:
+        ckpt_callbacks += [ModelCheckpoint(dirpath=config.logdir, monitor='train/loss', mode='max', save_last=False, every_n_train_steps=1,
+                            filename='epoch={epoch}-step={step}-loss_max={train/loss:.1e}', auto_insert_metric_name=False)]
 
     
     # Training
