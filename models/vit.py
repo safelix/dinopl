@@ -209,8 +209,7 @@ def vit_tiny(img_chans:int, img_size:int, patch_size:int=16, **kwargs) -> ViT:
         img_chans: Number of channels in input image.
         img_size: Square size of channels in input image.
         patch_size: Patch size for patchwise embedding.
-        preact: Construct a pre-activation resnet, default is ``False``.
-        **kwargs: parameters passed to the ``models.resnet.ResNet`` base class.
+        **kwargs: parameters passed to the ``models.vit.ViT`` base class.
     """
 
     embedder = PatchEmbedder(img_chans, img_size, patch_size, embed_dim=192)
@@ -225,8 +224,7 @@ def vit_small(img_chans:int, img_size:int, patch_size:int=16, **kwargs) -> ViT:
         img_chans: Number of channels in input image.
         img_size: Square size of channels in input image.
         patch_size: Patch size for patchwise embedding.
-        preact: Construct a pre-activation resnet, default is ``False``.
-        **kwargs: parameters passed to the ``models.resnet.ResNet`` base class.
+        **kwargs: parameters passed to the ``models.vit.ViT`` base class.
     """
 
     embedder = PatchEmbedder(img_chans, img_size, patch_size, embed_dim=384)
@@ -240,8 +238,7 @@ def vit_medium(img_chans:int, img_size:int, patch_size:int=16, **kwargs) -> ViT:
         img_chans: Number of channels in input image.
         img_size: Square size of channels in input image.
         patch_size: Patch size for patchwise embedding.
-        preact: Construct a pre-activation resnet, default is ``False``.
-        **kwargs: parameters passed to the ``models.resnet.ResNet`` base class.
+        **kwargs: parameters passed to the ``models.vit.ViT`` base class.
     """
 
     embedder = PatchEmbedder(img_chans, img_size, patch_size, embed_dim=512)
@@ -255,8 +252,7 @@ def vit_base(img_chans:int, img_size:int, patch_size:int=16, **kwargs) -> ViT:
         img_chans: Number of channels in input image.
         img_size: Square size of channels in input image.
         patch_size: Patch size for patchwise embedding.
-        preact: Construct a pre-activation resnet, default is ``False``.
-        **kwargs: parameters passed to the ``models.resnet.ResNet`` base class.
+        **kwargs: parameters passed to the ``models.vit.ViT`` base class.
     """
 
     embedder = PatchEmbedder(img_chans, img_size, patch_size, embed_dim=768)
