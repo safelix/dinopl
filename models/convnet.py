@@ -1,4 +1,4 @@
-from typing import Optional, Type
+from typing import Optional, Type, Tuple
 from math import floor
 import torch.nn as nn
 import torch
@@ -7,49 +7,71 @@ from dinopl.modules import init
 __all__ = [
     #"ConvNet",
     "convnet_16_1",
-    "convnet_16_1e",
     "convnet_16_2",
-    "convnet_16_2e",
+    "convnet_16_3",
+    "convnet_16_4",
+    "convnet_16_5",
+    "convnet_16_6",
+    "convnet_16_7",
+    "convnet_16_8",
     "convnet_32_1",
-    "convnet_32_1e",
     "convnet_32_2",
-    "convnet_32_2e",
+    "convnet_32_3",
+    "convnet_32_4",
+    "convnet_32_5",
+    "convnet_32_6",
+    "convnet_32_7",
+    "convnet_32_8",
 ]
 
 
 class ConvNet(nn.Module):
-    def __init__(self, 
-            width:int = 16, 
-            depth:int = 2, 
-            num_classes:Optional[int] = None, 
-            norm_layer:Type[nn.Module] = nn.BatchNorm2d,
+    def __init__(self,
+            widths:int = [16, 16], 
+            num_classes:Optional[int] = None,
+            act_layer: Type[nn.Module] = nn.ReLU,
+            norm_layer:Type[nn.Module] = nn.Identity,
+            pool_layer:Type[nn.Module] = nn.AvgPool2d,
+            adaptive_final_pool: bool = True,
+            img_size: Tuple[int, int] = None,
     ) -> None :
         super().__init__()
-        tail = str(depth).endswith('.5')
-        depth = floor(depth)
-        
-        # make stem
-        self.conv1 = nn.Conv2d(3, out_channels=width, kernel_size=3, padding='same')
-        self.bn1 = nn.Identity()
-        self.relu1 = nn.ReLU()
-    
+        img_size = img_size if isinstance(img_size, Tuple) or img_size is None else [img_size, img_size]
+
+        # make adaptive final layer
+        final_pool_layer = pool_layer
+        if adaptive_final_pool and issubclass(pool_layer, nn.AvgPool2d):
+            final_pool_layer = nn.AdaptiveAvgPool2d
+        if adaptive_final_pool and issubclass(pool_layer, nn.MaxPool2d):
+            final_pool_layer = nn.AdaptiveMaxPool2d
+
+        # make sequential 
         module_list = []
-        if depth > 1 or tail:
-            module_list.append(nn.MaxPool2d(2, 2))
+        widths = [3] + widths
+        for idx, (in_width, out_width) in enumerate(zip(widths[:-1], widths[1:])):
+            block_list = [
+                    nn.Conv2d(in_channels=in_width, out_channels=out_width, kernel_size=3, padding='same'),
+                    act_layer(inplace=True),
+                    norm_layer(num_features=out_width),
+                    pool_layer((2,2)) if idx < len(widths) else final_pool_layer(2,2)
+                ]
+            module_list.append(nn.Sequential(*block_list))
 
-        for _ in range(depth - 1):
-            module_list.append(nn.Conv2d(width, out_channels=width, kernel_size=3, padding='same'))
-            module_list.append(norm_layer(width))
-            module_list.append(nn.ReLU())
-
-        if tail:
-            module_list.append(nn.Conv2d(width, out_channels=width, kernel_size=3, padding='same'))
+            if img_size is not None:
+                img_size = img_size[0] // 2, img_size[2] // 2
+                
+        self.sequential = nn.Sequential(*module_list)
         
-        self.block = nn.Sequential(*module_list)
-
-        self.avgpool = nn.AdaptiveAvgPool2d((2, 2))
-        self.embed_dim:int = width * 4
-        
+        self.embed_dim:int = widths[out_width]
+        adaptive_output_size = getattr(self.sequential[-1][-1], 'output_size', None)
+        if adaptive_output_size is not None:
+            self.embed_dim *= adaptive_output_size[0] * adaptive_output_size[0]
+        elif img_size is not None:
+            self.embed_dim *= img_size[0] * img_size[1]
+        else:
+            ValueError('Either adaptive_final_pool or img_size must be specified.')
+    
+            
         self.fc = nn.Identity()
         if num_classes is not None:
             self.fc = nn.Linear(self.embed_dim, num_classes)
@@ -62,14 +84,7 @@ class ConvNet(nn.Module):
                 init.kaiming_normal_(m.weight, mode=mode, nonlinearity=nonlinearity, generator=generator)
 
     def forward(self, x):
-
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu1(x)
-
-        x = self.block(x)
-
-        x = self.avgpool(x)
+        x = self.sequential(x)
         x = torch.flatten(x, 1)  # flatten all dimensions except batch
         x = self.fc(x)
         return x
@@ -84,15 +99,7 @@ def convnet_16_1(**kwargs):
     Args:
         **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
     """
-    return ConvNet(width=16, depth=1, **kwargs)
-
-
-def convnet_16_1e(**kwargs):
-    r"""Simple ConvNet with constant width 16 and depth 1.5.
-    Args:
-        **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
-    """
-    return ConvNet(width=16, depth=1.5, **kwargs)
+    return ConvNet(widths=1*[16], **kwargs)
 
 
 def convnet_16_2(**kwargs):
@@ -100,15 +107,53 @@ def convnet_16_2(**kwargs):
     Args:
         **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
     """
-    return ConvNet(width=16, depth=2, **kwargs)
+    return ConvNet(width=2*[16], **kwargs)
 
-
-def convnet_16_2e(**kwargs):
-    r"""Simple ConvNet with constant width 16 and depth 2.
+def convnet_16_3(**kwargs):
+    r"""Simple ConvNet with constant width 16 and depth 3.
     Args:
         **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
     """
-    return ConvNet(width=16, depth=2.5, **kwargs)
+    return ConvNet(width=3*[16], **kwargs)
+
+def convnet_16_4(**kwargs):
+    r"""Simple ConvNet with constant width 16 and depth 4.
+    Args:
+        **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
+    """
+    return ConvNet(width=4*[16], **kwargs)
+
+def convnet_16_5(**kwargs):
+    r"""Simple ConvNet with constant width 16 and depth 5.
+    Args:
+        **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
+    """
+    return ConvNet(width=5*[16], **kwargs)
+
+
+def convnet_16_6(**kwargs):
+    r"""Simple ConvNet with constant width 16 and depth 6.
+    Args:
+        **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
+    """
+    return ConvNet(width=6*[16], **kwargs)
+
+
+def convnet_16_7(**kwargs):
+    r"""Simple ConvNet with constant width 16 and depth 7.
+    Args:
+        **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
+    """
+    return ConvNet(width=7*[16], **kwargs)
+
+
+def convnet_16_8(**kwargs):
+    r"""Simple ConvNet with constant width 16 and depth 8.
+    Args:
+        **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
+    """
+    return ConvNet(width=8*[16], **kwargs)
+
 
 
 ###################################################################################################
@@ -116,32 +161,64 @@ def convnet_16_2e(**kwargs):
 ###################################################################################################
 
 def convnet_32_1(**kwargs):
-    r"""Simple ConvNet with constant width 16 and depth 1.
+    r"""Simple ConvNet with constant width 32 and depth 1.
     Args:
         **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
     """
-    return ConvNet(width=32, depth=1, **kwargs)
-
-
-def convnet_32_1e(**kwargs):
-    r"""Simple ConvNet with constant width 16 and depth 1.5.
-    Args:
-        **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
-    """
-    return ConvNet(width=32, depth=1.5, **kwargs)
+    return ConvNet(width=1*[32], **kwargs)
 
 
 def convnet_32_2(**kwargs):
-    r"""Simple ConvNet with constant width 16 and depth 2.
+    r"""Simple ConvNet with constant width 32 and depth 2.
     Args:
         **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
     """
-    return ConvNet(width=32, depth=2, **kwargs)
+    return ConvNet(width=2*[32], **kwargs)
 
 
-def convnet_32_2e(**kwargs):
-    r"""Simple ConvNet with constant width 16 and depth 2.
+def convnet_32_3(**kwargs):
+    r"""Simple ConvNet with constant width 32 and depth 3.
     Args:
         **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
     """
-    return ConvNet(width=32, depth=2.5, **kwargs)
+    return ConvNet(width=3*[32], **kwargs)
+
+
+def convnet_32_4(**kwargs):
+    r"""Simple ConvNet with constant width 32 and depth 4.
+    Args:
+        **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
+    """
+    return ConvNet(width=4*[32], **kwargs)
+
+
+def convnet_32_5(**kwargs):
+    r"""Simple ConvNet with constant width 32 and depth 5.
+    Args:
+        **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
+    """
+    return ConvNet(width=5*[32], **kwargs)
+
+
+def convnet_32_6(**kwargs):
+    r"""Simple ConvNet with constant width 32 and depth 6.
+    Args:
+        **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
+    """
+    return ConvNet(width=6*[32], **kwargs)
+
+
+def convnet_32_7(**kwargs):
+    r"""Simple ConvNet with constant width 32 and depth 7.
+    Args:
+        **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
+    """
+    return ConvNet(width=7*[32], **kwargs)
+
+
+def convnet_32_8(**kwargs):
+    r"""Simple ConvNet with constant width 32 and depth 8.
+    Args:
+        **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
+    """
+    return ConvNet(width=8*[32], **kwargs)

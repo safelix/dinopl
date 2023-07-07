@@ -372,6 +372,9 @@ def get_encoder(config:Configuration) -> typing.Type[models.Encoder]:
         if 'mlp' in config.enc.lower():
             kwargs['in_numel'] = 3 * input_pixels
 
+        if 'convnet' in config.enc.lower():
+            kwargs['img_size'] = config.mc_spec[0]['out_size'] 
+
         if 'resnet' in config.enc.lower():
             kwargs['tiny_input'] = getattr(config, 'tiny_input', False)
 
