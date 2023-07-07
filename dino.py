@@ -16,6 +16,7 @@ from configuration import (Configuration, create_mc_spec, create_optimizer,
                            get_augmentations, get_dataset, get_encoder,
                            init_student_teacher)
 from datasets.targetnoise import LabelNoiseWrapper, LogitNoiseWrapper
+from datasets.stratifiedsubset import StratifiedSubset
 from dinopl import *
 from dinopl import utils as U
 from dinopl.probing import KNNAnalysis, LinearAnalysis, Prober
@@ -77,6 +78,9 @@ def main(config:Configuration):
     dino_valid_set = DSet(root=C.DATA_DIR, train=False, transform=dino_trfm)
     probe_train_set = DSet(root=C.DATA_DIR, train=True, transform=eval_trfm)
     probe_valid_set = DSet(root=C.DATA_DIR, train=False, transform=eval_trfm)
+
+    if config.n_samples is not None:
+        dino_train_set = StratifiedSubset(dino_train_set, n_samples=config.n_samples)
 
     if config.label_noise_ratio > 0 and config.logit_noise_temp > 0:
         raise RuntimeError('Only either label noise or logit noise can be applied.')

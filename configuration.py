@@ -115,13 +115,8 @@ class Configuration(object):
                             help='Datset to train on.')
         data.add_argument('--n_classes', type=int, default=None,
                             help='Number of classes. By default determined from dataset but can be overwritten for logit noise.')
-        data.add_argument('--mc', type=str, choices=[
-                                '2x128+4x96', '2x128', '1x128',
-                                '2x64+4x64', '1x64', '2x64',
-                                '2x32+4x32', '2x32', '1x32',
-                                '2x28+4x28', '2x28', '1x28'], 
-                                default='2x128+4x96',
-                            help='Specification of multicrop augmentation.')
+        data.add_argument('--n_samples', type=int, default=None,
+                            help='Number of samples used for training. Use a deterministic, stratified subset.')
         data.add_argument('--bs_train', type=int, default=64, 
                             help='Batch size for the training set.')
         data.add_argument('--batchaccum', type=int, default=None, 
@@ -139,6 +134,13 @@ class Configuration(object):
         data.add_argument('--augs', type=str, nargs='*', default=[],
                             help='Augmentation(s) to apply to Dataset. ' 
                             +'Supply multiple names as list or a string joined by \'_\'.')
+        data.add_argument('--mc', type=str, choices=[
+                                '2x128+4x96', '2x128', '1x128',
+                                '2x64+4x64', '1x64', '2x64',
+                                '2x32+4x32', '2x32', '1x32',
+                                '2x28+4x28', '2x28', '1x28'], 
+                                default='2x128+4x96',
+                            help='Specification of multicrop augmentation.')
         data.add_argument('--per_crop_augs', type=str, nargs='*', default=[],
                             help='Augmentation(s) to apply to each crop individually. ' 
                             +'Supply multiple names as list or a string joined by \'_\'.')
@@ -151,6 +153,8 @@ class Configuration(object):
                             help='Overwrite the normalization layer of the model if supported.')
         model.add_argument('--tiny_input', action='store_true', 
                             help='Adjust encoder for tiny inputs, e.g. resnet for cifar 10.')
+        model.add_argument('--head_init_method', type=str, choices=['default', 'trunc_normal'], default='trunc_normal',
+                           help='Initialization method for linear layers in head, \'default\' refers to the torch default, but DINO uses \'trunc_normal\'.')
         model.add_argument('--mlp_act', type=str, choices={'GELU', 'ReLU'}, default='GELU',
                             help='Activation function of DINOHead MLP.')
         model.add_argument('--mlp_bn', action='store_true',
@@ -161,8 +165,6 @@ class Configuration(object):
                             help='L2-Bottleneck dimension of DINOHead MLP. If 0, bottleneck is replaced by linear.')
         model.add_argument('--l2bot_cfg', type=str, default='-/lb/fn/wn/l/-',
                             help='L2-Bottleneck configuration string: \'{wn,-}/{l,lb,-}/{fn,-}/{wn,-}/{l,lb,-}/{wn,-}\'.')
-        model.add_argument('--head_init_method', type=str, choices=['default', 'trunc_normal'], default='trunc_normal',
-                           help='Initialization method for linear layers in head, \'default\' refers to the torch default, but DINO uses \'trunc_normal\'.')
         model.add_argument('--out_dim', type=int, default=65536, 
                             help='Output dimension of the DINOHead MLP.')
 
@@ -171,11 +173,11 @@ class Configuration(object):
         dino = parser.add_argument_group('DINO')
         dino.add_argument('--t_init', type=str, choices={'random', 's_ckpt', 't_ckpt'}, default='random',
                             help='Initialization of teacher, specify \'--ckpt_path\'.')
-        model.add_argument('--t_init_seed', type=int, default=None,
+        dino.add_argument('--t_init_seed', type=int, default=None,
                             help='The seed for teacher initialization, use numbers with good balance of 0 and 1 bits. None will set a new seed randomly.')
         dino.add_argument('--s_init', type=str, choices={'teacher', 's_ckpt', 't_ckpt', 'random', 'interpolated', 'neighborhood'}, default='teacher',
                             help='Initialization of student, specify \'--ckpt_path\'.')
-        model.add_argument('--s_init_seed', type=int, default=None,
+        dino.add_argument('--s_init_seed', type=int, default=None,
                             help='The seed for student initialization, use numbers with good balance of 0 and 1 bits. None will reuse teacher generator.')
         dino.add_argument('--s_init_alpha', type=float, default=0,
                             help='Alpha for interpolated random initialization of student.')
