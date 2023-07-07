@@ -112,6 +112,9 @@ def main(config:Configuration):
     # Model Setup.
     enc = get_encoder(config)()
     config.embed_dim = enc.embed_dim
+    config.out_dim = config.out_dim if config.out_dim > 0 else config.embed_dim
+    config.hid_dims = [hid_dim if hid_dim > 0 else config.embed_dim for hid_dim in config.hid_dims]
+    config.l2bot_dim = config.l2bot_dim if config.l2bot_dim > 0 else config.embed_dim
     head = DINOHead(config.embed_dim, config.out_dim, 
             hidden_dims=config.hid_dims, 
             l2bot_dim=config.l2bot_dim, 
