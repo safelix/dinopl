@@ -107,7 +107,7 @@ def convnet_16_2(**kwargs):
     Args:
         **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
     """
-    return ConvNet(width=2*[16], **kwargs)
+    return ConvNet(widths=2*[16], **kwargs)
 
 def convnet_16_3(**kwargs):
     r"""Simple ConvNet with constant width 16 and depth 3.
