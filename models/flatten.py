@@ -21,5 +21,5 @@ class Flatten(nn.Module):
     def forward(self, x):
         return torch.flatten(x, start_dim=1, end_dim=-1)
 
-def flatten(**kwargs) -> Flatten:
-    return Flatten(**kwargs)
+def flatten(n_pixels, n_channels, **kwargs) -> Flatten:
+    return Flatten(n_pixels, n_channels, **kwargs)

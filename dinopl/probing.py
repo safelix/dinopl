@@ -1,6 +1,6 @@
 from math import sqrt
 from time import time
-from typing import Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from warnings import warn
 
 import pytorch_lightning as pl
@@ -17,6 +17,9 @@ __all__ = [
     'KNNAnalysis'
     'Prober'
 ]
+
+## TODO: Support for LinearDiscriminantAnalysis
+# https://scikit-learn.org/stable/modules/array_api.html#pytorch-support
 
 class Analysis(object):
     def prepare(self, n_features:int, n_classes:int, device:torch.device=None, generator:torch.Generator=None) -> None:   
@@ -251,6 +254,10 @@ class Prober(pl.Callback):
 
     @torch.no_grad()
     def probe(self, device_enc=None, device_emb=None, verbose=True):
+        '''Args:
+            - device_enc: device to encode images, should match encoder (None defaults to cpu)
+            - device_emb: device to analyze embeddings, batches are used if possible (None defaults to device_enc)
+        '''
         device_emb = device_emb or device_enc # use encoder device for embeddings by default
 
         out = {}
@@ -292,7 +299,7 @@ class Prober(pl.Callback):
             del train_data, valid_data
 
         if verbose:
-            tqdm.write(str({key: f'{val:.3}' for key, val in out.items()}))
+            tqdm.write(' => ' + str({key: f'{val:.3}' for key, val in out.items()}))
 
         return out 
 
@@ -305,25 +312,46 @@ class Prober(pl.Callback):
             pl_module.log_dict(self.probe(pl_module.device))
 
 
+from torchvision.datasets import VisionDataset
+class ToySet(VisionDataset):
+        img_size = (1, 1)
+        ds_pixels = 1
+        ds_channels = 2
+        ds_classes = 2
+        cmean, cstd = 2.0, 1.0 # cluster mean and center
+        mean = torch.Tensor((0, 0))
+        std = torch.Tensor((sqrt(cmean**2 + cstd**2), sqrt(cmean**2 + cstd**2)))
+        def __init__(self, train: bool = True, n_samples = 100, **kwargs) -> None:
+            self.n_samples = n_samples
+
+            # generate clustered data
+            self.data = torch.cat([torch.normal(-self.cmean, self.cstd, (n_samples // 2, 2)),
+                                    torch.normal(+self.cmean, self.cstd, (n_samples // 2, 2))])
+
+            # generate cluster labels
+            self.lbls = torch.cat([torch.full((n_samples // 2,), 0),
+                                    torch.full((n_samples // 2,), 1)])
+            
+
+            super().__init__(train, **kwargs)
+        
+        def __getitem__(self, index: int) -> Any:
+            return (self.data[index] - self.mean) / self.std, self.lbls[index]
+        
+        def __len__(self) -> int:
+            return self.n_samples
+
+
 if __name__ == '__main__':
     import argparse
-    from random import shuffle
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--n_samples', type=int, default=100)
+    parser.add_argument('--train_samples', type=int, default=100)
+    parser.add_argument('--valid_samples', type=int, default=100)
     args = parser.parse_args()
 
-    # generate clustered data
-    xs = torch.cat([torch.normal(-1.0, 1.0, (args.n_samples // 2, 2)),
-                        torch.normal(+1.0, 1.0, (args.n_samples // 2, 2))])
-    lbls = torch.cat([torch.full((args.n_samples // 2,), 0),
-                        torch.full((args.n_samples // 2,), 1)])
-
-    # build data sets
-    data_set = list(zip(xs, lbls))
-    shuffle(data_set)
-    train_set = data_set[:args.n_samples // 2]
-    valid_set = data_set[args.n_samples // 2:]
+    train_set = ToySet(train=True, n_samples=args.train_samples)
+    valid_set = ToySet(train=False, n_samples=args.valid_samples)
 
     # prepare dataloaders
     train_dl = DataLoader(dataset=train_set, shuffle=True, batch_size=10)
