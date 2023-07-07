@@ -62,7 +62,7 @@ class ConvNet(nn.Module):
                 
         self.sequential = nn.Sequential(*module_list)
         
-        self.embed_dim:int = widths[out_width]
+        self.embed_dim:int = widths[-1]
         adaptive_output_size = getattr(self.sequential[-1][-1], 'output_size', None)
         if adaptive_output_size is not None:
             self.embed_dim *= adaptive_output_size[0] * adaptive_output_size[1]
