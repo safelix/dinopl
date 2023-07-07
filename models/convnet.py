@@ -58,14 +58,14 @@ class ConvNet(nn.Module):
             module_list.append(nn.Sequential(*block_list))
 
             if img_size is not None:
-                img_size = img_size[0] // 2, img_size[2] // 2
+                img_size = img_size[0] // 2, img_size[1] // 2
                 
         self.sequential = nn.Sequential(*module_list)
         
         self.embed_dim:int = widths[out_width]
         adaptive_output_size = getattr(self.sequential[-1][-1], 'output_size', None)
         if adaptive_output_size is not None:
-            self.embed_dim *= adaptive_output_size[0] * adaptive_output_size[0]
+            self.embed_dim *= adaptive_output_size[0] * adaptive_output_size[1]
         elif img_size is not None:
             self.embed_dim *= img_size[0] * img_size[1]
         else:
