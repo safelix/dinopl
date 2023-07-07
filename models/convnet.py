@@ -114,21 +114,21 @@ def convnet_16_3(**kwargs):
     Args:
         **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
     """
-    return ConvNet(width=3*[16], **kwargs)
+    return ConvNet(widths=3*[16], **kwargs)
 
 def convnet_16_4(**kwargs):
     r"""Simple ConvNet with constant width 16 and depth 4.
     Args:
         **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
     """
-    return ConvNet(width=4*[16], **kwargs)
+    return ConvNet(widths=4*[16], **kwargs)
 
 def convnet_16_5(**kwargs):
     r"""Simple ConvNet with constant width 16 and depth 5.
     Args:
         **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
     """
-    return ConvNet(width=5*[16], **kwargs)
+    return ConvNet(widths=5*[16], **kwargs)
 
 
 def convnet_16_6(**kwargs):
@@ -136,7 +136,7 @@ def convnet_16_6(**kwargs):
     Args:
         **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
     """
-    return ConvNet(width=6*[16], **kwargs)
+    return ConvNet(widths=6*[16], **kwargs)
 
 
 def convnet_16_7(**kwargs):
@@ -144,7 +144,7 @@ def convnet_16_7(**kwargs):
     Args:
         **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
     """
-    return ConvNet(width=7*[16], **kwargs)
+    return ConvNet(widths=7*[16], **kwargs)
 
 
 def convnet_16_8(**kwargs):
@@ -152,7 +152,7 @@ def convnet_16_8(**kwargs):
     Args:
         **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
     """
-    return ConvNet(width=8*[16], **kwargs)
+    return ConvNet(widths=8*[16], **kwargs)
 
 
 
@@ -165,7 +165,7 @@ def convnet_32_1(**kwargs):
     Args:
         **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
     """
-    return ConvNet(width=1*[32], **kwargs)
+    return ConvNet(widths=1*[32], **kwargs)
 
 
 def convnet_32_2(**kwargs):
@@ -173,7 +173,7 @@ def convnet_32_2(**kwargs):
     Args:
         **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
     """
-    return ConvNet(width=2*[32], **kwargs)
+    return ConvNet(widths=2*[32], **kwargs)
 
 
 def convnet_32_3(**kwargs):
@@ -181,7 +181,7 @@ def convnet_32_3(**kwargs):
     Args:
         **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
     """
-    return ConvNet(width=3*[32], **kwargs)
+    return ConvNet(widths=3*[32], **kwargs)
 
 
 def convnet_32_4(**kwargs):
@@ -189,7 +189,7 @@ def convnet_32_4(**kwargs):
     Args:
         **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
     """
-    return ConvNet(width=4*[32], **kwargs)
+    return ConvNet(widths=4*[32], **kwargs)
 
 
 def convnet_32_5(**kwargs):
@@ -197,7 +197,7 @@ def convnet_32_5(**kwargs):
     Args:
         **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
     """
-    return ConvNet(width=5*[32], **kwargs)
+    return ConvNet(widths=5*[32], **kwargs)
 
 
 def convnet_32_6(**kwargs):
@@ -205,7 +205,7 @@ def convnet_32_6(**kwargs):
     Args:
         **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
     """
-    return ConvNet(width=6*[32], **kwargs)
+    return ConvNet(widths=6*[32], **kwargs)
 
 
 def convnet_32_7(**kwargs):
@@ -213,7 +213,7 @@ def convnet_32_7(**kwargs):
     Args:
         **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
     """
-    return ConvNet(width=7*[32], **kwargs)
+    return ConvNet(widths=7*[32], **kwargs)
 
 
 def convnet_32_8(**kwargs):
@@ -221,4 +221,4 @@ def convnet_32_8(**kwargs):
     Args:
         **kwargs: parameters passed to the ``models.convnet.ConvNet`` base class.
     """
-    return ConvNet(width=8*[32], **kwargs)
+    return ConvNet(widths=8*[32], **kwargs)
