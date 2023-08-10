@@ -51,7 +51,7 @@ class LinearAnalysis(Analysis):
 
         self.clf = nn.Linear(n_features, n_classes)
         self.opt = AdamW(self.clf.parameters())
-        self.acc = Accuracy(task='binary', num_classes=n_classes)
+        self.acc = Accuracy(task='multiclass', num_classes=n_classes)
         if device and device.type == 'cuda':
             self.clf = self.clf.to(device=device)
             self.acc = self.acc.to(device=device)

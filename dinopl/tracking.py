@@ -30,8 +30,8 @@ __all__ = [
 
 class AccuracyTracker(pl.Callback):
     def __init__(self, n_classes, supervised=True, logit_targets=False) -> None:
-        self.s_train_acc = Accuracy(task='binary', num_classes=n_classes)
-        self.s_valid_acc = Accuracy(task='binary', num_classes=n_classes)
+        self.s_train_acc = Accuracy(task='multiclass', num_classes=n_classes)
+        self.s_valid_acc = Accuracy(task='multiclass', num_classes=n_classes)
         self.supervised = supervised
         self.logit_targets = logit_targets
 
@@ -46,7 +46,7 @@ class AccuracyTracker(pl.Callback):
         if self.supervised and self.logit_targets: # gaussian logits -> labels
             targets = F.softmax(targets, dim=-1).argmax(dim=-1)
 
-        # compute average probabilities over all crops
+        # compute average probabilities over all crops, acc takes logits or probas
         probas = F.softmax(out['student']['logits'], dim=-1).mean(dim=0)
         s_acc = self.s_train_acc(probas, targets)
         dino.log('train/s_acc', s_acc, on_step=True, on_epoch=False)

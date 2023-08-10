@@ -180,8 +180,8 @@ def train(train_epochs, model:Encoder, train_dl:DataLoader, valid_dl:DataLoader,
     
     # Train Loop
     best_acc = 0
-    train_acc = Accuracy(task='binary', num_classes=args['n_classes']).to(device)
-    valid_acc = Accuracy(task='binary', num_classes=args['n_classes']).to(device)
+    train_acc = Accuracy(task='multiclass', num_classes=args['n_classes']).to(device)
+    valid_acc = Accuracy(task='multiclass', num_classes=args['n_classes']).to(device)
     while epoch < train_epochs:
         
         # Training Epoch
