@@ -114,7 +114,7 @@ class KNNAnalysis(Analysis):
         import faiss.contrib.torch_utils
 
         self.index = faiss.IndexFlat(n_features)
-        self.acc = Accuracy(taks='binary', num_classes=n_classes)
+        self.acc = Accuracy(task='multiclass', num_classes=n_classes)
         if device and device.type == 'cuda':
             res = faiss.StandardGpuResources()
             self.index = faiss.index_cpu_to_gpu(res, device.index, self.index)
