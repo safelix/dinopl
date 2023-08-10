@@ -162,7 +162,7 @@ def main(config:Configuration):
             ParamTracker(dino.student, dino.teacher, track_init=True),
             ParamTracker(dino.student.head, dino.teacher.head, 'head', True),
             ParamTracker(dino.student.enc, dino.teacher.enc, 'enc', True),
-            AccuracyTracker(n_classes=config.n_classes, 
+            AccuracyTracker(n_classes=config.out_dim, # pseudo label accuracy
                             supervised=(config.s_mode=='supervised'), 
                             logit_targets=(config.logit_noise_temp > 0))
         ]
