@@ -29,9 +29,9 @@ __all__ = [
 # https://lightning.ai/docs/pytorch/stable/common/lightning_module.html#hooks
 
 class AccuracyTracker(pl.Callback):
-    def __init__(self, supervised, logit_targets) -> None:
-        self.s_train_acc = Accuracy()
-        self.s_valid_acc = Accuracy()
+    def __init__(self, n_classes, supervised=True, logit_targets=False) -> None:
+        self.s_train_acc = Accuracy(task='binary', num_classes=n_classes)
+        self.s_valid_acc = Accuracy(task='binary', num_classes=n_classes)
         self.supervised = supervised
         self.logit_targets = logit_targets
 
@@ -40,10 +40,10 @@ class AccuracyTracker(pl.Callback):
         batch, targets = batch
         self.s_train_acc.to(dino.device)
 
-        if not self.supervised:
+        if not self.supervised: # teacher logits -> probas -> mean over crops -> labels 
             targets = F.softmax(out['teacher']['logits'], dim=-1).mean(dim=0).argmax(dim=-1)
 
-        if self.supervised and self.logit_targets:
+        if self.supervised and self.logit_targets: # gaussian logits -> labels
             targets = F.softmax(targets, dim=-1).argmax(dim=-1)
 
         # compute average probabilities over all crops

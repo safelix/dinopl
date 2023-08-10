@@ -51,7 +51,7 @@ class LinearAnalysis(Analysis):
 
         self.clf = nn.Linear(n_features, n_classes)
         self.opt = AdamW(self.clf.parameters())
-        self.acc = Accuracy()
+        self.acc = Accuracy(task='binary', num_classes=n_classes)
         if device and device.type == 'cuda':
             self.clf = self.clf.to(device=device)
             self.acc = self.acc.to(device=device)
@@ -114,7 +114,7 @@ class KNNAnalysis(Analysis):
         import faiss.contrib.torch_utils
 
         self.index = faiss.IndexFlat(n_features)
-        self.acc = Accuracy()
+        self.acc = Accuracy(taks='binary', num_classes=n_classes)
         if device and device.type == 'cuda':
             res = faiss.StandardGpuResources()
             self.index = faiss.index_cpu_to_gpu(res, device.index, self.index)

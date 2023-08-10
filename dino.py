@@ -162,7 +162,8 @@ def main(config:Configuration):
             ParamTracker(dino.student, dino.teacher, track_init=True),
             ParamTracker(dino.student.head, dino.teacher.head, 'head', True),
             ParamTracker(dino.student.enc, dino.teacher.enc, 'enc', True),
-            AccuracyTracker(supervised=(config.s_mode=='supervised'), 
+            AccuracyTracker(n_classes=config.n_classes, 
+                            supervised=(config.s_mode=='supervised'), 
                             logit_targets=(config.logit_noise_temp > 0))
         ]
     wandb_logger.experiment.define_metric('train/s_acc', summary='max')
