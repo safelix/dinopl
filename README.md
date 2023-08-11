@@ -4,9 +4,9 @@ This repo provides a pytorch-lightning implementation of self-distillation with 
 
 ### Installation
 
-Currently tested with `python==3.8.5`, `torch==1.13.0+cu117`:
+Currently tested with `python==3.8.5`, `torch==2.0.0+cu117`:
 ```
-pip install torch==1.13.0+cu117 torchvision==0.14.0+cu117 torchaudio==0.13.0 --extra-index-url https://download.pytorch.org/whl/cu117
+pip install torch==2.0.0+cu117 torchvision==0.15.1+cu117 torchaudio==2.0.1 --index-url https://download.pytorch.org/whl/cu117
 ```
 Install with `pip install -e .[all]`. Use `pip install -e .` to only install the core dependencies, `[tracking]` for advanced tracking functionality and `[notebook]` to run notebooks with results.
 

@@ -466,10 +466,10 @@ def create_optimizer(config:Configuration) -> torch.optim.Optimizer:
     config.opt = config.opt.lower()
 
     if config.opt == 'adamw':
-        return (lambda *args, **kwargs: torch.optim.AdamW(*args, betas=(config.opt_beta1, config.opt_beta2), **kwargs))
+        return (lambda *args, **kwargs: torch.optim.AdamW(*args, betas=(config.opt_beta1, config.opt_beta2), foreach=False, **kwargs)) # TODO: pytorch 2.0 uses foreach to accelerate by default
 
     if config.opt == 'adam':
-        return (lambda *args, **kwargs: torch.optim.Adam(*args, betas=(config.opt_beta1, config.opt_beta2), **kwargs))
+        return (lambda *args, **kwargs: torch.optim.Adam(*args, betas=(config.opt_beta1, config.opt_beta2), foreach=False, **kwargs)) # TODO: pytorch 2.0 uses foreach to accelerate by default
 
     if config.opt == 'sgd':
         return (lambda *args, **kwargs: torch.optim.SGD(*args, momentum=config.opt_mom, **kwargs))
