@@ -4,7 +4,11 @@ This repo provides a pytorch-lightning implementation of self-distillation with 
 
 ### Installation
 
-Install with `pip install -e .[all]`. Currently tested with `python==3.8.5`, `torch==1.13.0+cu117`. Use `pip install -e .` to only install the core dependencies, `[tracking]` for advanced tracking functionality and `[notebook]` to run notebooks with results.
+Currently tested with `python==3.8.5`, `torch==1.13.0+cu117`:
+```
+pip install torch==1.13.0+cu117 torchvision==0.14.0+cu117 torchaudio==0.13.0 --extra-index-url https://download.pytorch.org/whl/cu117
+```
+Install with `pip install -e .[all]`. Use `pip install -e .` to only install the core dependencies, `[tracking]` for advanced tracking functionality and `[notebook]` to run notebooks with results.
 
 Specify data and results path in environment `DINO_DATA` `DINO_RESULTS` variables, e.g. by adding to your .bashrc
 ```
