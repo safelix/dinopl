@@ -46,6 +46,8 @@ class LinearAnalysis(Analysis):
         self.acc = None
         self.device = torch.device('cpu')
 
+    @torch.inference_mode(False)
+    @torch.no_grad() 
     def prepare(self, n_features:int, n_classes:int, device:torch.device=None, generator:torch.Generator=None):   
         from .modules import init
 
@@ -63,6 +65,8 @@ class LinearAnalysis(Analysis):
         if self.clf.bias is not None:
             init.uniform_(self.clf.bias, -bound, bound, generator=generator)
 
+    @torch.inference_mode(False)
+    @torch.no_grad()
     def train(self, train_data:List[Tuple[torch.Tensor, torch.Tensor]], verbose=True):
         self.clf.train()
         train_pbar = tqdm(range(self.n_epochs), leave=False)
@@ -156,7 +160,7 @@ class KNNAnalysis(Analysis):
         self.acc = None
         self.device = torch.device('cpu')
 
-@torch.no_grad()
+@torch.inference_mode()
 def load_data(encoder:nn.Module, dl:DataLoader, device:torch.device=None):
     loading_pbar = tqdm(dl, leave=False)
     loading_pbar.set_description(f'Loading embeddings')
@@ -181,7 +185,7 @@ def load_data(encoder:nn.Module, dl:DataLoader, device:torch.device=None):
     encoder.train(mode)
     return data
 
-@torch.no_grad()
+@torch.inference_mode()
 def normalize_data(train_data:List[Tuple[torch.Tensor, torch.Tensor]], 
                     valid_data:List[Tuple[torch.Tensor, torch.Tensor]]):
 
@@ -228,7 +232,7 @@ class Prober(pl.Callback):
         self.probe_every = probe_every
         self.seed = seed 
     
-    @torch.no_grad()
+    @torch.inference_mode()
     def eval_probe(self, train_data:List[Tuple[torch.Tensor, torch.Tensor]], 
                             valid_data:List[Tuple[torch.Tensor, torch.Tensor]], device=None):
 
@@ -252,7 +256,7 @@ class Prober(pl.Callback):
 
         return accs
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def probe(self, device_enc=None, device_emb=None, verbose=True):
         '''Args:
             - device_enc: device to encode images, should match encoder (None defaults to cpu)

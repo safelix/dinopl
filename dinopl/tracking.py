@@ -58,16 +58,17 @@ class AccuracyTracker(pl.Callback):
         batch, targets = batch
         self.s_valid_acc.to(dino.device)
 
-        if not self.supervised:
+        if not self.supervised: # teacher logits -> probas -> mean over crops -> labels 
             targets = F.softmax(out['teacher']['logits'], dim=-1).mean(dim=0).argmax(dim=-1)
 
-        if self.supervised and self.logit_targets:
+        if self.supervised and self.logit_targets: # gaussian logits -> labels
             targets = F.softmax(targets, dim=-1).argmax(dim=-1)
         
-        # compute average probabilities over all crops
+        # compute average probabilities over all crops, acc takes logits or probas
         probas = F.softmax(out['student']['logits'], dim=-1).mean(dim=0)
         self.s_valid_acc.update(probas, targets)
     
+    @torch.inference_mode(False) # reset needs to be done outside of InferenceMode
     def on_validation_epoch_end(self, _: pl.Trainer, dino:DINO, *args):
         dino.log('valid/s_acc', self.s_valid_acc.compute(), on_step=False, on_epoch=True)
         self.s_valid_acc.reset()

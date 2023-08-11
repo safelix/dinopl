@@ -47,7 +47,7 @@ def main(config:Configuration):
         )
 
     # store into logging directory
-    config.logdir = os.path.join(C.RESULTS_DIR, wandb_logger.name, wandb_logger.version)
+    config.logdir = os.path.join(C.RESULTS_DIR, wandb_logger.experiment.project, wandb_logger.experiment.id)
     os.makedirs(config.logdir, exist_ok=True)
     config.to_json(os.path.join(config.logdir, 'config.json'))
     print(f'Logging Directory: {config.logdir}')
@@ -219,7 +219,7 @@ def main(config:Configuration):
     if 'loss_max' in config.save_ckpt:
         ckpt_callbacks += [ModelCheckpoint(dirpath=config.logdir, monitor='train/loss', mode='max', save_last=False, every_n_train_steps=1,
                             filename='epoch={epoch}-step={step}-loss_max={train/loss:.1e}', auto_insert_metric_name=False)]
-    callbacks += [EarlyStopping(monitor='train/loss', min_delta=float('inf'), check_finite=True)]
+    #callbacks += [EarlyStopping(monitor='train/loss', min_delta=float('inf'), check_finite=True)]
 
     # Training
     trainer = pl.Trainer(
@@ -239,11 +239,11 @@ def main(config:Configuration):
         # acceleration
         accelerator='cpu' if config.force_cpu else 'gpu',
         devices=devices,
-        auto_select_gpus=False,
 
         # performance
         benchmark=True,
         deterministic=False,
+        inference_mode=True, # makes tracking in validation mode difficult 
 
         # debugging
         #limit_train_batches=2,

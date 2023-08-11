@@ -1,5 +1,5 @@
 import math
-from typing import Any, Dict, List, Type, Union
+from typing import Any, Dict, List, Optional, Type, Union
 
 import pytorch_lightning as pl
 import torch
@@ -469,8 +469,8 @@ class DINO(pl.LightningModule):
 
 
     # Set gradients to `None` instead of zero to improve performance.
-    def optimizer_zero_grad(self, epoch, batch_idx, opt:torch.optim.Optimizer, optimizer_idx):
-        opt.zero_grad(set_to_none=True)
+    def optimizer_zero_grad(self, epoch: int, batch_idx: int, optimizer: optim.Optimizer) -> None:
+        optimizer.zero_grad(set_to_none=True)
 
     def on_before_optimizer_step(self, *args):
         if self.current_epoch < self.wn_freeze_epochs:

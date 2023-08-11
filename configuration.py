@@ -119,7 +119,7 @@ class Configuration(object):
                             help='Number of samples used for training. Use a deterministic, stratified subset.')
         data.add_argument('--bs_train', type=int, default=64, 
                             help='Batch size for the training set.')
-        data.add_argument('--batchaccum', type=int, default=None, 
+        data.add_argument('--batchaccum', type=int, default=1, 
                             help='How many batches to accumulate for one gradient update. If -1, full batch is used.')
         data.add_argument('--samples_per_epoch', type=int, default=None,
                             help='Number of samples used by the dataloader per epoch.')

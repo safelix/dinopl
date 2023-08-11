@@ -186,8 +186,8 @@ class Scheduler(pl.Callback):
             loc[key] = sched(step)
 
     def on_fit_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):
-        trainer.reset_train_dataloader() # load train dataloader
-        steps_per_epoch = len(trainer.train_dataloader.loaders) / trainer.accumulate_grad_batches
+        trainer.fit_loop.setup_data() # load train dataloader -> get len(loader) == trainer.num_training_batches
+        steps_per_epoch = len(trainer.train_dataloader) / trainer.accumulate_grad_batches
         if round(steps_per_epoch) != steps_per_epoch:
             raise ValueError('Currently, the batch accumulation factor must devide number of batches.')
         self.prep(trainer.max_steps, trainer.max_epochs, int(steps_per_epoch))
