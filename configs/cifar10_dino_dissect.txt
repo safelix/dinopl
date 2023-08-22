@@ -1,0 +1,12 @@
+0. Original DINO
+1. Freeze Teacher & Unfreeze WN layer & AdamW Defaults, t_eval
+2. Remove Per Crop Augmentations
+3. Remove Multicrop and Augmentations
+4. Remove Centering, Sharpening, Weight Decay
+
+5. Ablate Normalizing Layers
+6. Ablate L2-Bottleneck
+7. Ablate Output dimension
+8. Ablate Optimizer (SGD vs Adam)
+
+10. Learning from Random Labels / Guillotine Regularization
