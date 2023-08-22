@@ -282,7 +282,7 @@ class DINO(pl.LightningModule):
         self.optimizer = opt([
             {'params':[p for n,p in params if not U.is_bias(n,p)]},
             {'params':[p for n,p in params if U.is_bias(n,p)]}],
-            lr=float('inf')) # learning rate will be overwritten by scheduler
+            lr=float('inf')) # learning rate will be overwritten by scheduler TODO: we could use torch.optim.optimizer.required
         
         if opt_lr is not None:
             self.scheduler.add(self.optimizer.param_groups[0], 'lr', opt_lr)
