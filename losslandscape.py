@@ -20,8 +20,7 @@ from torchvision import transforms
 from tqdm import tqdm
 
 import dinopl.utils as U
-from configuration import (Configuration, create_mc_spec, get_dataset,
-                           get_encoder, init_student_teacher)
+from configuration import Configuration, load_config, load_model, get_dataset
 from dinopl import DINO, DINOHead, DINOModel
 from dinopl import MultiCrop
 from dinopl.probing import KNNAnalysis, LinearAnalysis, Prober, normalize_data
@@ -93,15 +92,6 @@ class ParamProjector():
             return self.map(inp, is_position)
         raise ValueError('Cannot infer whether to project or map input.')
 
-def load_config(identifier:str) -> Configuration:
-    if ':' in identifier:
-        ckpt_path, name = identifier.split(':')
-    else:
-        ckpt_path, name = identifier, ''
-    config =  Configuration.from_json(os.path.join(os.path.dirname(ckpt_path), 'config.json'))
-    config.mc_spec = create_mc_spec(config)
-    return config
-
 def load_data(identifier:str, batchsize:int, num_workers:int, pin_memory:bool) -> Tuple[DataLoader, DataLoader]:
     ckpt_path = identifier.split(':')[0] if ':' in identifier else identifier
     config = load_config(ckpt_path)
@@ -118,49 +108,6 @@ def load_data(identifier:str, batchsize:int, num_workers:int, pin_memory:bool) -
     train_dl = DataLoader(dataset=train_ds, batch_size=batchsize, num_workers=num_workers, pin_memory=pin_memory)
     valid_dl = DataLoader(dataset=valid_ds, batch_size=batchsize, num_workers=num_workers, pin_memory=pin_memory)
     return train_dl, valid_dl
-
-def load_model(identifier:str) -> Union[DINO, DINOModel]:
-    if ':' in identifier:
-        ckpt_path, name = identifier.split(':')
-    else:
-        ckpt_path, name = identifier, ''
-    config = load_config(ckpt_path)
-
-    # get configuration and prepare model
-    enc = get_encoder(config)()
-    config.embed_dim = enc.embed_dim
-    head = DINOHead(config.embed_dim, config.out_dim, 
-        hidden_dims=config.hid_dims, 
-        l2bot_dim=config.l2bot_dim, 
-        l2bot_cfg=config.l2bot_cfg,
-        use_bn=config.mlp_bn,
-        act_fn=config.mlp_act)
-    student = DINOModel(enc, head)
-    teacher = copy.deepcopy(student)
-
-    # load DINO checkpoint
-    dino = DINO.load_from_checkpoint(ckpt_path, map_location='cpu', mc_spec=config.mc_spec, student=student, teacher=teacher)
-    
-    # init if required by .init suffix
-    if 'init' in name:
-        student, teacher = init_student_teacher(config, student)
-        dino.student = student
-        dino.teacher = teacher
-
-    if 'enc' in name:
-        for model in [dino.student, dino.teacher]:
-            model.head.cent.data = model.head.cent[:model.embed_dim]
-            model.head.mlp = torch.nn.Identity()
-            model.head.last_layer = torch.nn.Identity()
-
-    if name.startswith('teacher'):
-        return dino.teacher
-    
-    if name.startswith('student'):
-        return dino.student
-
-    return dino
-
 
 def update_losses(student_out, teacher_out, losses):
     preds, targs = student_out['logits'], teacher_out['logits']

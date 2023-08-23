@@ -10,11 +10,10 @@ from torch.nn.utils import prune
 from torchmetrics import Accuracy
 from tqdm import tqdm
 
-from configuration import Configuration
+from configuration import Configuration, load_model, load_config
 import dinopl.utils as U
 import wandb
 from dinopl import DINO, DINOHead, DINOModel, probing
-from losslandscape import load_model, load_config
 from models import Encoder
 import datasets
 from torchvision import transforms
