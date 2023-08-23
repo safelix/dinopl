@@ -22,7 +22,7 @@ import torch
 import dinopl.utils as U
 import models
 import datasets
-from dinopl import DINO, DINOModel
+from dinopl import DINO, DINOModel, DINOHead
 from dinopl.scheduling import *
 import torchvision
 
@@ -608,3 +608,53 @@ def create_mc_spec(config:Configuration):
 
     raise RuntimeError('Unkown multicrop name.')
 
+def load_config(identifier:str) -> Configuration:
+    if ':' in identifier:
+        ckpt_path, name = identifier.split(':')
+    else:
+        ckpt_path, name = identifier, ''
+    config =  Configuration.from_json(os.path.join(os.path.dirname(ckpt_path), 'config.json'))
+    config.mc_spec = create_mc_spec(config)
+    return config
+
+def load_model(identifier:str) -> typing.Union[DINO, DINOModel]:
+    if ':' in identifier:
+        ckpt_path, name = identifier.split(':')
+    else:
+        ckpt_path, name = identifier, ''
+    config = load_config(ckpt_path)
+
+    # get configuration and prepare model
+    enc = get_encoder(config)()
+    config.embed_dim = enc.embed_dim
+    head = DINOHead(config.embed_dim, config.out_dim, 
+        hidden_dims=config.hid_dims, 
+        l2bot_dim=config.l2bot_dim, 
+        l2bot_cfg=config.l2bot_cfg,
+        use_bn=config.mlp_bn,
+        act_fn=config.mlp_act)
+    student = DINOModel(enc, head)
+    teacher = copy.deepcopy(student)
+
+    # load DINO checkpoint
+    dino = DINO.load_from_checkpoint(ckpt_path, map_location='cpu', mc_spec=config.mc_spec, student=student, teacher=teacher)
+    
+    # init if required by .init suffix
+    if 'init' in name:
+        student, teacher = init_student_teacher(config, student)
+        dino.student = student
+        dino.teacher = teacher
+
+    if 'enc' in name:
+        for model in [dino.student, dino.teacher]:
+            model.head.cent.data = model.head.cent[:model.embed_dim]
+            model.head.mlp = torch.nn.Identity()
+            model.head.last_layer = torch.nn.Identity()
+
+    if name.startswith('teacher'):
+        return dino.teacher
+    
+    if name.startswith('student'):
+        return dino.student
+
+    return dino
