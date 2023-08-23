@@ -618,6 +618,14 @@ def load_config(identifier:str) -> Configuration:
     return config
 
 def load_model(identifier:str) -> typing.Union[DINO, DINOModel]:
+    ''' Load the DINO model using the checkpoint path.
+    Optionally access specific parts of the model by appending `:` followed by a combination of
+        - `teacher` (to access only teacher)
+        - `student` (to access only teacher)
+        - `init`    (to revert model to its initialization)
+        - `enc`     (to remove mlp and last_layer)
+    '''
+
     if ':' in identifier:
         ckpt_path, name = identifier.split(':')
     else:
@@ -650,11 +658,11 @@ def load_model(identifier:str) -> typing.Union[DINO, DINOModel]:
             model.head.cent.data = model.head.cent[:model.embed_dim]
             model.head.mlp = torch.nn.Identity()
             model.head.last_layer = torch.nn.Identity()
-
-    if name.startswith('teacher'):
+        
+    if 'teacher' in name and 'student' not in name:
         return dino.teacher
     
-    if name.startswith('student'):
+    if 'student' in name and 'teacher' not in name:
         return dino.student
 
     return dino
