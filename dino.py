@@ -219,6 +219,9 @@ def main(config:Configuration):
     if 'loss_max' in config.save_ckpt:
         ckpt_callbacks += [ModelCheckpoint(dirpath=config.logdir, monitor='train/loss', mode='max', save_last=False, every_n_train_steps=1,
                             filename='epoch={epoch}-step={step}-loss_max={train/loss:.1e}', auto_insert_metric_name=False)]
+    if 'rank_min' in config.save_ckpt:
+        ckpt_callbacks += [ModelCheckpoint(dirpath=config.logdir, monitor='train/feat/embed/s_x.rank()', mode='min', save_last=False, every_n_train_steps=1,
+                            filename='epoch={epoch}-step={step}-rank_min={train/feat/embed/s_x.rank()}', auto_insert_metric_name=False)]
     #callbacks += [EarlyStopping(monitor='train/loss', min_delta=float('inf'), check_finite=True)]
 
     # Training
