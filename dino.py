@@ -210,9 +210,10 @@ def main(config:Configuration):
             callbacks += [ParamStatSaver(dino.teacher, 'teacher', dir=config.logdir)]
         if 'student' in config.save_paramstats:
             callbacks += [ParamStatSaver(dino.student, 'student', dir=config.logdir)]
-        
+    
+    ckpt_callbacks = []
     if 'none' not in config.save_ckpt:
-        ckpt_callbacks = [ModelCheckpoint(dirpath=config.logdir, monitor=None, filename='last')]
+        ckpt_callbacks += [ModelCheckpoint(dirpath=config.logdir, monitor=None, filename='last')]
         if 'probe_student' in config.save_ckpt:
             ckpt_callbacks += [ModelCheckpoint(dirpath=config.logdir, monitor='probe/student', mode='max', save_last=False, # checked each epoch
                                 filename='epoch={epoch}-probe_student={probe/student:.3f}', auto_insert_metric_name=False)]
