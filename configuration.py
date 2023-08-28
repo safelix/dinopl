@@ -254,7 +254,7 @@ class Configuration(object):
                             help='Track gradient variances of model, encoder and head.')
         # specify lists as: --argument choice1 choice2
         addons.add_argument('--save_ckpt', type=str, nargs='*', default=['probe_student'],
-                            choices=['probe_student', 'loss_max', 'rank_min'],
+                            choices=['probe_student', 'loss_max', 'rank_min', '', 'none', 'None'],
                             help='Save checkpoints for specific types of metrics.')
         addons.add_argument('--save_features', type=str, nargs='*', default=[],
                             choices=['embeddings', 'projections', 'logits', 'all'],   
