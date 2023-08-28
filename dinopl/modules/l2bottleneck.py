@@ -82,14 +82,16 @@ class LpNormalize(nn.Module):
         self.p = p
         self.dim = dim
         self.eps = eps
-        self.detach = detach
+        if detach:
+            self.forward = self.forward_detach
+
+    def forward_detach(self, x:torch.Tensor):
+        denom:torch.Tensor = x.norm(self.p, self.dim, keepdim=True).clamp(min=self.eps).expand_as(x)
+        return x / denom.detach()
 
     def forward(self, x:torch.Tensor):
         #return F.normalize(x, p=self.p, dim=self.dim)
-        denom:torch.Tensor = x.norm(self.p, self.dim, keepdim=True)
-        denom = denom.clamp_min_(self.eps).expand_as(x)
-        if self.detach:
-            denom = denom.detach()
+        denom:torch.Tensor = x.norm(self.p, self.dim, keepdim=True).clamp(min=self.eps).expand_as(x)
         return x / denom
 
     def extra_repr(self):
