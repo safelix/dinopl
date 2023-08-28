@@ -164,7 +164,7 @@ class Configuration(object):
         model.add_argument('--l2bot_dim', type=int, default=256,
                             help='L2-Bottleneck dimension of DINOHead MLP. If 0, bottleneck is replaced by linear.')
         model.add_argument('--l2bot_cfg', type=str, default='-/lb/fn/wn/l/-',
-                            help='L2-Bottleneck configuration string: \'{wn,-}/{l,lb,-}/{fn,-}/{wn,-}/{l,lb,-}/{wn,-}\'.')
+                            help='L2-Bottleneck configuration string: \'{wn,-}/{l,lb,-}/{fn,fnd,-}/{wn,-}/{l,lb,-}/{fn,fnd,-}\'.')
         model.add_argument('--out_dim', type=int, default=65536, 
                             help='Output dimension of the DINOHead MLP.')
 

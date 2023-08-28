@@ -15,7 +15,7 @@ __all__ = [
 
 
 class L2Bottleneck(nn.Module):
-    'L2-Bottleneck configuration string: \'{wn,-}/{l,lb,-}/{fn,-}/{wn,-}/{l,lb,-}/{wn,-}\'.'
+    'L2-Bottleneck configuration string: \'{wn,-}/{l,lb,-}/{fn,fnd-}/{wn,-}/{l,lb,-}/{fn,fnd-}\'.'
     
     def __init__(self, in_dim:int, mid_dim:int, out_dim:int, cfg:str='-/lb/fn/wn/l/-'):
         super().__init__() 
@@ -28,7 +28,7 @@ class L2Bottleneck(nn.Module):
                 raise ValueError(f'cfg[{3*i+0}] describes {mode} weight normalization: can be eiter \'wn\' or \'-\'.')
             if self.cfg[3*i+1] not in ['l', 'lb', '-']:
                 raise ValueError(f'cfg[{3*i+1}] describes {mode} linear layer: can be eiter \'l\', \'lb\' or \'-\'.')
-            if self.cfg[3*i+2] not in ['fn', '-']:
+            if self.cfg[3*i+2] not in ['fn', 'fnd', '-']:
                 raise ValueError(f'cfg[{3*i+2}] describes {mode} feature normalization: can be eiter \'fn\' or \'-\'.')
 
         if self.cfg[1] == '-': 
@@ -42,13 +42,13 @@ class L2Bottleneck(nn.Module):
         if 'l' in self.cfg[1]: # if lin1 exists
             self.wn1 = LpNormalize(p=2, dim=-1) if self.cfg[0] == 'wn' else nn.Identity()
             self.lin1 = Linear(in_dim, mid_dim, bias='b' in self.cfg[1])
-        self.fn1 = LpNormalize(p=2, dim=-1) if self.cfg[2] == 'fn' else nn.Identity()
+        self.fn1 = LpNormalize(p=2, dim=-1, detach=(self.cfg[2]=='fnd')) if 'fn' in self.cfg[2] else nn.Identity()
 
         self.lin2, self.wn2 = None, None
         if 'l' in self.cfg[4]: # if lin2 exists
             self.wn2 = LpNormalize(p=2, dim=-1) if self.cfg[3] == 'wn' else nn.Identity()
             self.lin2 = Linear(mid_dim, out_dim, bias='b' in self.cfg[4])
-        self.fn2 = LpNormalize(p=2, dim=-1) if self.cfg[5] == 'fn' else nn.Identity()
+        self.fn2 = LpNormalize(p=2, dim=-1, detach=(self.cfg[5] == 'fnd')) if 'fn' in self.cfg[5] else nn.Identity()
 
         self.reset_parameters()
     
@@ -60,7 +60,7 @@ class L2Bottleneck(nn.Module):
             self.lin2.reset_parameters(method=method, generator=generator)
 
 
-    def forward(self, x):
+    def forward(self, x:torch.Tensor):
         # transform to bottleneck
         if self.lin1 is not None:
             w1 = self.wn1(self.lin1.weight) # prepare weight normalization
@@ -77,13 +77,20 @@ class L2Bottleneck(nn.Module):
 
 
 class LpNormalize(nn.Module):
-    def __init__(self, p:float = 2, dim:int = -1):
+    def __init__(self, p:float = 2, dim:int = -1, eps:float = 1e-12, detach:bool = False):
         super().__init__()
         self.p = p
         self.dim = dim
+        self.eps = eps
+        self.detach = detach
 
-    def forward(self, x):
-        return F.normalize(x, p=self.p, dim=self.dim)
+    def forward(self, x:torch.Tensor):
+        #return F.normalize(x, p=self.p, dim=self.dim)
+        denom:torch.Tensor = x.norm(self.p, self.dim, keepdim=True)
+        denom = denom.clamp_min_(self.eps).expand_as(x)
+        if self.detach:
+            denom = denom.detach()
+        return x / denom
 
     def extra_repr(self):
         return f'p={self.p}, dim={self.dim}'
