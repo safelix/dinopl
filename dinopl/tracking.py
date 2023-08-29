@@ -183,7 +183,7 @@ class FeatureTracker(pl.Callback):
                 cossim = batch_cossim(x)
                 cossim_triu = cossim[torch.triu_indices(*cossim.shape, offset=1).unbind()] # upper triangular values
                 logs[f'{prefix}/{n}/{i}_x.corr().mean()'] = cossim_triu.mean()
-                logs[f'{prefix}/{n}/{i}_x.corr().rank()'] = matrix_rank(cossim, hermitian=True)
+                logs[f'{prefix}/{n}/{i}_x.corr().rank()'] = matrix_rank(cossim, hermitian=False) # TODO: hermitian=True breaks with torch 2.0.1+cu117
                 
                 # within batch l2 distance
                 l2dist = batch_l2dist(x)
