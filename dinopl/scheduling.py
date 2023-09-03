@@ -54,7 +54,7 @@ class Schedule():
         return torch.linspace(lower, upper, self.n_steps)
     
     def set_ys(self) -> torch.Tensor:
-        'Compute and set ys, after that n_step/n_epochs xs() is defined.'
+        'Compute and set ys, after that xs() is defined.'
         self.ys = torch.full((self.n_steps, ), torch.nan)
         raise NotImplementedError('Please compute ys here.')
 
@@ -269,20 +269,23 @@ class CatSched(Schedule):
     def set_ys(self) -> Self:
         if isinstance(self.where, float):
             frac = self.where # interprete as rounded fraction of epoch
-            n_epochs_l = round(frac * self.n_epochs)
+            n_steps_l = round(frac * self.n_steps)
+            n_steps_r = self.n_steps - n_steps_l
+            n_epochs_l, n_epochs_r = -1, -1
         elif isinstance(self.where, int):
             n_epochs_l = self.where # interprete as epoch
+            n_epochs_r = self.n_epochs - n_epochs_l
+            n_steps_l, n_steps_r = -1, -1
         else:
             raise ValueError('Unkown type for \'where\'.')
-        n_epochs_r = self.n_epochs - n_epochs_l
 
         # prepare schedules of left and right
         ys_list = []
-        if n_epochs_l > 0:
-            self.sched_l.prep(-1, n_epochs_l, self.steps_per_epoch)
+        if n_steps_l > 0 or n_epochs_l > 0:
+            self.sched_l.prep(n_steps_l, n_epochs_l, self.steps_per_epoch)
             ys_list.append(self.sched_l.ys)
-        if n_epochs_r > 0:
-            self.sched_r.prep(-1, n_epochs_r, self.steps_per_epoch)
+        if n_steps_r > 0 or n_epochs_r > 0:
+            self.sched_r.prep(n_steps_r, n_epochs_r, self.steps_per_epoch)
             ys_list.append(self.sched_r.ys)
 
         # concatenate left and right schedules
