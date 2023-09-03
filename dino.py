@@ -2,6 +2,7 @@ import copy
 import math
 import os
 import time
+from typing import Any
 
 import pytorch_lightning as pl
 import torch
@@ -226,7 +227,11 @@ def main(config:Configuration):
     
     class StopOnNonFinite(pl.Callback):
         def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
-            trainer.should_stop = any([torch.any(p.isfinite()) for p in pl_module.parameters()])
+            is_finite = all([torch.all(p.isfinite()) for p in pl_module.parameters()])
+            if not is_finite:
+                print('Some parameters are non-finite: signaling Trainer to stop.', flush=True)
+                trainer.should_stop = True # stop after end of epoch
+
     if config.stop_on_non_finite:
         callbacks += [StopOnNonFinite()]
     #callbacks += [EarlyStopping(monitor='train/loss', min_delta=float('inf'), check_finite=True)]
