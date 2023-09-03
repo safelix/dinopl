@@ -317,6 +317,15 @@ class ExpWarmup(CatSched, Schedule):
     def __repr__(self) -> str:
         return Schedule.__repr__(self, [self.y_start, self.y_end, self.where])
 
+class CosWarmup(CatSched, Schedule):
+    def __init__(self, y_start:float, y_end:float, where:int):
+        super().__init__(CosSched(y_start, y_end), y_end, where)
+        self.y_start = float(y_start)
+        self.y_end = float(y_end)
+        self.where = where
+    
+    def __repr__(self) -> str:
+        return Schedule.__repr__(self, [self.y_start, self.y_end, self.where])
 
 class MultiStep(Schedule):
     def __init__(self, start:float, gamma:float, *steps:List[Union[int, float]]):
