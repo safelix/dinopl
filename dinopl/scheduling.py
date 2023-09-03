@@ -281,10 +281,10 @@ class CatSched(Schedule):
 
         # prepare schedules of left and right
         ys_list = []
-        if n_steps_l > 0 or n_epochs_l > 0:
+        if n_steps_l > 0 or n_epochs_l > 0: # don't prepare if length is 0
             self.sched_l.prep(n_steps_l, n_epochs_l, self.steps_per_epoch)
             ys_list.append(self.sched_l.ys)
-        if n_steps_r > 0 or n_epochs_r > 0:
+        if n_steps_r > 0 or n_epochs_r > 0: # don't prepare if length is 0
             self.sched_r.prep(n_steps_r, n_epochs_r, self.steps_per_epoch)
             ys_list.append(self.sched_r.ys)
 
