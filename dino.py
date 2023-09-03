@@ -223,6 +223,12 @@ def main(config:Configuration):
         if 'rank_min' in config.save_ckpt:
             ckpt_callbacks += [ModelCheckpoint(dirpath=config.logdir, monitor='train/feat/embed/s_x.rank()', mode='min', save_last=False, every_n_train_steps=1,
                                 filename='epoch={epoch}-step={step}-rank_min={train/feat/embed/s_x.rank()}', auto_insert_metric_name=False)]
+    
+    class StopOnNonFinite(pl.Callback):
+        def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+            trainer.should_stop = any([torch.any(p.isfinite()) for p in pl_module.parameters()])
+    if config.stop_on_non_finite:
+        callbacks += [StopOnNonFinite()]
     #callbacks += [EarlyStopping(monitor='train/loss', min_delta=float('inf'), check_finite=True)]
 
     # Training
