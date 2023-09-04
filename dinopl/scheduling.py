@@ -15,7 +15,10 @@ __all__ = [
     'CosSched',
     'ExpSched',
     'CatSched',
-    'LinWarmup'
+    'LinWarmup',
+    'ExpWarmup',
+    'CosWarmup',
+    'MultiStep',
 ]
 
 
