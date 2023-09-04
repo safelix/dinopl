@@ -183,12 +183,16 @@ def main(config:Configuration):
         if config.probing_epochs > 0:
             analyses[''] = LinearAnalysis(config.probing_epochs)
             wandb_logger.experiment.define_metric('probe/student', summary='max')
+            wandb_logger.experiment.define_metric('probe/norm/student', summary='max')
             wandb_logger.experiment.define_metric('probe/teacher', summary='max')
+            wandb_logger.experiment.define_metric('probe/norm/teacher', summary='max')
 
         if config.probing_k > 0:
             analyses['knn'] = KNNAnalysis(config.probing_k)
             wandb_logger.experiment.define_metric('probe/student/knn', summary='max')
+            wandb_logger.experiment.define_metric('probe/norm/student/knn', summary='max')
             wandb_logger.experiment.define_metric('probe/teacher/knn', summary='max')
+            wandb_logger.experiment.define_metric('probe/norm/teacher/knn', summary='max')
         
         encoders = dict(student=dino.student.enc, teacher=dino.teacher.enc)
         callbacks += [Prober(encoders=encoders, analyses=analyses, 
