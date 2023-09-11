@@ -323,7 +323,8 @@ class DINO(pl.LightningModule):
             targs = targ_logits
  
         elif targ_labels is not None and targ_logits is None:
-            raise NotImplementedError('Regression losses are currently not supported for target labels, only logits.')
+            targs = F.one_hot(targ_labels, self.out_dim).unsqueeze(0).expand(len(self.teacher.crops), -1, -1)
+            #raise NotImplementedError('Regression losses are currently not supported for target labels, only logits.')
         else:
             raise RuntimeError('Please specify either targ_logits or targ_labels.')
 
