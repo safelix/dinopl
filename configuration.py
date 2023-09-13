@@ -25,6 +25,7 @@ import datasets
 from dinopl import DINO, DINOModel, DINOHead
 from dinopl.scheduling import *
 import torchvision
+from torch.utils.data import DataLoader
 
 
 class Constants(object):
@@ -618,6 +619,24 @@ def load_config(identifier:str) -> Configuration:
     config =  Configuration.from_json(os.path.join(os.path.dirname(ckpt_path), 'config.json'))
     config.mc_spec = create_mc_spec(config)
     return config
+
+def load_data(identifier:str, batchsize:int, num_workers:int, pin_memory:bool) -> typing.Tuple[DataLoader, DataLoader]:
+    ckpt_path = identifier.split(':')[0] if ':' in identifier else identifier
+    config = load_config(ckpt_path)
+    
+    DSet = get_dataset(config)
+    trfm = torchvision.transforms.Compose([ # self-training
+                    torchvision.transforms.Lambda(lambda img: img.convert('RGB')), 
+                    torchvision.transforms.ToTensor(),
+                    torchvision.transforms.Normalize(DSet.mean, DSet.std),
+                ])
+    #trfm = MultiCrop(config.mc_spec, per_crop_transform=trfm)
+
+    train_ds = DSet(root=os.environ['DINO_DATA'], train=True, transform=trfm, download=False)
+    valid_ds = DSet(root=os.environ['DINO_DATA'], train=False, transform=trfm, download=False)
+    train_dl = DataLoader(dataset=train_ds, batch_size=batchsize, num_workers=num_workers, pin_memory=pin_memory)
+    valid_dl = DataLoader(dataset=valid_ds, batch_size=batchsize, num_workers=num_workers, pin_memory=pin_memory)
+    return train_dl, valid_dl
 
 def load_model(identifier:str) -> typing.Union[DINO, DINOModel]:
     ''' Load the DINO model using the checkpoint path.

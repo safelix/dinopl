@@ -20,7 +20,7 @@ from torchvision import transforms
 from tqdm import tqdm
 
 import dinopl.utils as U
-from configuration import Configuration, load_config, load_model, get_dataset
+from configuration import Configuration, load_model, load_data
 from dinopl import DINO, DINOHead, DINOModel
 from dinopl import MultiCrop
 from dinopl.probing import KNNAnalysis, LinearAnalysis, Prober, normalize_data
@@ -92,22 +92,6 @@ class ParamProjector():
             return self.map(inp, is_position)
         raise ValueError('Cannot infer whether to project or map input.')
 
-def load_data(identifier:str, batchsize:int, num_workers:int, pin_memory:bool) -> Tuple[DataLoader, DataLoader]:
-    ckpt_path = identifier.split(':')[0] if ':' in identifier else identifier
-    config = load_config(ckpt_path)
-    
-    DSet = get_dataset(config)
-    trfm = transforms.Compose([ # self-training
-                    transforms.Lambda(lambda img: img.convert('RGB')), transforms.ToTensor(),
-                    transforms.Normalize(DSet.mean, DSet.std),
-                ])
-    #trfm = MultiCrop(config.mc_spec, per_crop_transform=trfm)
-
-    train_ds = DSet(root=os.environ['DINO_DATA'], train=True, transform=trfm, download=False)
-    valid_ds = DSet(root=os.environ['DINO_DATA'], train=False, transform=trfm, download=False)
-    train_dl = DataLoader(dataset=train_ds, batch_size=batchsize, num_workers=num_workers, pin_memory=pin_memory)
-    valid_dl = DataLoader(dataset=valid_ds, batch_size=batchsize, num_workers=num_workers, pin_memory=pin_memory)
-    return train_dl, valid_dl
 
 def update_losses(student_out, teacher_out, losses):
     preds, targs = student_out['logits'], teacher_out['logits']
