@@ -88,12 +88,15 @@ def main(config:Configuration):
     elif config.label_noise_ratio > 0 and config.ds_classes != config.n_classes:
         raise RuntimeError('Cannot change number of classes with label noise.')
     elif config.label_noise_ratio > 0 and config.ds_classes == config.n_classes:
+        assert(config.s_mode=='supervised')
         dino_train_set = LabelNoiseWrapper(dino_train_set, config.n_classes, config.label_noise_ratio, config.resample_noise)
         #dino_valid_set = LabelNoiseWrapper(dino_valid_set, config.n_classes, config.label_noise_ratio, config.resample_noise)
     elif config.logit_noise_temp > 0:
+        assert(config.s_mode=='supervised')
         dino_train_set = LogitNoiseWrapper(dino_train_set, config.n_classes, config.logit_noise_temp, config.resample_noise)
         dino_valid_set = LogitNoiseWrapper(dino_valid_set, config.n_classes, config.logit_noise_temp, config.resample_noise)
     elif config.inputs_as_logits:
+        assert(config.s_mode=='supervised')
         dino_train_set = InputsAsTargetsWrapper(dino_train_set)
         dino_valid_set = InputsAsTargetsWrapper(dino_valid_set)
         config.n_classes = DSet.ds_pixels * DSet.ds_channels
