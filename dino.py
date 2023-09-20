@@ -16,7 +16,7 @@ from configuration import CONSTANTS as C
 from configuration import (Configuration, create_mc_spec, create_optimizer,
                            get_augmentations, get_dataset, get_encoder,
                            init_student_teacher)
-from datasets.targetnoise import LabelNoiseWrapper, LogitNoiseWrapper
+from datasets.targetnoise import LabelNoiseWrapper, LogitNoiseWrapper, InputsAsTargetsWrapper
 from datasets.stratifiedsubset import StratifiedSubset
 from dinopl import *
 from dinopl import utils as U
@@ -93,6 +93,11 @@ def main(config:Configuration):
     elif config.logit_noise_temp > 0:
         dino_train_set = LogitNoiseWrapper(dino_train_set, config.n_classes, config.logit_noise_temp, config.resample_noise)
         dino_valid_set = LogitNoiseWrapper(dino_valid_set, config.n_classes, config.logit_noise_temp, config.resample_noise)
+    elif config.inputs_as_logits:
+        dino_train_set = InputsAsTargetsWrapper(dino_train_set)
+        dino_valid_set = InputsAsTargetsWrapper(dino_valid_set)
+        config.n_classes = DSet.ds_pixels * DSet.ds_channels
+
     
     print(f'Init dino train set: {dino_train_set}')
     print(f'Init dino valid set: {dino_valid_set}')

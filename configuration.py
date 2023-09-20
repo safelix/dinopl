@@ -132,6 +132,8 @@ class Configuration(object):
                             help='Add logit noise (sharpened gaussian logits) for supervised training.')
         data.add_argument('--resample_target_noise', type=bool, default=False,
                             help='Resample the the logits/labels at every access.')
+        data.add_argument('--inputs_as_logits', type=U.bool_parser, default=False,
+                            help='Use the inputs as logits and train in autoencoder fashion.')
         data.add_argument('--augs', type=str, nargs='*', default=[],
                             help='Augmentation(s) to apply to Dataset. ' 
                             +'Supply multiple names as list or a string joined by \'_\'.')

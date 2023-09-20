@@ -84,4 +84,24 @@ class LogitNoiseWrapper(VisionDataset):
         body += [f'temperature: {self.temperature}']
         body += [f'resample: {self.resample}']
         return '\n'.join(body)
+
+
+class InputsAsTargetsWrapper(VisionDataset):
+    def __init__(self, dataset) -> None:
+        super().__init__(root=None)
+        self.dataset = dataset
+
+    def __getitem__(self, index: int) -> Tuple[Any, Any]:
+        img, target = self.dataset.__getitem__(index)
+
+        if isinstance(img, list):
+            return img, [i.flatten() for i in img]
+        return img, img.flatten()
+
+    def __len__(self) -> int:
+        return self.dataset.__len__()
+
+    def extra_repr(self) -> str:
+        body = [f'Wrapping: {self.dataset.__repr__()}']
+        return '\n'.join(body)
         
