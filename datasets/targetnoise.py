@@ -95,7 +95,7 @@ class InputsAsTargetsWrapper(VisionDataset):
         img, target = self.dataset.__getitem__(index)
 
         if isinstance(img, list):
-            return img, [i.flatten() for i in img]
+            return img, img[0].flatten() #[i.flatten() for i in img]
         return img, img.flatten()
 
     def __len__(self) -> int:
