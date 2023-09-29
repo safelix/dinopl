@@ -86,7 +86,7 @@ def vector_as_params(vec:torch.Tensor, module:nn.Module) -> List[nn.Parameter]:
 
 # Source: https://github.com/Spijkervet/SimCLR/blob/master/simclr/modules/resnet_hacks.py
 def modify_resnet_for_tiny_input(model:nn.Module, *, cifar_stem:bool=True, v1:bool=True) -> nn.Module:
-    """Modifies some layers of a given torchvision resnet model to
+    '''Modifies some layers of a given torchvision resnet model to
     match the one used for the CIFAR-10 experiments in the SimCLR paper.
     Parameters
     ----------
@@ -104,16 +104,16 @@ def modify_resnet_for_tiny_input(model:nn.Module, *, cifar_stem:bool=True, v1:bo
     Returns
     -------
     Modified ResNet model.
-    """
-    assert isinstance(model, torchvision.models.ResNet), "model must be a ResNet instance"
+    '''
+    assert isinstance(model, torchvision.models.ResNet), 'model must be a ResNet instance'
     if cifar_stem:
         conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
-        nn.init.kaiming_normal_(conv1.weight, mode="fan_out", nonlinearity="relu")
+        nn.init.kaiming_normal_(conv1.weight, mode='fan_out', nonlinearity='relu')
         model.conv1 = conv1
         model.maxpool = nn.Identity()
     if v1:
         for l in range(2, 5):
-            layer = getattr(model, "layer{}".format(l))
+            layer = getattr(model, 'layer{}'.format(l))
             block = list(layer.children())[0]
             if isinstance(block,  torchvision.models.resnet.Bottleneck):
                 assert block.conv1.kernel_size == (1, 1) and block.conv1.stride == (
@@ -127,7 +127,7 @@ def modify_resnet_for_tiny_input(model:nn.Module, *, cifar_stem:bool=True, v1:bo
                 assert block.conv2.dilation == (
                     1,
                     1,
-                ), "Currently, only models with dilation=1 are supported"
+                ), 'Currently, only models with dilation=1 are supported'
                 block.conv1.stride = (2, 2)
                 block.conv2.stride = (1, 1)
     return model
@@ -137,21 +137,29 @@ def bool_parser(s):
     '''
     Parse boolean arguments from the command line.
     '''
-    FALSY_STRINGS = {"off", "false", "0"}
-    TRUTHY_STRINGS = {"on", "true", "1"}
+    FALSY_STRINGS = {'off', 'false', '0'}
+    TRUTHY_STRINGS = {'on', 'true', '1'}
     if s.lower() in FALSY_STRINGS:
         return False
     elif s.lower() in TRUTHY_STRINGS:
         return True
     else:
-        raise argparse.ArgumentTypeError("invalid value for a boolean flag")
+        raise argparse.ArgumentTypeError('invalid value for a boolean flag')
 
+def floatint_parser(s):
+    '''
+    Parse float or integer arguments from the command line.
+    '''
+    try:
+        return float(s) if '.' in s else int(s)
+    except ValueError:
+        argparse.ArgumentTypeError('Invalid value for an integer or float')
 
 def pick_single_gpu() -> int:
     for i in range(torch.cuda.device_count()):
 
         # Try to allocate on device:
-        device = torch.device(f"cuda:{i}")
+        device = torch.device(f'cuda:{i}')
         try:
             torch.ones(1).to(device=device)
             torch.cuda.synchronize(device=device)
@@ -159,7 +167,7 @@ def pick_single_gpu() -> int:
             continue
         return i
 
-    raise RuntimeError("No GPUs available.")
+    raise RuntimeError('No GPUs available.')
 
 
 ## Recursive shape for debugging multicrop

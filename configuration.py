@@ -243,6 +243,8 @@ class Configuration(object):
 
         # Probing configurations
         addons = parser.add_argument_group('addons')
+        addons.add_argument('--validation_freq', type=U.floatint_parser, default=1, 
+                            help='Validation frequency, if (int) in epochs if (float) in ratio of total steps.')       
         addons.add_argument('--probe_every', type=int, default=1, 
                             help='Probe every so many epochs during training.')
         addons.add_argument('--probing_epochs', type=int, default=10, 

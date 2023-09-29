@@ -309,11 +309,11 @@ class Prober(pl.Callback):
 
     # trainer.validate() needs to be called before trainer.fit() for per-training probe
     def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
-        if trainer.current_epoch % self.probe_every == 0: # only probe every so many epochs
-            pl_module.log_dict(self.probe(pl_module.device))
+        #if trainer.current_epoch % self.probe_every == 0: # only probe every so many epochs
+        pl_module.log_dict(self.probe(pl_module.device))
         
-        elif trainer.current_epoch == trainer.max_epochs - 1: # probe after last epoch
-            pl_module.log_dict(self.probe(pl_module.device))
+        #elif trainer.current_epoch == trainer.max_epochs - 1: # probe after last epoch
+        #    pl_module.log_dict(self.probe(pl_module.device))
 
 
 from torchvision.datasets import VisionDataset

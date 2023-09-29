@@ -191,8 +191,8 @@ class Scheduler(pl.Callback):
     def on_fit_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):
         trainer.fit_loop.setup_data() # load train dataloader -> get len(loader) == trainer.num_training_batches
         steps_per_epoch = len(trainer.train_dataloader) / trainer.accumulate_grad_batches
-        if round(steps_per_epoch) != steps_per_epoch:
-            raise ValueError('Currently, the batch accumulation factor must devide number of batches.')
+        if int(steps_per_epoch) != steps_per_epoch:
+            raise ValueError('Currently, the batch accumulation factor must devide the number of batches.')
         self.prep(trainer.max_steps, trainer.max_epochs, int(steps_per_epoch))
 
     def on_train_batch_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule, *args):

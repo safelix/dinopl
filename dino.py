@@ -248,6 +248,23 @@ def main(config:Configuration):
         callbacks += [StopOnNonFinite()]
     #callbacks += [EarlyStopping(monitor='train/loss', min_delta=float('inf'), check_finite=True)]
 
+    check_val_every_n_epoch=1 # default: check every epoch
+    val_check_interval=1.0 # default: check at end of epoch
+    if isinstance(config.validation_freq, int):
+        check_val_every_n_epoch=config.validation_freq
+        val_check_interval=1.0 # check at end of epoch
+    elif isinstance(config.validation_freq, float):
+        if config.validation_freq < 0 or 1 < config.validation_freq:
+            raise ValueError('Validation frequency is ratio in (0,1)')
+
+        steps_per_epoch = len(dino_train_dl) / config.batchaccum
+        if int(steps_per_epoch) != steps_per_epoch:
+            raise ValueError('Currently, the batch accumulation factor must devide the number of batches.')
+        total_steps = min(config.n_steps, config.n_epochs * int(steps_per_epoch)) 
+        val_check_interval=math.floor(total_steps * config.validation_freq)
+        check_val_every_n_epoch=None #check after steps not epoch
+
+
     # Training
     trainer = pl.Trainer(
         # training dynamics
@@ -262,6 +279,8 @@ def main(config:Configuration):
         logger=wandb_logger,
         log_every_n_steps=config.log_every,
         num_sanity_val_steps=0, # call trainer.validate() before trainer.fit() instead
+        val_check_interval=val_check_interval,
+        check_val_every_n_epoch=check_val_every_n_epoch,
 
         # acceleration
         accelerator='cpu' if config.force_cpu else 'gpu',
@@ -281,12 +300,13 @@ def main(config:Configuration):
     wandb_logger.experiment.config.update(config, allow_val_change=True)
     config.to_json(os.path.join(config.logdir, 'config.json'))
 
-    # move dino to selected GPU, validate, then fit
+    # move dino to selected GPU, validate, then fit, then validate
     dino = dino if config.force_cpu else dino.to(trainer.device_ids[0])
     trainer.validate(model=dino, dataloaders=dino_valid_dl)
     trainer.fit(model=dino, 
                 train_dataloaders=dino_train_dl,
                 val_dataloaders=dino_valid_dl)
+    trainer.validate(model=dino, dataloaders=dino_valid_dl)
 
 
 if __name__ == '__main__':
