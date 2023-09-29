@@ -250,10 +250,10 @@ def main(config:Configuration):
 
     check_val_every_n_epoch=1 # default: check every epoch
     val_check_interval=1.0 # default: check at end of epoch
-    if isinstance(config.validation_freq, int):
+    if isinstance(config.validation_freq, int) and config.validation_freq != 0:
         check_val_every_n_epoch=config.validation_freq
         val_check_interval=1.0 # check at end of epoch
-    elif isinstance(config.validation_freq, float):
+    elif isinstance(config.validation_freq, float) and config.validation_freq != 0:
         if config.validation_freq < 0 or 1 < config.validation_freq:
             raise ValueError('Validation frequency is ratio in (0,1)')
 
@@ -263,7 +263,6 @@ def main(config:Configuration):
         total_steps = min(config.n_steps, config.n_epochs * int(steps_per_epoch)) 
         val_check_interval=math.floor(total_steps * config.validation_freq)
         check_val_every_n_epoch=None #check after steps not epoch
-
 
     # Training
     trainer = pl.Trainer(
@@ -281,6 +280,7 @@ def main(config:Configuration):
         num_sanity_val_steps=0, # call trainer.validate() before trainer.fit() instead
         val_check_interval=val_check_interval,
         check_val_every_n_epoch=check_val_every_n_epoch,
+        limit_val_batches=0 if config.validation_freq == 0 else None, # disable validation
 
         # acceleration
         accelerator='cpu' if config.force_cpu else 'gpu',
