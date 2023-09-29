@@ -227,7 +227,7 @@ def main(config:Configuration):
     ckpt_callbacks = []
     if 'none' not in config.save_ckpt:
         ckpt_callbacks += [ModelCheckpoint(dirpath=config.logdir, monitor=None, filename='last')]
-        if 'probe_student' in config.save_ckpt:
+        if 'probe_student' in config.save_ckpt and config.validation_freq != 0:
             ckpt_callbacks += [ModelCheckpoint(dirpath=config.logdir, monitor='probe/student', mode='max', save_last=False, # checked each epoch
                                 filename='epoch={epoch}-probe_student={probe/student:.3f}', auto_insert_metric_name=False)]
         if 'loss_max' in config.save_ckpt:
