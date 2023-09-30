@@ -260,7 +260,14 @@ def main(config:Configuration):
         steps_per_epoch = len(dino_train_dl) / config.batchaccum
         if int(steps_per_epoch) != steps_per_epoch:
             raise ValueError('Currently, the batch accumulation factor must devide the number of batches.')
-        total_steps = min(config.n_steps, config.n_epochs * int(steps_per_epoch)) 
+        if config.n_steps > 0 and config.n_epochs > 0:
+            total_steps = min(config.n_steps, config.n_epochs * int(steps_per_epoch)) 
+        elif config.n_steps > 0:
+            total_steps = config.n_steps
+        elif config.n_epochs > 0:
+            total_steps = config.n_epochs * int(steps_per_epoch)
+        else:
+            raise ValueError('Either n_epochs or n_steps need to be >= 0.')
         val_check_interval=math.floor(total_steps * config.validation_freq)
         check_val_every_n_epoch=None #check after steps not epoch
 
