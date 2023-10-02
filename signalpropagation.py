@@ -173,13 +173,14 @@ def compute_svdvals(loader:EmbeddingLoader, prefix:str, overwrite=True, device=t
         try: # compute on GPU and potentially resort to CPU 
             svdvals = torch.linalg.svdvals(X.to(device, dtype=dtype)).detach().cpu()
         except (Exception, RuntimeError, torch.cuda.OutOfMemoryError) as e: # pylance typing error will be fixed torch==2.1
-            if 'out of memory' not in str(e):
-                raise e
-            tqdm.write(f'Could not compute svdvals for {name}: '+str(e))
-            #warn(f'Could not compute svdvals for {name}: '+str(e))
+            # https://github.com/pytorch/pytorch/pull/99786
+            # hot-fix last line in ~/venv/gdynamics/lib/python3.10/site-packages/torch/_C/__init__.pyi
             svdvals = torch.Tensor([float('nan')])
-            if escape_oom_cpu:
+            if 'out of memory' in str(e) and escape_oom_cpu:  
+                warn(f'Out of Memory: could not compute SVD for {name} on GPU... retrying on CPU.')
                 svdvals = torch.linalg.svdvals(X.to(dtype=dtype))
+            else:
+                warn(f'Could not compute SVD for {name}: {str(e)}')
 
         with open(fname, 'wb') as f:
             pickle.dump(svdvals, f)
@@ -230,17 +231,16 @@ def compute_svdcluster(loader:EmbeddingLoader, prefix:str, overwrite=True, devic
             SVDb = torch.linalg.svd(Xb.to(device, dtype=dtype), full_matrices=False)
 
         except (Exception, RuntimeError, torch.cuda.OutOfMemoryError) as e: # pylance typing error will be fixed torch==2.1
-            if 'out of memory' not in str(e):
-                raise e
-            warn(f'Could not compute svdvals for {name}: '+str(e))
-            SVDg = None
-            SVDw = None
-            SVDb = None
-            
-            if escape_oom_cpu:
+            # https://github.com/pytorch/pytorch/pull/99786
+            # hot-fix last line in ~/venv/gdynamics/lib/python3.10/site-packages/torch/_C/__init__.pyi
+            SVDg, SVDw, SVDb = None, None, None
+            if 'out of memory' in str(e) and escape_oom_cpu:  
+                warn(f'Out of Memory: could not compute SVD for {name} on GPU... retrying on CPU.')
                 SVDg = torch.linalg.svd(Xg.to(dtype=dtype), full_matrices=False)
                 SVDw = torch.linalg.svd(Xw.to(dtype=dtype), full_matrices=False)
                 SVDb = torch.linalg.svd(Xb.to(dtype=dtype), full_matrices=False)
+            else:
+                warn(f'Could not compute SVD for {name}: {str(e)}')
 
         #U_g, S_g, Vh_g = SVDg
         #U_w, S_w, Vh_w = SVDw
@@ -294,14 +294,15 @@ def compute_probes(loader:EmbeddingLoader, valid_loader:EmbeddingLoader, prefix:
             except (Exception, RuntimeError, torch.cuda.OutOfMemoryError) as e: # pylance typing error will be fixed torch==2.1
                 # https://github.com/pytorch/pytorch/pull/99786
                 # hot-fix last line in ~/venv/gdynamics/lib/python3.10/site-packages/torch/_C/__init__.pyi
-                if 'out of memory' not in str(e):
-                    raise e
-                warn(f'Could not compute clf for {name}: '+str(e))
-                if escape_oom_cpu:
+                acc[type(clf).__name__] = None
+                if 'out of memory' in str(e) and escape_oom_cpu:  
+                    warn(f'Out of Memory: could not compute {CLF.__name__} for {name} on GPU... retrying on CPU.')
                     clf:Analysis = CLF(**kwargs)
                     clf.prepare(n_features=D, n_classes=C, device=torch.device('cpu'))
                     clf.train(train_data)
                     acc[type(clf).__name__] = clf.valid(valid_data)
+                else:
+                    warn(f'Could not compute {CLF.__name__} for {name}: {str(e)}')
         
         with open(f'{prefix}probes-{name}.pckl', 'wb') as f:
             pickle.dump(acc, f)
