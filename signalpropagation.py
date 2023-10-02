@@ -274,8 +274,9 @@ def compute_probes(loader:EmbeddingLoader, valid_loader:EmbeddingLoader, prefix:
         pbar.set_postfix({'curr': name, 'mem':f'{mem/1e6:.1f}MB' if mem < 1e9 else f'{mem/1e9:.1f}GB'})
         
         # check if result exists 
-        fname = f'{prefix}probe-{name}.pckl'
+        fname = f'{prefix}probes-{name}.pckl'
         if overwrite is False and os.path.isfile(fname):
+            tqdm.write(f'Skipping {name} because file already exists.')
             loader.embeddings[name] = None
             valid_loader.embeddings[name] = None
             continue
@@ -303,8 +304,11 @@ def compute_probes(loader:EmbeddingLoader, valid_loader:EmbeddingLoader, prefix:
                     acc[type(clf).__name__] = clf.valid(valid_data)
                 else:
                     warn(f'Could not compute {CLF.__name__} for {name}: {str(e)}')
-        
-        with open(f'{prefix}probes-{name}.pckl', 'wb') as f:
+            
+            #if 'linalg.svd: Argument 12 has illegal value' in str(e):
+            # try: run with np.linalg.svd? 
+
+        with open(fname, 'wb') as f:
             pickle.dump(acc, f)
 
         loader.embeddings[name] = None
