@@ -162,7 +162,7 @@ def compute_svdvals(loader:EmbeddingLoader, prefix:str, overwrite=True, device=t
 
         try: # compute on GPU and potentially resort to CPU 
             svdvals = torch.linalg.svdvals(X.to(device, dtype=dtype)).detach().cpu()
-        except RuntimeError as e:
+        except (RuntimeError, torch.cuda.OutOfMemoryError) as e: # pylance typing error will be fixed torch==2.1
             if 'out of memory' not in str(e):
                 raise e
             tqdm.write(f'Could not compute svdvals for {name}: '+str(e))
@@ -219,7 +219,7 @@ def compute_svdcluster(loader:EmbeddingLoader, prefix:str, overwrite=True, devic
             SVDw = torch.linalg.svd(Xw.to(device, dtype=dtype), full_matrices=False)
             SVDb = torch.linalg.svd(Xb.to(device, dtype=dtype), full_matrices=False)
 
-        except RuntimeError as e:
+        except (RuntimeError, torch.cuda.OutOfMemoryError) as e: # pylance typing error will be fixed torch==2.1
             if 'out of memory' not in str(e):
                 raise e
             warn(f'Could not compute svdvals for {name}: '+str(e))
@@ -281,7 +281,7 @@ def compute_probes(loader:EmbeddingLoader, valid_loader:EmbeddingLoader, prefix:
                 clf.prepare(n_features=D, n_classes=C, device=device) #LogReg will ignore device
                 clf.train(train_data)
                 acc[type(clf).__name__] = clf.valid(valid_data)
-            except RuntimeError as e:
+            except (RuntimeError, torch.cuda.OutOfMemoryError) as e: # pylance typing error will be fixed torch==2.1
                 if 'out of memory' not in str(e):
                     raise e
                 warn(f'Could not compute clf for {name}: '+str(e))
