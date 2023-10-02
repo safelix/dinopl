@@ -23,8 +23,8 @@ from torch.utils.data import DataLoader
 
 class ModelHook():
     def __init__(self, model:nn.Module, rootname='', layers='root') -> None:
-        if layers not in ['root', 'leafs']:
-            raise ValueError('Layer must be either \'root\' or \'leafs\'.')
+        if layers not in ['root', 'leafs'] and not isinstance(layers, list):
+            raise ValueError('Layer must be either \'root\' or \'leafs\' or a list of subnames.')
 
         self.names : Dict[nn.Module, str] = {}
         self.fwd_handles : Dict[str, RemovableHandle] = {}
@@ -38,12 +38,20 @@ class ModelHook():
             self.names[root] = rootname
             return
 
-        # else layers == 'leafs'
+
+        # else layers == 'leafs' or list of subnames
         if rootname != '': # prepare rootname for concatenation
             rootname += '.'
-        for subname, submodule in root.named_modules():
-            if sum(1 for _ in submodule.children()) == 0:
+
+        if isinstance(layers, list): # get specific layers
+            for subname in layers:
+                submodule = reduce(getattr, subname.split('.'), root)
                 self.names[submodule] = rootname+subname
+
+        if layers == 'leafs': # get all leaf layers
+            for subname, submodule in root.named_modules():
+                if sum(1 for _ in submodule.children()) == 0:
+                    self.names[submodule] = rootname+subname
         return
 
     def register_hooks(self):
@@ -52,12 +60,14 @@ class ModelHook():
             self.bwd_handles[name] = module.register_backward_hook(self.backward_hook)
 
     def remove_hooks(self):
-        for name, handle in self.fwd_handles.items():
-            handle.remove()
-        self.fwd_handles = {}
-        for name, handle in self.bwd_handles.items():
-            handle.remove()
-        self.bwd_handles = {}
+        if hasattr(self, 'fwd_handles'):
+            for name, handle in self.fwd_handles.items():
+                handle.remove()
+            self.fwd_handles = {}
+        if hasattr(self, 'bwd_handles'):
+            for name, handle in self.bwd_handles.items():
+                handle.remove()
+            self.bwd_handles = {}
 
     def __del__(self) -> None:
         self.remove_hooks()
@@ -84,7 +94,7 @@ class EmbeddingLoader(ModelHook):
         self.embeddings[self.names[module]].append(output.detach().cpu())
 
     @torch.no_grad()
-    @torch.inference_mode()
+    #@torch.inference_mode()
     def load_data(self, dl:DataLoader, device=torch.device('cpu')):
         self.register_hooks()
         self.embeddings = {n:[] for n in self.names.values()}
@@ -102,7 +112,7 @@ class EmbeddingLoader(ModelHook):
         self.remove_hooks()
 
     @torch.no_grad()
-    @torch.inference_mode()
+    #@torch.inference_mode()
     def center(self, mean={}, device=torch.device('cpu')):
         for k in tqdm(self.embeddings.keys(), desc='Centering Data'):
             data:torch.Tensor = self.embeddings[k].to(device)
@@ -112,7 +122,7 @@ class EmbeddingLoader(ModelHook):
         return dict(mean=mean)
     
     @torch.no_grad()
-    @torch.inference_mode()
+    #@torch.inference_mode()
     def standardize(self, mean={}, std={}, device=torch.device('cpu')):
         mean, std = {}, {}
         for k in tqdm(self.embeddings.keys(), desc='Standardizing Data'):
@@ -126,7 +136,7 @@ class EmbeddingLoader(ModelHook):
         return dict(mean=mean, std=std)
     
     @torch.no_grad()
-    @torch.inference_mode()
+    ##@torch.inference_mode()
     def normalize(self, min_val={}, max_val={}, device=torch.device('cpu')):
         for k in tqdm(self.embeddings.keys(), desc='Normalizing Data'):
             data = self.embeddings[k].to(device)
@@ -145,7 +155,7 @@ class EmbeddingLoader(ModelHook):
         return sum(batch.element_size()*batch.numel() for batches in self.embeddings.values() for batch in batches)
 
 @torch.no_grad()
-@torch.inference_mode()
+##@torch.inference_mode()
 def compute_svdvals(loader:EmbeddingLoader, prefix:str, overwrite=True, device=torch.device('cpu'), dtype=None, escape_oom_cpu=False):
     pbar = tqdm(reversed(loader.embeddings), desc='Computing Sigmas')
     for name in pbar:
@@ -162,7 +172,7 @@ def compute_svdvals(loader:EmbeddingLoader, prefix:str, overwrite=True, device=t
 
         try: # compute on GPU and potentially resort to CPU 
             svdvals = torch.linalg.svdvals(X.to(device, dtype=dtype)).detach().cpu()
-        except (RuntimeError, torch.cuda.OutOfMemoryError) as e: # pylance typing error will be fixed torch==2.1
+        except (Exception, RuntimeError, torch.cuda.OutOfMemoryError) as e: # pylance typing error will be fixed torch==2.1
             if 'out of memory' not in str(e):
                 raise e
             tqdm.write(f'Could not compute svdvals for {name}: '+str(e))
@@ -179,7 +189,7 @@ def compute_svdvals(loader:EmbeddingLoader, prefix:str, overwrite=True, device=t
 
 
 @torch.no_grad()
-@torch.inference_mode()
+##@torch.inference_mode()
 def compute_svdcluster(loader:EmbeddingLoader, prefix:str, overwrite=True, device=torch.device('cpu'), dtype=None, escape_oom_cpu=False):
 
     pbar = tqdm(reversed(loader.embeddings), desc='Computing SVDs')
@@ -219,7 +229,7 @@ def compute_svdcluster(loader:EmbeddingLoader, prefix:str, overwrite=True, devic
             SVDw = torch.linalg.svd(Xw.to(device, dtype=dtype), full_matrices=False)
             SVDb = torch.linalg.svd(Xb.to(device, dtype=dtype), full_matrices=False)
 
-        except (RuntimeError, torch.cuda.OutOfMemoryError) as e: # pylance typing error will be fixed torch==2.1
+        except (Exception, RuntimeError, torch.cuda.OutOfMemoryError) as e: # pylance typing error will be fixed torch==2.1
             if 'out of memory' not in str(e):
                 raise e
             warn(f'Could not compute svdvals for {name}: '+str(e))
@@ -250,7 +260,7 @@ def compute_svdcluster(loader:EmbeddingLoader, prefix:str, overwrite=True, devic
 
 
 @torch.no_grad()
-@torch.inference_mode()
+#@torch.inference_mode()
 def compute_probes(loader:EmbeddingLoader, valid_loader:EmbeddingLoader, prefix:str, overwrite=True, device=torch.device('cpu'), dtype=None, escape_oom_cpu=False):
     from dinopl.probing import Analysis, LinearAnalysis, KNNAnalysis, LogRegAnalysis, LinDiscrAnalysis
     pbar = tqdm(reversed(loader.embeddings), desc='Probing')
@@ -274,19 +284,22 @@ def compute_probes(loader:EmbeddingLoader, valid_loader:EmbeddingLoader, prefix:
         C, N, D = len(y.unique()), *X.shape
         train_data = list(zip(X.chunk(ceil(N/256)), y.chunk(ceil(N/256))))
         valid_data = list(zip(X_val.chunk(ceil(N/256)), y_val.chunk(ceil(N/256))))
-        for clf in [LinearAnalysis(20), KNNAnalysis(20), LogRegAnalysis(), LinDiscrAnalysis()]:
-            clf:Analysis = clf
+        for CLF, kwargs in {LinearAnalysis: dict(n_epochs=20), KNNAnalysis: dict(k=20), LogRegAnalysis: {}, LinDiscrAnalysis:{}}.items():
             
             try: # try clf on GPU
+                clf:Analysis = CLF(**kwargs)
                 clf.prepare(n_features=D, n_classes=C, device=device) #LogReg will ignore device
                 clf.train(train_data)
                 acc[type(clf).__name__] = clf.valid(valid_data)
-            except (RuntimeError, torch.cuda.OutOfMemoryError) as e: # pylance typing error will be fixed torch==2.1
+            except (Exception, RuntimeError, torch.cuda.OutOfMemoryError) as e: # pylance typing error will be fixed torch==2.1
+                # https://github.com/pytorch/pytorch/pull/99786
+                # hot-fix last line in ~/venv/gdynamics/lib/python3.10/site-packages/torch/_C/__init__.pyi
                 if 'out of memory' not in str(e):
                     raise e
                 warn(f'Could not compute clf for {name}: '+str(e))
                 if escape_oom_cpu:
-                    clf.prepare(n_features=D, n_classes=C, device=torch.device('cpu')) #LogReg will ignore device
+                    clf:Analysis = CLF(**kwargs)
+                    clf.prepare(n_features=D, n_classes=C, device=torch.device('cpu'))
                     clf.train(train_data)
                     acc[type(clf).__name__] = clf.valid(valid_data)
         
