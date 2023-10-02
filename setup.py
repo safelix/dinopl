@@ -3,7 +3,7 @@
 from setuptools import setup, find_packages
 
 install_requires=['torch', 'torchvision', 'torchinfo', 'pytorch-lightning==2.0.6'],
-extras_require=dict(tracking=['wandb', 'pandas', 'torchmetrics==1.0.3', 'faiss-gpu==1.7.2'],
+extras_require=dict(tracking=['wandb', 'pandas', 'torchmetrics==1.0.3', 'faiss-gpu==1.7.2', 'scikit-learn'],
                     notebook=['notebook', 'ipywidgets', 'matplotlib', 'seaborn', 'tueplots', 'scipy', 'pillow'])
 extras_require=dict(extras_require, all= [dep for group in extras_require.values() for dep in group]) # add all extra
 
