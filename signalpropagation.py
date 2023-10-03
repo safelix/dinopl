@@ -131,6 +131,7 @@ class EmbeddingLoader(ModelHook):
                 mean[k] = data.mean(dim=0)
             if k not in std.keys():
                 std[k] = data.std(dim=0)
+            #std[std == 0] = 1.0 #avoid division by 0
             data = (data - mean[k]) / (std[k] + torch.finfo(data.dtype).eps)
             self.embeddings[k] = data.cpu()
         return dict(mean=mean, std=std)
@@ -153,6 +154,31 @@ class EmbeddingLoader(ModelHook):
     @property
     def storage(self):
         return sum(batch.element_size()*batch.numel() for batches in self.embeddings.values() for batch in batches)
+
+@torch.no_grad()
+##@torch.inference_mode()
+def compute_deadneurons(loader:EmbeddingLoader, prefix:str, overwrite=True, dtype=None):
+    # check if result exists
+    spec = next(iter(loader.names.values())).split('.')[0]
+    fname = f'{prefix}deadneurons-{spec}.pckl'
+    if overwrite is False and os.path.isfile(fname):
+        return 
+
+    deadneurons = {}
+    pbar = tqdm(reversed(loader.embeddings), desc='Counting Dead Neurons')
+    for name in pbar:
+        pbar.set_postfix({'curr': name})
+        X = loader.embeddings[name].to(dtype=dtype)
+        deadneurons[name] = torch.sum(torch.all(X==0, dim=0)) 
+        loader.embeddings[name] = None
+        gc.collect()
+
+    with open(fname, 'wb') as f:
+        pickle.dump(deadneurons, f)
+
+    return deadneurons   
+
+
 
 @torch.no_grad()
 ##@torch.inference_mode()
@@ -348,7 +374,9 @@ def evaluate_ckpt(fname, args):
     if args.dtype is not None:
         prefix = f'{prefix}{str(args.dtype).split(".")[-1]}-'
 
-    # load values
+    # execute computation
+    if args.compute == 'deadneurons':
+        compute_deadneurons(loader, prefix=prefix, overwrite=args.overwrite, dtype=args.dtype)
     if args.compute == 'svdvals':
         compute_svdvals(loader, prefix=prefix, overwrite=args.overwrite, device=args.device, 
                         dtype=args.dtype, escape_oom_cpu=args.escape_oom_cpu)
@@ -419,7 +447,7 @@ if __name__ == '__main__':
     parser.add_argument('--preprocess', default=None,
                         choices=[None, 'center', 'standardize', 'normalize'])
     parser.add_argument('--compute', default='svdvals',
-                        choices=['svdvals', 'svdcluster', 'probes'])
+                        choices=['deadneurons', 'svdvals', 'svdcluster', 'probes'])
     parser.add_argument('--overwrite', type=str2bool, default=False)
     parser.add_argument('--dtype', default=None,
                         choices=['float16, float32', 'float64'])
