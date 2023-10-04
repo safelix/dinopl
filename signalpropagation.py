@@ -7,6 +7,7 @@ from glob import glob
 from warnings import warn
 from math import sqrt, floor, ceil
 
+import numpy as np
 import torch
 from torch import nn
 from torch.utils.hooks import RemovableHandle
@@ -162,6 +163,7 @@ def compute_deadneurons(loader:EmbeddingLoader, prefix:str, overwrite=True, dtyp
     spec = next(iter(loader.names.values())).split('.')[0]
     fname = f'{prefix}deadneurons-{spec}.pckl'
     if overwrite is False and os.path.isfile(fname):
+        tqdm.write(f'Skipping {spec} because file already exists.')
         return 
 
     deadneurons = {}
@@ -193,6 +195,7 @@ def compute_svdvals(loader:EmbeddingLoader, prefix:str, overwrite=True, device=t
         # check if result exists 
         fname = f'{prefix}svdvals-{name}.pckl'
         if overwrite is False and os.path.isfile(fname):
+            tqdm.write(f'Skipping {name} because file already exists.')
             loader.embeddings[name] = None
             continue
 
@@ -228,8 +231,9 @@ def compute_svdcluster(loader:EmbeddingLoader, prefix:str, overwrite=True, devic
         pbar.set_postfix({'curr': name, 'mem':f'{mem/1e6:.1f}MB' if mem < 1e9 else f'{mem/1e9:.1f}GB'})
         
         # check if result exists 
-        fname = f'{prefix}SVDg-{name}.pckl'
+        fname = f'{prefix}SVDg-{name}.pt'
         if overwrite is False and os.path.isfile(fname):
+            tqdm.write(f'Skipping {name} because file already exists.')
             loader.embeddings[name] = None
             continue
 
@@ -280,6 +284,68 @@ def compute_svdcluster(loader:EmbeddingLoader, prefix:str, overwrite=True, devic
             torch.save(SVDw, f)
         with open(f'{prefix}SVDb-{name}.pt', 'wb') as f:
             torch.save(SVDb, f)
+
+        loader.embeddings[name] = None
+        gc.collect()
+
+@torch.no_grad()
+##@torch.inference_mode()
+def compute_svdcluster_np(loader:EmbeddingLoader, prefix:str, overwrite=True, device=torch.device('cpu'), dtype=None, escape_oom_cpu=False):
+
+    pbar = tqdm(reversed(loader.embeddings), desc='Computing SVDs (np)')
+    for name in pbar:
+        # get data
+        y:np.ndarray = loader.targets.detach().numpy()
+        X:np.ndarray = loader.embeddings[name].detach().numpy()
+        mem = X.itemsize*X.size
+        pbar.set_postfix({'curr': name, 'mem':f'{mem/1e6:.1f}MB' if mem < 1e9 else f'{mem/1e9:.1f}GB'})
+        
+        # check if result exists 
+        fname = f'{prefix}SVDg-{name}.pt' # check if tensor file exists
+        if overwrite is False and os.path.isfile(fname):
+            tqdm.write(f'Skipping {name} because file already exists.')
+            loader.embeddings[name] = None
+            continue
+
+        ### Compute globally, within-cluster and between-cluster centered data
+        C, N, D = len(np.unique(y)), *X.shape
+        Nc = np.asarray([np.sum(y==c) for c in np.unique(y)])
+
+        Xw:np.ndarray = np.zeros((N, D))
+        Xb:np.ndarray = np.zeros((C, D))
+        for idx, c in enumerate(np.unique(y)):
+            Xw[y==c] = (X[y==c] - X[y==c].mean(axis=0)) / sqrt(N-1)
+            Xb[idx] = (X[y==c].mean(axis=0) - X.mean(axis=0)) * np.sqrt(Nc[idx]) / sqrt(N-1)
+        Xg:np.ndarray = (X - X.mean(axis=0)) / sqrt(N-1)
+
+        #Cov_g = Xg.T @ Xg 
+        #Cov_w = Xw.T @ Xw 
+        #Cov_b = Xb.T @ Xb 
+        #assert torch.dist(Cov_g, Cov_w+Cov_b, p=float('inf')) < eps
+        #Xr = torch.linalg.pinv(Cov_w) @ Cov_b
+        #Sr = torch.linalg.svdvals(Xr)
+
+        try: 
+            SVDg = np.linalg.svd(Xg.astype(dtype=dtype), full_matrices=False)
+            SVDw = np.linalg.svd(Xw.astype(dtype=dtype), full_matrices=False)
+            SVDb = np.linalg.svd(Xb.astype(dtype=dtype), full_matrices=False)
+
+        except (Exception, RuntimeError) as e:
+            SVDg, SVDw, SVDb = None, None, None
+            warn(f'Could not compute SVD for {name}: {str(e)}')
+
+        #U_g, S_g, Vh_g = SVDg
+        #U_w, S_w, Vh_w = SVDw
+        #U_b, S_b, Vh_b = SVDb
+        #Xr = (torch.diag(S_w**(-2)) @ Vh_w)  @  (Vh_b.T @ torch.diag(S_b**(2)))
+        #Sr = torch.linalg.svdvals(Xr)
+
+        with open(f'{prefix}SVDg-{name}.pckl', 'wb') as f:
+            pickle.dump(SVDg, f)
+        with open(f'{prefix}SVDw-{name}.pckl', 'wb') as f:
+            pickle.dump(SVDw, f)
+        with open(f'{prefix}SVDb-{name}.pckl', 'wb') as f:
+            pickle.dump(SVDb, f)
 
         loader.embeddings[name] = None
         gc.collect()
@@ -383,6 +449,9 @@ def evaluate_ckpt(fname, args):
     if args.compute == 'svdcluster':
         compute_svdcluster(loader, prefix=prefix, overwrite=args.overwrite, device=args.device, 
                         dtype=args.dtype, escape_oom_cpu=args.escape_oom_cpu)
+    if args.compute == 'svdcluster_np':
+        compute_svdcluster_np(loader, prefix=prefix, overwrite=args.overwrite, device=args.device, 
+                        dtype=args.dtype, escape_oom_cpu=args.escape_oom_cpu)
     
     if args.compute == 'probes':
         if args.ds_split == 'valid':
@@ -447,7 +516,7 @@ if __name__ == '__main__':
     parser.add_argument('--preprocess', default=None,
                         choices=[None, 'center', 'standardize', 'normalize'])
     parser.add_argument('--compute', default='svdvals',
-                        choices=['deadneurons', 'svdvals', 'svdcluster', 'probes'])
+                        choices=['deadneurons', 'svdvals', 'svdcluster', 'svdcluster_np', 'probes'])
     parser.add_argument('--overwrite', type=str2bool, default=False)
     parser.add_argument('--dtype', default=None,
                         choices=['float16, float32', 'float64'])
